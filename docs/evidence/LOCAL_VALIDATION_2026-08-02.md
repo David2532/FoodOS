@@ -8,6 +8,7 @@ separate artifact check.
 |---|---|---|
 | Baseline `npm run verify` | `FLAKY` | Initial build could not download Google fonts; escalated retry passed. The implementation replaced network fonts with local Geist. |
 | Final `npm run verify` | `FLAKY` | The first packaging run mistakenly collected the separate Playwright auth spec in Vitest; after excluding `e2e-auth/**`, the repeat passed lint, TypeScript, 26 tests and the Next production build. Per policy the repeated gate remains flaky. |
+| GitHub Actions Node 22 / npm 10 | `PASS` | Locked install plus lint, TypeScript, 26 tests and production build passed in run `30762182243` after pinning the Node-22-compatible ZXing pair and regenerating the lock with npm 10. |
 | `npm run test:coverage` | `PASS` | 93.81% statements, 89% branches, 100% functions, 98.71% lines for configured critical modules. |
 | Supabase clean reset | `PASS` | Migrations 0001–0007 applied from an empty local Postgres 17 database. |
 | Supabase schema lint | `PASS` | No schema errors reported. |
