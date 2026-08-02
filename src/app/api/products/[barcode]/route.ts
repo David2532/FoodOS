@@ -5,6 +5,8 @@ import { productApiResponseSchema } from "@/contracts/product";
 import { normalizeCachedProduct } from "@/lib/product-cache";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { personalizeProductAssessments, type FoodRiskPreference } from "@/domain/ingredient-relevance";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const barcodeSchema = z.string().regex(/^\d{8,14}$/, "Barcode muss 8 bis 14 Ziffern enthalten.");
 const fields = [
@@ -35,9 +37,8 @@ async function fetchProduct(barcode: string) {
   return null;
 }
 
-async function findCachedProduct(barcode: string) {
-  if (!isSupabaseConfigured()) return null;
-  const supabase = await createSupabaseServerClient();
+async function findCachedProduct(supabase: SupabaseClient | null, barcode: string) {
+  if (!supabase) return null;
   const result = await supabase
     .from("products")
     .select("gtin, name, brand, image_url, ingredients_text, source_updated_at, data_confidence, product_nutrition(energy_kcal, protein_g, carbohydrates_g, sugars_g, fat_g, saturated_fat_g, fiber_g, salt_g), product_metadata(field_key, value_json)")
@@ -48,6 +49,24 @@ async function findCachedProduct(barcode: string) {
   return normalizeCachedProduct(result.data);
 }
 
+async function loadFoodRiskPreferences(supabase: SupabaseClient | null): Promise<FoodRiskPreference[]> {
+  if (!supabase) return [];
+  const result = await supabase
+    .from("user_food_risk_profiles")
+    .select("canonical_key, kind, severity")
+    .order("severity", { ascending: false });
+  if (result.error) throw new Error("Food risk profile unavailable");
+  return z.array(z.object({
+    canonical_key: z.string(),
+    kind: z.enum(["allergen", "intolerance", "exclusion", "medical"]),
+    severity: z.enum(["notice", "avoid", "strict_avoid"])
+  })).parse(result.data).map((preference) => ({
+    key: preference.canonical_key,
+    kind: preference.kind,
+    severity: preference.severity
+  }));
+}
+
 export async function GET(_request: Request, context: { params: Promise<{ barcode: string }> }) {
   const { barcode: rawBarcode } = await context.params;
   const parsed = barcodeSchema.safeParse(rawBarcode);
@@ -56,9 +75,11 @@ export async function GET(_request: Request, context: { params: Promise<{ barcod
   }
 
   try {
-    const cached = await findCachedProduct(parsed.data);
+    const supabase = isSupabaseConfigured() ? await createSupabaseServerClient() : null;
+    const preferences = await loadFoodRiskPreferences(supabase);
+    const cached = await findCachedProduct(supabase, parsed.data);
     if (cached) {
-      const response = productApiResponseSchema.parse({ product: cached });
+      const response = productApiResponseSchema.parse({ product: personalizeProductAssessments(cached, preferences) });
       return NextResponse.json(response, {
         headers: {
           "Cache-Control": "private, max-age=0, must-revalidate",
@@ -68,7 +89,8 @@ export async function GET(_request: Request, context: { params: Promise<{ barcod
     }
     const raw = await fetchProduct(parsed.data);
     if (!raw) return NextResponse.json({ error: "Produkt nicht gefunden.", barcode: parsed.data }, { status: 404 });
-    const response = productApiResponseSchema.parse({ product: normalizeOpenFoodFacts(raw, parsed.data) });
+    const product = personalizeProductAssessments(normalizeOpenFoodFacts(raw, parsed.data), preferences);
+    const response = productApiResponseSchema.parse({ product });
     return NextResponse.json(response, {
       headers: {
         "Cache-Control": "private, max-age=0, must-revalidate",

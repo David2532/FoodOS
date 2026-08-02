@@ -113,8 +113,12 @@ Metadatenfelder, chargenbezogene MHD-Daten, Inhaltsstoffbewertungen, Vorrat, Foo
 Rezepte, Wochenplan, Einkauf und RLS-Policies. Private Tabellen müssen zusätzlich einen
 AAL2-Claim verlangen. Die neueren Forward-Migrationen ergänzen transaktionales
 Onboarding, idempotentes Erfassen/Verzehren, explizite Data-API-Rechte, append-only
-Inventar-Events sowie persistente Plan-/Einkaufs-RPCs. `supabase/tests/` beweist AAL1-
-Verweigerung, zweiten Nutzer, Haushaltsisolation, Replay und atomare Mengen-/Logwirkung.
+Inventar-Events sowie persistente Plan-/Einkaufs-RPCs. Die C0-Forward-Migrationen binden
+Mutation-IDs an einen Payload-Hash, sperren überschrittene Verbrauchsdaten und exakte
+Rückrufe, verlangen eine bewusste MHD-/Risikobestätigung und berechnen Fehlmengen per
+geplantem Nutzungstag mit FEFO-Zuordnung. `supabase/tests/` beweist AAL1-Verweigerung,
+zweiten Nutzer, Haushaltsisolation, Replay/Payload-Konflikt, Safety-Sperren und atomare
+Mengen-/Logwirkung.
 
 ## Vercel
 

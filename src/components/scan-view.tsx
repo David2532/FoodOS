@@ -182,6 +182,7 @@ function ProductResult({ product, householdId, gs1, onReset, onSaved }: { produc
   const [dateKind, setDateKind] = useState<"best_before" | "use_by" | "none">(gs1?.useByDate ? "use_by" : gs1?.bestBeforeDate ? "best_before" : "none");
   const mutationId = useRef<string>(crypto.randomUUID());
   const topAssessments = product.assessments.slice(0, 4);
+  const requiresPersonalRiskConfirmation = product.assessments.some((assessment) => assessment.level === "avoid");
 
   async function saveBatch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -189,6 +190,7 @@ function ProductResult({ product, householdId, gs1, onReset, onSaved }: { produc
     setSaveError(null);
     const form = new FormData(event.currentTarget);
     const price = String(form.get("purchasePrice") ?? "").trim().replace(",", ".");
+    const personalRiskConfirmed = form.get("personalRiskConfirmed") === "yes";
     const parsed = inventoryBatchInputSchema.safeParse({
       amount: form.get("amount"),
       unit: form.get("unit"),
@@ -217,7 +219,8 @@ function ProductResult({ product, householdId, gs1, onReset, onSaved }: { produc
         lot_number: parsed.data.lotNumber || null,
         serial_number: parsed.data.serialNumber || null,
         purchase_price_cents: parsed.data.purchasePriceCents ?? null,
-        date_source: gs1 ? "gs1_confirmed" : "manual_confirmed"
+        date_source: gs1 ? "gs1_confirmed" : "manual_confirmed",
+        personal_risk_confirmed: personalRiskConfirmed
       },
       mutation_id: mutationId.current
     });
@@ -245,6 +248,7 @@ function ProductResult({ product, householdId, gs1, onReset, onSaved }: { produc
         <div className="batch-grid"><label className="field-label"><span>Menge</span><input name="amount" type="number" inputMode="decimal" min="0.001" step="0.001" defaultValue="1" required /></label><label className="field-label"><span>Einheit</span><select name="unit" defaultValue="piece"><option value="piece">Stück</option><option value="g">g</option><option value="ml">ml</option></select></label></div>
         <label className="field-label"><span>Lagerort</span><select name="location" defaultValue="pantry"><option value="fridge">Kühlschrank</option><option value="freezer">Gefrierfach</option><option value="pantry">Vorrat</option><option value="drinks">Getränke</option><option value="other">Sonstiges</option></select></label>
         <div className="batch-grid"><label className="field-label"><span>Charge · optional</span><input name="lotNumber" defaultValue={gs1?.lotNumber ?? ""} maxLength={120} /></label><label className="field-label"><span>Kaufpreis € · optional</span><input name="purchasePrice" inputMode="decimal" pattern="[0-9]+([,.][0-9]{1,2})?" /></label></div>
+        {requiresPersonalRiskConfirmation && <label className="risk-confirmation"><input type="checkbox" name="personalRiskConfirmed" value="yes" required /><span><strong>Persönlichen Konflikt ausdrücklich bestätigen</strong><small>Dieses Produkt passt zu einem hinterlegten Allergen oder Ausschluss. Prüfe die vollständige Packungskennzeichnung; FoodOS ersetzt keine medizinische Beratung.</small></span></label>}
         {saveError && <div className="error-banner" role="alert"><AlertTriangle size={17} /><span>{saveError}</span></div>}
         {householdId ? <button className="primary-button wide" disabled={saving}>{saving ? <LoaderCircle className="spin" size={18} /> : <Check size={18} />}{saving ? "Charge wird gespeichert …" : "Charge zum Vorrat hinzufügen"}</button> : <p className="preview-save-note">Preview-Modus: Produktdaten können geprüft, aber nicht dauerhaft gespeichert werden.</p>}
       </form>

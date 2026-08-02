@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(35);
+select plan(48);
 
 select has_function(
   'public',
@@ -22,13 +22,20 @@ select has_function(
   array['uuid', 'numeric', 'uuid'],
   'consumption RPC exists'
 );
+select has_function(
+  'public',
+  'consume_inventory_batch_v2',
+  array['uuid', 'numeric', 'uuid', 'boolean', 'boolean'],
+  'safety-aware consumption RPC exists'
+);
+select has_table('public', 'mutation_receipts', 'payload-bound mutation receipts exist');
 select results_eq(
   $$
     select count(*)::bigint
     from pg_policies
     where schemaname = 'public' and policyname = 'require_aal2'
   $$,
-  $$ values (20::bigint) $$,
+  $$ values (21::bigint) $$,
   'every private MVP table has the restrictive AAL2 policy'
 );
 select has_table('public', 'recall_sources', 'approved recall-source registry exists');
@@ -172,8 +179,24 @@ select is(
   (
     public.add_inventory_batch(
       :'owner_household'::uuid,
-      '{"barcode":"3017624010701","name":"ignored replay"}'::jsonb,
-      '{"amount":999,"unit":"g","location":"pantry"}'::jsonb,
+      '{
+        "barcode":"3017624010701",
+        "name":"Testprodukt",
+        "brand":"FoodOS Test",
+        "source":"open_food_facts",
+        "confidence":0.9,
+        "retrievedAt":"2026-08-02T10:00:00Z",
+        "nutrition":{"kcal100g":200,"protein100g":10,"carbs100g":20,"fat100g":8},
+        "allergens":["en:milk"]
+      }'::jsonb,
+      '{
+        "amount":500,
+        "unit":"g",
+        "location":"pantry",
+        "best_before_date":"2027-06-30",
+        "lot_number":"LOT-42",
+        "date_source":"manual_confirmed"
+      }'::jsonb,
       'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid
     ) ->> 'idempotent_replay'
   )::boolean,
@@ -184,6 +207,18 @@ select results_eq(
   $$ select count(*)::bigint from public.inventory_events where event_type = 'purchase' $$,
   $$ values (1::bigint) $$,
   'inventory replay does not create a duplicate event'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"3017624010701","name":"changed payload"}',
+    '{"amount":999,"unit":"g","location":"pantry"}',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+  ),
+  '23505',
+  'Mutation ID payload conflict',
+  'inventory intake rejects a reused mutation ID with a different payload'
 );
 select id::text as owner_batch from public.inventory_batches limit 1 \gset
 
@@ -256,6 +291,117 @@ select results_eq(
   'consumption replay leaves inventory unchanged'
 );
 select throws_ok(
+  format(
+    'select public.consume_inventory_batch(%L::uuid, 25, %L::uuid)',
+    :'owner_batch', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  ),
+  '23505',
+  'Mutation ID payload conflict',
+  'consumption rejects a reused mutation ID with a different amount'
+);
+
+select (public.add_inventory_batch(
+  :'owner_household'::uuid,
+  '{"barcode":"4006381333931","name":"Verbrauchsdatum-Test","source":"manual","confidence":1}'::jsonb,
+  jsonb_build_object(
+    'amount', 200, 'unit', 'g', 'location', 'fridge',
+    'use_by_date', (current_date - 1)::text, 'date_source', 'manual_confirmed'
+  ),
+  'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'::uuid
+) ->> 'batch_id') as use_by_batch \gset
+select throws_ok(
+  format(
+    'select public.consume_inventory_batch_v2(%L::uuid, 10, %L::uuid, false, false)',
+    :'use_by_batch', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeef'
+  ),
+  '22023',
+  'Use-by date exceeded',
+  'a past use-by date blocks consumption without an override path'
+);
+
+select (public.add_inventory_batch(
+  :'owner_household'::uuid,
+  '{"barcode":"4006381333948","name":"MHD-Test","source":"manual","confidence":1}'::jsonb,
+  jsonb_build_object(
+    'amount', 200, 'unit', 'g', 'location', 'pantry',
+    'best_before_date', (current_date - 1)::text, 'date_source', 'manual_confirmed'
+  ),
+  'ffffffff-ffff-4fff-8fff-ffffffffffff'::uuid
+) ->> 'batch_id') as best_before_batch \gset
+select throws_ok(
+  format(
+    'select public.consume_inventory_batch_v2(%L::uuid, 10, %L::uuid, false, false)',
+    :'best_before_batch', 'ffffffff-ffff-4fff-8fff-fffffffffffe'
+  ),
+  '22023',
+  'Best-before confirmation required',
+  'a past best-before date requires explicit confirmation'
+);
+select is(
+  (public.consume_inventory_batch_v2(
+    :'best_before_batch'::uuid, 10,
+    'ffffffff-ffff-4fff-8fff-fffffffffffe'::uuid, true, false
+  ) ->> 'idempotent_replay')::boolean,
+  false,
+  'confirmed past-best-before consumption is applied once'
+);
+
+reset role;
+insert into public.recall_sources (
+  id, source_key, display_name, authority_url, approved, license_reviewed_at, last_success_at
+) values (
+  '12345678-1234-4234-8234-123456789012', 'pgtap-authority', 'pgTAP Behörde',
+  'https://example.test/authority', true, now(), now()
+);
+insert into public.recall_events (
+  source_id, source_record_id, payload_sha256, parser_version, status, title,
+  product_name, gtins, lot_numbers, reason, source_url, published_at, retrieved_at, raw_payload
+) values (
+  '12345678-1234-4234-8234-123456789012', 'recall-42', repeat('a', 64), 'pgtap-1',
+  'active', 'Test-Rückruf', 'Testprodukt', array['3017624010701'], array['lot 42'],
+  'Nur synthetische Testdaten', 'https://example.test/authority/recall-42', now(), now(), '{"fixture":true}'::jsonb
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal2"}',
+  true
+);
+set local role authenticated;
+select throws_ok(
+  format(
+    'select public.consume_inventory_batch_v2(%L::uuid, 10, %L::uuid, false, false)',
+    :'owner_batch', '99999999-9999-4999-8999-999999999999'
+  ),
+  '22023',
+  'Exact recall match blocks consumption',
+  'an approved exact GTIN and lot recall blocks consumption'
+);
+
+insert into public.user_food_risk_profiles (user_id, canonical_key, kind, severity)
+values ('11111111-1111-4111-8111-111111111111', 'milk', 'allergen', 'strict_avoid');
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"4006381333955","name":"Risikoprofil-Test","allergens":["en:milk"],"source":"manual","confidence":1}',
+    '{"amount":100,"unit":"g","location":"pantry"}',
+    '88888888-8888-4888-8888-888888888888'
+  ),
+  '22023',
+  'Personal risk confirmation required',
+  'a critical personal food-risk match requires confirmation before intake'
+);
+select is(
+  (public.add_inventory_batch(
+    :'owner_household'::uuid,
+    '{"barcode":"4006381333955","name":"Risikoprofil-Test","allergens":["en:milk"],"source":"manual","confidence":1}'::jsonb,
+    '{"amount":100,"unit":"g","location":"pantry","personal_risk_confirmed":true}'::jsonb,
+    '88888888-8888-4888-8888-888888888888'::uuid
+  ) ->> 'idempotent_replay')::boolean,
+  false,
+  'an explicitly confirmed critical personal-risk intake is applied once'
+);
+select throws_ok(
   $$ update public.inventory_batches set remaining_amount = 1 $$,
   '42501',
   'permission denied for table inventory_batches',
@@ -320,6 +466,86 @@ select public.set_shopping_item_checked(:'manual_item_id'::uuid, true);
 select ok(
   (select checked_at is not null from public.shopping_items where id = :'manual_item_id'::uuid),
   'shopping completion is persisted'
+);
+
+select public.add_inventory_batch(
+  :'owner_household'::uuid,
+  '{"barcode":"4006381333962","name":"Plan-Datums-Test","source":"manual","confidence":1}'::jsonb,
+  jsonb_build_object(
+    'amount', 30, 'unit', 'g', 'location', 'pantry',
+    'use_by_date', (current_date - ((extract(isodow from current_date)::integer - 1)) + 1)::text,
+    'date_source', 'manual_confirmed'
+  ),
+  '77777777-7777-4777-8777-777777777771'::uuid
+) as allocation_early_result \gset
+select public.add_inventory_batch(
+  :'owner_household'::uuid,
+  '{"barcode":"4006381333962","name":"Plan-Datums-Test","source":"manual","confidence":1}'::jsonb,
+  jsonb_build_object(
+    'amount', 60, 'unit', 'g', 'location', 'pantry',
+    'use_by_date', (current_date - ((extract(isodow from current_date)::integer - 1)) + 6)::text,
+    'date_source', 'manual_confirmed'
+  ),
+  '77777777-7777-4777-8777-777777777772'::uuid
+) as allocation_late_result \gset
+select (:'allocation_early_result'::jsonb ->> 'product_id') as allocation_product \gset
+
+reset role;
+update public.products
+set package_amount = 100, package_unit = 'g'
+where id = :'allocation_product'::uuid;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal2"}',
+  true
+);
+set local role authenticated;
+select public.plan_product(
+  :'owner_household'::uuid,
+  :'allocation_product'::uuid,
+  current_date - (extract(isodow from current_date)::integer - 1) + 3,
+  'dinner', 1,
+  '77777777-7777-4777-8777-777777777773'::uuid
+);
+select public.generate_shopping_from_plan(
+  :'owner_household'::uuid,
+  current_date - (extract(isodow from current_date)::integer - 1)
+);
+select results_eq(
+  format(
+    'select required_amount from public.shopping_items where source = ''plan'' and source_product_id = %L::uuid',
+    :'allocation_product'
+  ),
+  $$ values (40::numeric) $$,
+  'shopping allocation excludes stock that expires before the planned use date'
+);
+
+select public.add_inventory_batch(
+  :'owner_household'::uuid,
+  '{"barcode":"4006381333962","name":"Plan-Datums-Test","source":"manual","confidence":1}'::jsonb,
+  jsonb_build_object(
+    'amount', 50, 'unit', 'g', 'location', 'pantry',
+    'use_by_date', (current_date - ((extract(isodow from current_date)::integer - 1)) + 6)::text,
+    'date_source', 'manual_confirmed'
+  ),
+  '77777777-7777-4777-8777-777777777774'::uuid
+);
+select public.generate_shopping_from_plan(
+  :'owner_household'::uuid,
+  current_date - (extract(isodow from current_date)::integer - 1)
+);
+select results_eq(
+  format(
+    'select count(*)::bigint from public.shopping_items where source = ''plan'' and source_product_id = %L::uuid',
+    :'allocation_product'
+  ),
+  $$ values (0::bigint) $$,
+  'regeneration removes a stale plan shortage once usable stock covers it'
+);
+select results_eq(
+  $$ select count(*)::bigint from public.shopping_items where source = 'manual' $$,
+  $$ values (1::bigint) $$,
+  'plan regeneration retains confirmed manual shopping intent'
 );
 
 reset role;

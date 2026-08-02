@@ -3,6 +3,8 @@ import "server-only";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { classifyExpiry } from "@/domain/expiry";
+import { criticalFoodRiskMatches, type FoodRiskPreference } from "@/domain/ingredient-relevance";
+import { assessRecall, type RecallAssessment, type RecallNotice } from "@/domain/recall";
 import type { AppSnapshot, InventoryItem } from "@/lib/types";
 
 const membershipSchema = z.object({
@@ -19,7 +21,7 @@ const inventoryRowSchema = z.object({
   best_before_date: z.string().nullable(),
   use_by_date: z.string().nullable(),
   lot_number: z.string().nullable(),
-  products: z.object({ name: z.string(), brand: z.string().nullable(), image_url: z.string().nullable() })
+  products: z.object({ gtin: z.string().nullable(), name: z.string(), brand: z.string().nullable(), image_url: z.string().nullable() })
 });
 
 const nutritionRowSchema = z.object({
@@ -58,6 +60,26 @@ const shoppingItemSchema = z.object({
   source: z.enum(["manual", "plan"])
 });
 const recallSourceSchema = z.object({ last_success_at: z.string().nullable() });
+const productMetadataRowSchema = z.object({
+  product_id: z.uuid(),
+  field_key: z.enum(["allergens", "additives", "structured_ingredients"]),
+  value_json: z.unknown()
+});
+const foodRiskRowSchema = z.object({
+  canonical_key: z.string(),
+  kind: z.enum(["allergen", "intolerance", "exclusion", "medical"]),
+  severity: z.enum(["notice", "avoid", "strict_avoid"])
+});
+const recallEventRowSchema = z.object({
+  source_record_id: z.string(),
+  status: z.enum(["active", "corrected", "withdrawn"]),
+  product_name: z.string(),
+  gtins: z.array(z.string()),
+  lot_numbers: z.array(z.string()),
+  source_url: z.url(),
+  published_at: z.string(),
+  retrieved_at: z.string()
+});
 
 const locationLabels: Record<z.infer<typeof inventoryRowSchema>["location"], InventoryItem["location"]> = {
   fridge: "Kühlschrank",
@@ -105,6 +127,35 @@ function formatDate(value: string | null): string | undefined {
   return new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
+function metadataNames(rows: z.infer<typeof productMetadataRowSchema>[]): string[] {
+  return rows.flatMap((row) => {
+    if (row.field_key === "structured_ingredients") {
+      return z.array(z.object({ name: z.string(), normalizedName: z.string().optional() }))
+        .safeParse(row.value_json).data?.map((item) => item.normalizedName ?? item.name) ?? [];
+    }
+    return z.array(z.string()).safeParse(row.value_json).data ?? [];
+  });
+}
+
+function recallForBatch(
+  notices: RecallNotice[],
+  batch: { gtin?: string; lotNumber?: string; productName: string },
+  sourceStatus: "unavailable" | "fresh" | "stale",
+  now: string
+): RecallAssessment {
+  const priority = { exact: 0, possible_gtin: 1, text_candidate: 2, none: 3, source_unavailable: 4 };
+  const match = notices.map((notice) => assessRecall(notice, batch, now))
+    .sort((left, right) => priority[left.kind] - priority[right.kind])[0];
+  if (match && match.kind !== "none") return match;
+  if (sourceStatus !== "fresh") return assessRecall(null, batch, now);
+  return match ?? {
+    kind: "none",
+    blocksConsumption: false,
+    stale: false,
+    wording: "In den geladenen amtlichen Daten wurde kein Treffer gefunden. Das ist keine Sicherheitsgarantie."
+  };
+}
+
 export type AppLoadResult =
   | { kind: "onboarding" }
   | { kind: "ready"; snapshot: AppSnapshot }
@@ -123,7 +174,7 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
 
   const inventoryResult = await supabase
     .from("inventory_batches")
-    .select("id, product_id, remaining_amount, unit, location, best_before_date, use_by_date, lot_number, products!inner(name, brand, image_url)")
+    .select("id, product_id, remaining_amount, unit, location, best_before_date, use_by_date, lot_number, products!inner(gtin, name, brand, image_url)")
     .eq("household_id", membership.data.household_id)
     .gt("remaining_amount", 0)
     .order("use_by_date", { ascending: true, nullsFirst: false })
@@ -150,7 +201,7 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
   const today = berlinDate();
   const weekStart = mondayOf(today);
   const recentBoundary = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString();
-  const [foodLogResult, profileResult, mealPlanResult, shoppingListResult, recallSourceResult] = await Promise.all([
+  const [foodLogResult, profileResult, mealPlanResult, shoppingListResult, recallSourceResult, foodRiskResult, metadataResult, recallEventsResult] = await Promise.all([
     supabase
       .from("food_log_entries")
       .select("eaten_at, nutrition_snapshot")
@@ -177,15 +228,46 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
       .eq("approved", true)
       .order("last_success_at", { ascending: false, nullsFirst: false })
       .limit(1)
-      .maybeSingle()
+      .maybeSingle(),
+    supabase.from("user_food_risk_profiles").select("canonical_key, kind, severity"),
+    productIds.length
+      ? supabase.from("product_metadata").select("product_id, field_key, value_json").in("product_id", productIds).in("field_key", ["allergens", "additives", "structured_ingredients"])
+      : Promise.resolve({ data: [], error: null }),
+    supabase
+      .from("recall_events")
+      .select("source_record_id, status, product_name, gtins, lot_numbers, source_url, published_at, retrieved_at, recall_sources!inner(approved)")
+      .eq("recall_sources.approved", true)
+      .order("published_at", { ascending: false })
+      .limit(500)
   ]);
-  if (foodLogResult.error || profileResult.error || mealPlanResult.error || shoppingListResult.error || recallSourceResult.error) return { kind: "error", message: "Tages-, Plan-, Einkaufs- oder Rückrufdaten konnten nicht geladen werden." };
+  if (foodLogResult.error || profileResult.error || mealPlanResult.error || shoppingListResult.error || recallSourceResult.error || foodRiskResult.error || metadataResult.error || recallEventsResult.error) return { kind: "error", message: "Tages-, Plan-, Einkaufs-, Risiko- oder Rückrufdaten konnten nicht geladen werden." };
   const parsedLogs = z.array(foodLogSchema).safeParse(foodLogResult.data);
   const parsedProfile = profileSchema.nullable().safeParse(profileResult.data);
   const parsedMealPlan = z.array(mealPlanRowSchema).safeParse(mealPlanResult.data);
   const parsedShoppingList = shoppingListSchema.nullable().safeParse(shoppingListResult.data);
   const parsedRecallSource = recallSourceSchema.nullable().safeParse(recallSourceResult.data);
-  if (!parsedLogs.success || !parsedProfile.success || !parsedMealPlan.success || !parsedShoppingList.success || !parsedRecallSource.success) return { kind: "error", message: "Tages-, Plan-, Einkaufs- oder Rückrufdaten haben ein unerwartetes Format." };
+  const parsedFoodRisks = z.array(foodRiskRowSchema).safeParse(foodRiskResult.data);
+  const parsedMetadata = z.array(productMetadataRowSchema).safeParse(metadataResult.data);
+  const parsedRecallEvents = z.array(recallEventRowSchema).safeParse(recallEventsResult.data);
+  if (!parsedLogs.success || !parsedProfile.success || !parsedMealPlan.success || !parsedShoppingList.success || !parsedRecallSource.success || !parsedFoodRisks.success || !parsedMetadata.success || !parsedRecallEvents.success) return { kind: "error", message: "Tages-, Plan-, Einkaufs-, Risiko- oder Rückrufdaten haben ein unerwartetes Format." };
+
+  const recallSource = parsedRecallSource.data?.last_success_at ? {
+    status: (Date.now() - new Date(parsedRecallSource.data.last_success_at).getTime() <= 48 * 60 * 60 * 1000 ? "fresh" : "stale") as "fresh" | "stale",
+    lastSuccessAt: parsedRecallSource.data.last_success_at
+  } : { status: "unavailable" as const };
+  const preferences: FoodRiskPreference[] = parsedFoodRisks.data.map((risk) => ({ key: risk.canonical_key, kind: risk.kind, severity: risk.severity }));
+  const metadataByProduct = new Map<string, z.infer<typeof productMetadataRowSchema>[]>();
+  parsedMetadata.data.forEach((row) => metadataByProduct.set(row.product_id, [...(metadataByProduct.get(row.product_id) ?? []), row]));
+  const recallNotices: RecallNotice[] = parsedRecallEvents.data.map((event) => ({
+    sourceRecordId: event.source_record_id,
+    status: event.status,
+    productName: event.product_name,
+    gtins: event.gtins,
+    lotNumbers: event.lot_numbers,
+    sourceUrl: event.source_url,
+    publishedAt: event.published_at,
+    retrievedAt: event.retrieved_at
+  }));
 
   let parsedShoppingItems: z.infer<typeof shoppingItemSchema>[] = [];
   if (parsedShoppingList.data) {
@@ -208,6 +290,7 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
     return {
       id: row.id,
       productId: row.product_id,
+      gtin: row.products.gtin ?? undefined,
       name: row.products.name,
       brand: row.products.brand ?? undefined,
       imageUrl: row.products.image_url ?? undefined,
@@ -220,6 +303,12 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
       daysUntilExpiry: expiry.days ?? undefined,
       expiryState: expiry.state,
       lotNumber: row.lot_number ?? undefined,
+      personalRiskMatches: criticalFoodRiskMatches(metadataNames(metadataByProduct.get(row.product_id) ?? []), preferences),
+      recall: recallForBatch(recallNotices, {
+        gtin: row.products.gtin ?? undefined,
+        lotNumber: row.lot_number ?? undefined,
+        productName: row.products.name
+      }, recallSource.status, new Date().toISOString()),
       nutrition: {
         kcal100g: nutrition?.energy_kcal ?? undefined,
         protein100g: nutrition?.protein_g ?? undefined,
@@ -263,10 +352,7 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
         checked: entry.checked_at !== null,
         source: entry.source
       })),
-      recallSource: parsedRecallSource.data?.last_success_at ? {
-        status: Date.now() - new Date(parsedRecallSource.data.last_success_at).getTime() <= 48 * 60 * 60 * 1000 ? "fresh" : "stale",
-        lastSuccessAt: parsedRecallSource.data.last_success_at
-      } : { status: "unavailable" }
+      recallSource
     }
   };
 }

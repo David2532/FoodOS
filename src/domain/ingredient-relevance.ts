@@ -1,8 +1,8 @@
-import type { IngredientAssessment, RiskLevel } from "@/lib/types";
+import type { IngredientAssessment, Product, RiskLevel } from "@/lib/types";
 
 export interface FoodRiskPreference {
   key: string;
-  kind: "allergen" | "intolerance" | "exclusion";
+  kind: "allergen" | "intolerance" | "exclusion" | "medical";
   severity: "notice" | "avoid" | "strict_avoid";
 }
 
@@ -18,7 +18,14 @@ export interface IngredientFact {
 const rank: Record<RiskLevel, number> = { avoid: 0, watch: 1, info: 2, ok: 3, unknown: 4 };
 
 function canonical(value: string): string {
-  return value.normalize("NFKC").trim().toLocaleLowerCase("de-DE").replace(/[^a-z0-9äöüß]+/g, " ").trim();
+  return value.normalize("NFKC").trim().toLocaleLowerCase("de-DE").replace(/^[a-z]{2}[:_-]/, "").replace(/[^a-z0-9äöüß]+/g, " ").trim();
+}
+
+export function criticalFoodRiskMatches(candidateNames: string[], preferences: FoodRiskPreference[]): string[] {
+  const criticalKeys = new Set(preferences
+    .filter((preference) => preference.severity === "avoid" || preference.severity === "strict_avoid")
+    .map((preference) => canonical(preference.key)));
+  return [...new Set(candidateNames.filter((candidate) => criticalKeys.has(canonical(candidate))))];
 }
 
 export function assessIngredientFacts(facts: IngredientFact[], preferences: FoodRiskPreference[]): IngredientAssessment[] {
@@ -58,4 +65,22 @@ export function assessIngredientFacts(facts: IngredientFact[], preferences: Food
       sourceLabel: assessment.sourceLabel,
       confidence: assessment.confidence
     }));
+}
+
+export function personalizeProductAssessments(product: Product, preferences: FoodRiskPreference[]): Product {
+  if (!preferences.length) return product;
+  const facts: IngredientFact[] = [
+    ...product.allergens.map((name) => ({ name, normalizedName: name, allergen: true, confidence: .95, sourceLabel: "Produktkennzeichnung" })),
+    ...product.structuredIngredients.map((ingredient) => ({ name: ingredient.name, normalizedName: ingredient.normalizedName, allergen: false, confidence: .82, sourceLabel: "Zutatenliste" })),
+    ...product.additives.map((name) => ({ name, normalizedName: name, eNumber: name.toUpperCase(), allergen: false, confidence: .82, sourceLabel: "Zusatzstoffkennzeichnung" }))
+  ];
+  const personal = assessIngredientFacts(facts, preferences).filter((assessment) => assessment.level === "avoid" || assessment.level === "watch");
+  const personalKeys = new Set(personal.map((assessment) => canonical(assessment.name)));
+  return {
+    ...product,
+    assessments: [
+      ...personal,
+      ...product.assessments.filter((assessment) => !personalKeys.has(canonical(assessment.name)))
+    ]
+  };
 }

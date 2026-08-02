@@ -52,6 +52,7 @@ export interface Product {
 export interface InventoryItem {
   id: string;
   productId: string;
+  gtin?: string;
   name: string;
   brand?: string;
   imageUrl?: string;
@@ -64,6 +65,14 @@ export interface InventoryItem {
   daysUntilExpiry?: number;
   expiryState: "future" | "soon" | "today" | "past_best_before" | "past_use_by" | "unknown";
   lotNumber?: string;
+  personalRiskMatches: string[];
+  recall: {
+    kind: "exact" | "possible_gtin" | "text_candidate" | "none" | "source_unavailable";
+    blocksConsumption: boolean;
+    stale: boolean;
+    wording: string;
+    sourceUrl?: string;
+  };
   nutrition: ProductNutrition;
 }
 
