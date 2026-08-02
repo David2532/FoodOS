@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(50);
+select plan(58);
 
 select has_function(
   'public',
@@ -41,6 +41,84 @@ select results_eq(
 select has_table('public', 'recall_sources', 'approved recall-source registry exists');
 select has_table('public', 'recall_events', 'immutable recall provenance events exist');
 select has_table('public', 'recall_acknowledgements', 'idempotent household recall acknowledgement exists');
+select has_function(
+  'public',
+  'ingest_recall_event',
+  array['text', 'text', 'text', 'text', 'text', 'text', 'text', 'text[]', 'text[]', 'text', 'text', 'timestamp with time zone', 'timestamp with time zone', 'timestamp with time zone', 'jsonb'],
+  'official recall ingestion RPC exists'
+);
+
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+set local role service_role;
+select throws_ok(
+  $$
+    select public.ingest_recall_event(
+      'de-lebensmittelwarnung-rss', 'fixture-recall', repeat('b', 64), 'fixture-1',
+      'Fixture recall', 'Fixture product', null, array['4006381333931'], array['LOT-A'],
+      'Fixture reason',
+      'https://www.lebensmittelwarnung.de/___lebensmittelwarnung.de/Meldungen/fixture.html',
+      now(), null, now(), '{"fixture":1}'::jsonb
+    )
+  $$,
+  '42501',
+  'Recall source approval incomplete',
+  'the official adapter remains closed until source and license review are approved'
+);
+
+reset role;
+update public.recall_sources
+set approved = true, license_reviewed_at = now()
+where source_key = 'de-lebensmittelwarnung-rss';
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+set local role service_role;
+select is(
+  (public.ingest_recall_event(
+    'de-lebensmittelwarnung-rss', 'fixture-recall', repeat('b', 64), 'fixture-1',
+    'Fixture recall', 'Fixture product', null, array['4006381333931'], array['LOT-A'],
+    'Fixture reason',
+    'https://www.lebensmittelwarnung.de/___lebensmittelwarnung.de/Meldungen/fixture.html',
+    now(), null, now(), '{"fixture":1}'::jsonb
+  ) ->> 'idempotent_replay')::boolean,
+  false,
+  'first approved official recall payload is ingested'
+);
+select is(
+  (public.ingest_recall_event(
+    'de-lebensmittelwarnung-rss', 'fixture-recall', repeat('b', 64), 'fixture-1',
+    'Fixture recall', 'Fixture product', null, array['4006381333931'], array['LOT-A'],
+    'Fixture reason',
+    'https://www.lebensmittelwarnung.de/___lebensmittelwarnung.de/Meldungen/fixture.html',
+    now(), null, now(), '{"fixture":1}'::jsonb
+  ) ->> 'idempotent_replay')::boolean,
+  true,
+  'identical official recall payload is replayed idempotently'
+);
+select is(
+  (public.ingest_recall_event(
+    'de-lebensmittelwarnung-rss', 'fixture-recall', repeat('c', 64), 'fixture-1',
+    'Corrected fixture recall', 'Fixture product', null, array['4006381333931'], array['LOT-B'],
+    'Corrected fixture reason',
+    'https://www.lebensmittelwarnung.de/___lebensmittelwarnung.de/Meldungen/fixture.html',
+    now(), now(), now(), '{"fixture":2}'::jsonb
+  ) ->> 'corrected')::boolean,
+  true,
+  'changed authority payload creates a correction event'
+);
+reset role;
+select results_eq(
+  $$ select count(*)::bigint from public.recall_events where source_record_id = 'fixture-recall' and superseded_by is null $$,
+  $$ values (1::bigint) $$,
+  'only one current version remains after a correction'
+);
+select results_eq(
+  $$ select status from public.recall_events where source_record_id = 'fixture-recall' and superseded_by is not null $$,
+  $$ values ('corrected'::text) $$,
+  'the prior immutable recall version is marked corrected'
+);
+select ok(
+  (select last_success_at is not null and last_error_code is null from public.recall_sources where source_key = 'de-lebensmittelwarnung-rss'),
+  'successful ingestion updates source freshness without hiding errors as success'
+);
 
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,

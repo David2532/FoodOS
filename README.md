@@ -124,12 +124,15 @@ Mengen-/Logwirkung.
 
 1. Repository in Vercel importieren.
 2. `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (oder ausschließlich
-   den Legacy-Anon-Key) und `OPEN_FOOD_FACTS_USER_AGENT` setzen.
+   den Legacy-Anon-Key), `OPEN_FOOD_FACTS_USER_AGENT` sowie die server-only Recall-
+   Variablen aus `.env.example` setzen.
 3. Production-Deployment ausführen.
 
 Für die aktuellen Nutzerflows wird kein Service-Role-Key benötigt. Künftige Adminjobs
 müssen Secrets ausschließlich in der jeweiligen Server-/Deployment-Secret-Verwaltung
 halten und dürfen sie nie als `NEXT_PUBLIC_*` setzen.
+Der geplante Rückrufjob und seine getrennte Quellenfreigabe sind unter
+[`docs/RECALL_INGESTION.md`](docs/RECALL_INGESTION.md) beschrieben.
 
 ## Rechtlicher Status
 

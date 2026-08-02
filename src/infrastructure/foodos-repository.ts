@@ -237,6 +237,7 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
       .from("recall_events")
       .select("source_record_id, status, product_name, gtins, lot_numbers, source_url, published_at, retrieved_at, recall_sources!inner(approved)")
       .eq("recall_sources.approved", true)
+      .is("superseded_by", null)
       .order("published_at", { ascending: false })
       .limit(500)
   ]);
