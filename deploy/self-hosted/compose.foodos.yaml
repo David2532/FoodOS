@@ -1,0 +1,22 @@
+services:
+  foodos:
+    image: "foodos:${FOODOS_IMAGE_TAG:-local}"
+    build:
+      context: ../..
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: "${NEXT_PUBLIC_SUPABASE_URL}"
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}"
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: "${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}"
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_SUPABASE_URL: "${NEXT_PUBLIC_SUPABASE_URL}"
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}"
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}"
+      OPEN_FOOD_FACTS_USER_AGENT: "${OPEN_FOOD_FACTS_USER_AGENT}"
+    ports:
+      - "127.0.0.1:3000:3000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true

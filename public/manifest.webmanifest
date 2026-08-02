@@ -1,0 +1,13 @@
+{
+  "name": "FoodOS",
+  "short_name": "FoodOS",
+  "description": "Vorrat, Ernährung und Einkauf in einem System.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#08130f",
+  "theme_color": "#08130f",
+  "lang": "de-DE",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

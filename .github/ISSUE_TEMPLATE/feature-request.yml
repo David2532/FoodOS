@@ -1,0 +1,55 @@
+name: Product or engineering proposal
+description: Propose a user-outcome change with evidence, risks and acceptance criteria.
+title: "[Proposal]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: Describe who struggles, in what context, and the consequence. Do not start with a component or vendor.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence or hypothesis
+      description: Link research/support/metric evidence, or label the assumption and how it will be tested.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Intended outcome and non-goals
+      placeholder: "Outcome: …\nIncluded: …\nNot included: …"
+    validations:
+      required: true
+  - type: input
+    id: flow
+    attributes:
+      label: Related flow, requirement and plan
+      placeholder: "F02 / requirement ID / plans/…"
+    validations:
+      required: true
+  - type: textarea
+    id: states
+    attributes:
+      label: Data and state behavior
+      description: Include authoritative source, validation, unknown, loading, error, offline, conflict and recovery behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: Risks and review triggers
+      description: Safety, privacy, security, accessibility, performance, provider, legal/store, operational and cost impact.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance and evidence
+      description: Observable criteria, required test IDs/levels, usability evidence and rollback/disable strategy.
+    validations:
+      required: true

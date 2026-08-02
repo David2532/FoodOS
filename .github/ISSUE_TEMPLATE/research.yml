@@ -1,0 +1,41 @@
+name: Research study
+description: Plan a FoodOS discovery or usability round with ethical, reusable evidence.
+title: "[Research]: "
+labels:
+  - research
+body:
+  - type: textarea
+    id: questions
+    attributes:
+      label: Research questions
+      description: List no more than three primary decisions/questions.
+    validations:
+      required: true
+  - type: textarea
+    id: participants
+    attributes:
+      label: Target participants and recruitment matrix
+      description: Behavior/context, platform/accessibility mix, inclusion/exclusion and sample rationale.
+    validations:
+      required: true
+  - type: textarea
+    id: method
+    attributes:
+      label: Method, tasks and fixtures
+      description: Include flow IDs, session length, fictional data and moderator-assistance handling.
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Consent, data and retention
+      description: Recording choice, incentive, storage/access, minimization, retention and withdrawal path.
+    validations:
+      required: true
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision and completion rule
+      description: Define severity, success/stop/retest and continue/narrow/pivot/stop owner.
+    validations:
+      required: true

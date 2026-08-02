@@ -1,0 +1,84 @@
+name: Bug report
+description: Report reproducible incorrect FoodOS behavior without sensitive data.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use fictional/redacted data. For vulnerabilities or cross-household exposure, follow SECURITY.md and do not submit this form.
+  - type: dropdown
+    id: flow
+    attributes:
+      label: Flow or area
+      options:
+        - F00 Privacy and eligibility
+        - F01 Authentication, 2FA and household
+        - F02 Scan, product and batch
+        - F03 Ingredient relevance
+        - F04 Consumption and inventory
+        - F05 Plan and shopping
+        - F06 Subscription, export and deletion
+        - F07 Recall
+        - F08 Offline sync
+        - CEO/Ops/deployment
+        - Other or unknown
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Highest credible impact
+      options:
+        - C0 — security/privacy, use-by/recall, charge/update/admin or confirmed-intent loss
+        - C1 — critical flow, entitlement, export/deletion or user intent unavailable
+        - C2 — accessibility/performance or material degraded behavior
+        - C3 — cosmetic/low impact
+        - Needs triage
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Actual and expected outcome
+      description: State what happened, what should have happened, and the user consequence.
+      placeholder: "Actual: …\nExpected: …\nConsequence: …"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Use a minimal fictional fixture and include starting state.
+      placeholder: "1. …\n2. …\n3. …"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version, commit or release
+      placeholder: "commit SHA / web release / iOS or Android build"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "Browser/device, OS, window size, network/offline, font/accessibility settings"
+    validations:
+      required: true
+  - type: textarea
+    id: state
+    attributes:
+      label: Relevant state and diagnostics
+      description: Add redacted screenshot/trace/error ID. Do not paste tokens, GTINs, product/date/health/household data or raw logs.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Data safety
+      options:
+        - label: I removed credentials and real identity, household, product, date, diet/health and payment data.
+          required: true
+        - label: This is not a privately reportable security vulnerability.
+          required: true
