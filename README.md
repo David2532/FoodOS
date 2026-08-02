@@ -27,20 +27,39 @@ gemeinsame reine Domain-Pakete. Eine reine WebView-Hülle ist kein Release-Kandi
 ```bash
 cp .env.example .env.local
 npm install
+npm exec supabase start
+npm exec supabase db reset -- --local --no-seed
 npm run dev
 ```
 
-Ohne Supabase-Variablen startet die Oberfläche im Preview-Modus. Der Barcode-Lookup funktioniert serverseitig über Open Food Facts.
+`npm exec supabase status` zeigt die ausschließlich lokalen URL-/Publishable-Key-Werte,
+die in `.env.local` gehören. Keine Secret-/Service-Role-Keys in Client-Variablen oder Git
+ablegen. Ohne Supabase-Variablen startet die Oberfläche im klar gekennzeichneten
+Preview-Modus. Der Barcode-Lookup funktioniert dann serverseitig über Open Food Facts;
+private Haushaltsdaten werden nicht simuliert.
 
 ## Verifizieren
 
 ```bash
 npm run verify
+npm run test:coverage
+npm run test:db
+npm run test:e2e
+npm audit --audit-level=high
 ```
 
 Node.js 22 is pinned in `.nvmrc`. GitHub CI runs the same locked install and verification
-for pull requests and `main`. The larger web/native/security/release suite described in
-the plans is not implemented merely because this baseline passes.
+for pull requests and `main`. `test:db` requires the local Supabase Docker stack;
+`test:e2e` builds the app and checks Pixel-7/Desktop-Chrome profiles with Playwright and
+axe. A passing local subset is not production, native-device, usability, restore, load,
+store-sandbox or legal evidence.
+
+Für den echten lokalen Auth-Flow zuerst die von `npm exec supabase status` ausgegebenen
+`API_URL`/`PUBLISHABLE_KEY` als `NEXT_PUBLIC_SUPABASE_URL`/
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` nur in der aktuellen Shell setzen und dann
+`npm run test:e2e:auth` ausführen. Der Test registriert eine isolierte Identität, schreibt
+und verifiziert TOTP und legt den Haushalt an; anschließend die lokale Testdatenbank mit
+`npm exec supabase db reset -- --local --no-seed` bereinigen.
 
 ## Mit Codex weiterarbeiten
 
@@ -92,16 +111,21 @@ approvals, deployments or legal conclusions.
 Die Migrationen unter `supabase/migrations/` enthalten das Haushaltsmodell, Produkt- und
 Metadatenfelder, chargenbezogene MHD-Daten, Inhaltsstoffbewertungen, Vorrat, Food-Log,
 Rezepte, Wochenplan, Einkauf und RLS-Policies. Private Tabellen müssen zusätzlich einen
-AAL2-Claim verlangen.
+AAL2-Claim verlangen. Die neueren Forward-Migrationen ergänzen transaktionales
+Onboarding, idempotentes Erfassen/Verzehren, explizite Data-API-Rechte, append-only
+Inventar-Events sowie persistente Plan-/Einkaufs-RPCs. `supabase/tests/` beweist AAL1-
+Verweigerung, zweiten Nutzer, Haushaltsisolation, Replay und atomare Mengen-/Logwirkung.
 
 ## Vercel
 
 1. Repository in Vercel importieren.
-2. `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (oder den Legacy-
-   Anon-Key) und `OPEN_FOOD_FACTS_USER_AGENT` setzen.
+2. `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (oder ausschließlich
+   den Legacy-Anon-Key) und `OPEN_FOOD_FACTS_USER_AGENT` setzen.
 3. Production-Deployment ausführen.
 
-`SUPABASE_SERVICE_ROLE_KEY` ist nur für spätere serverseitige Adminjobs vorgesehen und darf nie als `NEXT_PUBLIC_*` gesetzt werden.
+Für die aktuellen Nutzerflows wird kein Service-Role-Key benötigt. Künftige Adminjobs
+müssen Secrets ausschließlich in der jeweiligen Server-/Deployment-Secret-Verwaltung
+halten und dürfen sie nie als `NEXT_PUBLIC_*` setzen.
 
 ## Rechtlicher Status
 
@@ -112,12 +136,15 @@ Lebensmittel-Claims, Werbung, Barrierefreiheit und das konkrete Land freigegeben
 
 ## Aktueller Reifegrad
 
-Die neuen Unterlagen sind Ziel- und Release-Spezifikationen, keine Behauptung, dass diese
-Funktionen bereits implementiert sind. Der aktuelle Prototyp hat Auth-/AAL2-Grundlagen,
-UI und drei Unit-Tests. Recall-Pipeline, native Offline-Synchronisation, Playwright/
-Maestro/pgTAP-Gesamtsuite, signierte OTA-Governance und die echte CEO-Zentrale müssen in
-den dokumentierten Stufen noch gebaut, mit Live-Quellen verbunden und bewiesen werden.
-Die UI-/Performance-Zielwerte sind ebenso Release-Gates: Aktuell existieren noch keine
-Produktions-RUM-Daten, native Release-Build-Messungen oder abgeschlossenen echten
-Usability-Runden. Das Repository sollte bis zur Marken-, Sicherheits- und Rechtsfreigabe
-privat bleiben und enthält derzeit keine Open-Source-Lizenz.
+Der Web-MVP besitzt Auth-/AAL2-Gates, transaktionales Onboarding, Cache-first-Produktlookup,
+EAN/UPC/GS1-Erfassung, manuellen unbekannten Produkt-/MHD-Fallback, chargenbezogenen
+Vorrat, atomaren Verzehr, Tageswerte sowie persistente Wochenplan-/Einkaufsflows. Lokale
+Unit-/Property-, Coverage-, pgTAP/RLS- und Playwright/axe-Suiten sind vorhanden; der
+konkrete Stand steht unter `docs/evidence/`.
+
+Stage -1 ist weiterhin nicht bestanden: Es gibt keine erfundenen Interviews,
+Concierge-Beta, Zahlungs-, Marken- oder echte Usability-Evidence. Recall-Ingestion,
+verlustfreie Offline-Outbox, Datenschutzrechte/Retention, Ops-/CEO-Ledger, native Apps,
+Maestro/Store-Sandbox, Restore/Last/Security-Pentest und Production-RUM/Deployment sind
+nicht durch den Web-MVP bewiesen. Das Repository bleibt bis zu Markt-, Marken-,
+Sicherheits- und Rechtsfreigabe privat und enthält keine Open-Source-Lizenz.
