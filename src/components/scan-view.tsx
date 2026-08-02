@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Image from "next/image";
 import { AlertTriangle, Camera, Check, ChevronDown, Info, Keyboard, LoaderCircle, ScanLine, ShieldCheck, X } from "lucide-react";
 import type { IScannerControls } from "@zxing/browser";
 import type { Product, RiskLevel } from "@/lib/types";
+import { productApiResponseSchema } from "@/contracts/product";
+import { addBatchResultSchema, inventoryBatchInputSchema } from "@/contracts/inventory";
+import { hasValidGtinCheckDigit, parseGs1, type Gs1Elements } from "@/domain/gs1";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 const riskLabels: Record<RiskLevel, { label: string; icon: typeof Check }> = {
   avoid: { label: "Persönlich meiden", icon: X },
@@ -14,7 +18,7 @@ const riskLabels: Record<RiskLevel, { label: string; icon: typeof Check }> = {
   unknown: { label: "Daten unbekannt", icon: Info }
 };
 
-export function ScanView() {
+export function ScanView({ householdId, onSaved }: { householdId?: string; onSaved?: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
@@ -22,23 +26,51 @@ export function ScanView() {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gs1, setGs1] = useState<Gs1Elements | null>(null);
+  const [manualBarcode, setManualBarcode] = useState<string | null>(null);
 
   useEffect(() => () => controlsRef.current?.stop(), []);
 
   async function lookup(code: string) {
-    if (!/^\d{8,14}$/.test(code)) {
-      setError("Bitte gib einen gültigen EAN-/UPC-Code mit 8–14 Ziffern ein.");
+    const trimmed = code.trim();
+    let gtin = trimmed;
+    let parsedGs1: Gs1Elements | null = null;
+    if (!/^\d{8,14}$/.test(trimmed)) {
+      const parsed = parseGs1(trimmed);
+      if (!parsed.ok || !parsed.value.gtin) {
+        setError(parsed.ok ? "Der GS1-Code enthält keine GTIN (AI 01)." : parsed.error.message);
+        return;
+      }
+      gtin = parsed.value.gtin;
+      parsedGs1 = parsed.value;
+    }
+    if (!hasValidGtinCheckDigit(gtin)) {
+      setError("Die Prüfziffer des EAN-/UPC-/GTIN-Codes ist ungültig.");
       return;
     }
     setLoading(true);
     setError(null);
+    setManualBarcode(null);
     controlsRef.current?.stop();
     setCameraActive(false);
     try {
-      const response = await fetch(`/api/products/${code}`);
-      const body = (await response.json()) as { product?: Product; error?: string };
-      if (!response.ok || !body.product) throw new Error(body.error ?? "Produkt nicht gefunden.");
-      setProduct(body.product);
+      const response = await fetch(`/api/products/${gtin}`);
+      const body: unknown = await response.json();
+      if (response.status === 404) {
+        setManualBarcode(gtin);
+        setGs1(parsedGs1);
+        return;
+      }
+      if (!response.ok) {
+        const message = body && typeof body === "object" && "error" in body && typeof body.error === "string"
+          ? body.error
+          : "Produkt nicht gefunden.";
+        throw new Error(message);
+      }
+      const parsed = productApiResponseSchema.safeParse(body);
+      if (!parsed.success) throw new Error("Die Produktquelle hat unerwartete Daten geliefert.");
+      setProduct(parsed.data.product);
+      setGs1(parsedGs1);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Produkt konnte nicht geladen werden.");
     } finally {
@@ -66,7 +98,8 @@ export function ScanView() {
     }
   }
 
-  if (product) return <ProductResult product={product} onReset={() => { setProduct(null); setBarcode(""); }} />;
+  if (product) return <ProductResult product={product} householdId={householdId} gs1={gs1} onSaved={onSaved} onReset={() => { setProduct(null); setBarcode(""); setGs1(null); setManualBarcode(null); }} />;
+  if (manualBarcode) return <ManualProductEntry barcode={manualBarcode} onCancel={() => setManualBarcode(null)} onConfirm={(manualProduct) => setProduct(manualProduct)} />;
 
   return (
     <div className="scan-page page-enter">
@@ -81,7 +114,7 @@ export function ScanView() {
           <div className="scanner-empty">
             <span><ScanLine size={34} /></span>
             <h2>Produktcode erfassen</h2>
-            <p>Wir lesen danach Produktdaten, Zutaten und das MHD aus.</p>
+            <p>Wir laden Produktdaten und fragen das Datum der konkreten Packung getrennt ab.</p>
             <button className="primary-button" onClick={startCamera}><Camera size={18} /> Kamera starten</button>
           </div>
         )}
@@ -90,7 +123,7 @@ export function ScanView() {
 
       <div className="scan-divider"><span>oder manuell</span></div>
       <form className="barcode-form" onSubmit={(event) => { event.preventDefault(); void lookup(barcode); }}>
-        <label><Keyboard size={18} /><input inputMode="numeric" autoComplete="off" value={barcode} onChange={(event) => setBarcode(event.target.value.replace(/\D/g, ""))} placeholder="EAN / UPC eingeben" /></label>
+        <label><span className="sr-only">EAN, UPC oder GS1-Code</span><Keyboard size={18} /><input inputMode="text" autoComplete="off" value={barcode} onChange={(event) => setBarcode(event.target.value)} maxLength={120} placeholder="EAN / UPC / GS1 eingeben" /></label>
         <button disabled={loading}>{loading ? <LoaderCircle className="spin" size={19} /> : "Prüfen"}</button>
       </form>
       {error && <div className="error-banner"><AlertTriangle size={17} /><span>{error}</span></div>}
@@ -98,16 +131,103 @@ export function ScanView() {
       <section className="scan-steps">
         <p>WAS FOODOS DANACH MACHT</p>
         <div><span>1</span><strong>Produkt & Zutaten</strong><small>Alle verfügbaren Metadaten</small></div>
-        <div><span>2</span><strong>MHD & Charge</strong><small>Automatischer zweiter Kamerablick</small></div>
+        <div><span>2</span><strong>MHD & Charge</strong><small>Packungsdatum manuell bestätigen</small></div>
         <div><span>3</span><strong>Vorrat</strong><small>Menge und Lagerort bestätigen</small></div>
       </section>
     </div>
   );
 }
 
-function ProductResult({ product, onReset }: { product: Product; onReset: () => void }) {
+function ManualProductEntry({ barcode, onCancel, onConfirm }: { barcode: string; onCancel: () => void; onConfirm: (product: Product) => void }) {
+  function confirm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") ?? "").trim();
+    const brand = String(form.get("brand") ?? "").trim();
+    if (!name) return;
+    onConfirm({
+      barcode,
+      name,
+      brand: brand || undefined,
+      categories: [],
+      countries: [],
+      structuredIngredients: [],
+      allergens: [],
+      traces: [],
+      additives: [],
+      labels: [],
+      nutrition: {},
+      assessments: [],
+      source: "manual",
+      retrievedAt: new Date().toISOString(),
+      confidence: 1
+    });
+  }
+
+  return <div className="product-result page-enter">
+    <button className="reset-scan" onClick={onCancel}><ScanLine size={17} /> Anderen Code prüfen</button>
+    <section className="empty-state"><Keyboard size={25} /><h2>Produkt noch nicht im Katalog</h2><p>Der Code {barcode} wurde nicht bei Open Food Facts gefunden. Lege das Produkt mit einem bestätigten Namen an; fehlende Angaben bleiben sichtbar unbekannt.</p></section>
+    <form className="batch-form" onSubmit={confirm}>
+      <label className="field-label"><span>Produktname</span><input name="name" minLength={1} maxLength={240} autoFocus required /></label>
+      <label className="field-label"><span>Marke · optional</span><input name="brand" maxLength={160} /></label>
+      <button className="primary-button wide"><Check size={18} /> Produktdaten bestätigen</button>
+    </form>
+  </div>;
+}
+
+function ProductResult({ product, householdId, gs1, onReset, onSaved }: { product: Product; householdId?: string; gs1: Gs1Elements | null; onReset: () => void; onSaved?: () => void }) {
   const [showIngredients, setShowIngredients] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [dateKind, setDateKind] = useState<"best_before" | "use_by" | "none">(gs1?.useByDate ? "use_by" : gs1?.bestBeforeDate ? "best_before" : "none");
+  const mutationId = useRef<string>(crypto.randomUUID());
   const topAssessments = product.assessments.slice(0, 4);
+
+  async function saveBatch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!householdId) return;
+    setSaveError(null);
+    const form = new FormData(event.currentTarget);
+    const price = String(form.get("purchasePrice") ?? "").trim().replace(",", ".");
+    const parsed = inventoryBatchInputSchema.safeParse({
+      amount: form.get("amount"),
+      unit: form.get("unit"),
+      location: form.get("location"),
+      dateKind,
+      date: form.get("date"),
+      lotNumber: form.get("lotNumber"),
+      serialNumber: gs1?.serialNumber,
+      purchasePriceCents: price ? Math.round(Number(price) * 100) : undefined
+    });
+    if (!parsed.success) {
+      setSaveError(parsed.error.issues[0]?.message ?? "Prüfe Menge, Datum und Lagerort.");
+      return;
+    }
+
+    setSaving(true);
+    const { data, error } = await getSupabaseBrowserClient().rpc("add_inventory_batch", {
+      target_household: householdId,
+      product_payload: product,
+      batch_payload: {
+        amount: parsed.data.amount,
+        unit: parsed.data.unit,
+        location: parsed.data.location,
+        best_before_date: parsed.data.dateKind === "best_before" ? parsed.data.date : null,
+        use_by_date: parsed.data.dateKind === "use_by" ? parsed.data.date : null,
+        lot_number: parsed.data.lotNumber || null,
+        serial_number: parsed.data.serialNumber || null,
+        purchase_price_cents: parsed.data.purchasePriceCents ?? null,
+        date_source: gs1 ? "gs1_confirmed" : "manual_confirmed"
+      },
+      mutation_id: mutationId.current
+    });
+    setSaving(false);
+    if (error || !addBatchResultSchema.safeParse(data).success) {
+      setSaveError("Die Charge wurde nicht vollständig gespeichert. Prüfe deine Verbindung und versuche es erneut; die Wiederholung erzeugt keine Doppelbuchung.");
+      return;
+    }
+    onSaved?.();
+  }
 
   return (
     <div className="product-result page-enter">
@@ -118,11 +238,16 @@ function ProductResult({ product, onReset }: { product: Product; onReset: () => 
         <i className="confidence-badge"><Check size={12} />{Math.round(product.confidence * 100)} %</i>
       </section>
 
-      <button className="mhd-prompt">
-        <span><Camera size={20} /></span>
-        <div><p>NÄCHSTER SCHRITT</p><strong>MHD & Charge fotografieren</strong><small>Bei normalem EAN nicht im Code enthalten</small></div>
-        <ChevronDown size={18} />
-      </button>
+      <form className="batch-form" onSubmit={saveBatch}>
+        <div className="batch-form-heading"><span><Camera size={20} /></span><div><p>PACKUNG BESTÄTIGEN</p><strong>MHD/Verbrauchsdatum und Charge</strong><small>{gs1 ? "Aus GS1 erkannt – vor dem Speichern prüfen" : "Bei normalem EAN manuell von der Packung übernehmen"}</small></div></div>
+        <fieldset><legend>Art des Datums</legend><label><input type="radio" name="dateKind" checked={dateKind === "best_before"} onChange={() => setDateKind("best_before")} /> MHD</label><label><input type="radio" name="dateKind" checked={dateKind === "use_by"} onChange={() => setDateKind("use_by")} /> Verbrauchsdatum</label><label><input type="radio" name="dateKind" checked={dateKind === "none"} onChange={() => setDateKind("none")} /> Kein Datum</label></fieldset>
+        {dateKind !== "none" && <label className="field-label"><span>{dateKind === "use_by" ? "Zu verbrauchen bis" : "Mindestens haltbar bis"}</span><input name="date" type="date" defaultValue={gs1?.useByDate ?? gs1?.bestBeforeDate ?? ""} required /></label>}
+        <div className="batch-grid"><label className="field-label"><span>Menge</span><input name="amount" type="number" inputMode="decimal" min="0.001" step="0.001" defaultValue="1" required /></label><label className="field-label"><span>Einheit</span><select name="unit" defaultValue="piece"><option value="piece">Stück</option><option value="g">g</option><option value="ml">ml</option></select></label></div>
+        <label className="field-label"><span>Lagerort</span><select name="location" defaultValue="pantry"><option value="fridge">Kühlschrank</option><option value="freezer">Gefrierfach</option><option value="pantry">Vorrat</option><option value="drinks">Getränke</option><option value="other">Sonstiges</option></select></label>
+        <div className="batch-grid"><label className="field-label"><span>Charge · optional</span><input name="lotNumber" defaultValue={gs1?.lotNumber ?? ""} maxLength={120} /></label><label className="field-label"><span>Kaufpreis € · optional</span><input name="purchasePrice" inputMode="decimal" pattern="[0-9]+([,.][0-9]{1,2})?" /></label></div>
+        {saveError && <div className="error-banner" role="alert"><AlertTriangle size={17} /><span>{saveError}</span></div>}
+        {householdId ? <button className="primary-button wide" disabled={saving}>{saving ? <LoaderCircle className="spin" size={18} /> : <Check size={18} />}{saving ? "Charge wird gespeichert …" : "Charge zum Vorrat hinzufügen"}</button> : <p className="preview-save-note">Preview-Modus: Produktdaten können geprüft, aber nicht dauerhaft gespeichert werden.</p>}
+      </form>
 
       <section className="nutrition-strip">
         <div><strong>{product.nutrition.kcal100g ?? "–"}</strong><span>kcal</span></div>
@@ -144,7 +269,6 @@ function ProductResult({ product, onReset }: { product: Product; onReset: () => 
         {showIngredients && <p className="ingredients-text">{product.ingredientsText}</p>}
       </section>
 
-      <button className="primary-button wide"><Check size={18} /> Menge & Lagerort bestätigen</button>
     </div>
   );
 }

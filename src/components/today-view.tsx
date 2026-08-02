@@ -1,7 +1,37 @@
-import { ArrowRight, Beef, Clock3, Flame, PackageCheck, Plus, Wheat } from "lucide-react";
-import type { AppView } from "@/lib/types";
+import { ArrowRight, Beef, Clock3, Flame, PackageCheck, Plus, ShieldAlert, Wheat } from "lucide-react";
+import type { AppSnapshot, AppView } from "@/lib/types";
 
-export function TodayView({ onNavigate }: { onNavigate: (view: AppView) => void }) {
+export function TodayView({ onNavigate, snapshot }: { onNavigate: (view: AppView) => void; snapshot?: AppSnapshot }) {
+  if (snapshot) {
+    const urgent = snapshot.inventory.find((item) => ["past_use_by", "today", "soon", "past_best_before"].includes(item.expiryState));
+    const target = snapshot.today.calorieTarget;
+    const targetProgress = target ? Math.min(100, snapshot.today.kcal / target * 100) : 0;
+    return (
+      <div className="stack-lg page-enter">
+        <section className="hero-card">
+          <div className="hero-topline"><div><span className="status-pulse" />Dauerhaft verbunden</div></div>
+          <div className="hero-number"><strong>{Math.round(snapshot.today.kcal).toLocaleString("de-DE")}</strong><span>{target ? `/ ${target.toLocaleString("de-DE")} kcal` : "kcal heute"}</span></div>
+          {target && <div className="progress-track"><span style={{ width: `${targetProgress}%` }} /></div>}
+          <div className="macro-grid">
+            <div><Beef size={16} /><span>Protein</span><strong>{Math.round(snapshot.today.proteinG)} <small>{snapshot.today.proteinTargetG ? `/ ${Math.round(snapshot.today.proteinTargetG)} g` : "g"}</small></strong></div>
+            <div><Wheat size={16} /><span>Carbs</span><strong>{Math.round(snapshot.today.carbsG)} <small>g</small></strong></div>
+            <div><Flame size={16} /><span>Fett</span><strong>{Math.round(snapshot.today.fatG)} <small>g</small></strong></div>
+          </div>
+          <button className="primary-button" onClick={() => onNavigate("inventory")}><PackageCheck size={18} /> Verzehr aus Vorrat buchen</button>
+        </section>
+        {snapshot.recallSource.status !== "fresh" && <section className="recall-source-warning" role="status"><ShieldAlert size={21} /><div><strong>{snapshot.recallSource.status === "stale" ? "Rückrufquelle ist veraltet" : "Rückrufprüfung nicht verfügbar"}</strong><p>Es ist keine aktuelle Aussage zur Betroffenheit oder Sicherheit möglich. Prüfe im Zweifel die amtliche Quelle lebensmittelwarnung.de.</p></div></section>}
+        {urgent ? (
+          <section className="expiry-card">
+            <div className="expiry-icon"><Clock3 size={20} /></div>
+            <div><p>{urgent.dateKind === "use_by" ? "VERBRAUCHSDATUM" : "ZUERST PRÜFEN"}</p><h3>{urgent.name}</h3><span>{urgent.expiryDate ? `${urgent.expiryDate} · ` : ""}{urgent.remainingLabel}</span></div>
+            <button onClick={() => onNavigate("inventory")} aria-label={`${urgent.name} im Vorrat öffnen`}><ArrowRight size={18} /></button>
+          </section>
+        ) : (
+          <section className="empty-state"><PackageCheck size={24} /><h2>{snapshot.inventory.length ? "Keine dringende Charge" : "Dein Vorrat ist leer"}</h2><p>{snapshot.inventory.length ? "Aktuell ist keine Charge mit Datum kurzfristig fällig." : "Scanne dein erstes Lebensmittel oder gib den Barcode manuell ein."}</p><button className="primary-button" onClick={() => onNavigate("scan")}><Plus size={17} /> Lebensmittel erfassen</button></section>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="stack-lg page-enter">
       <section className="hero-card">
@@ -40,7 +70,7 @@ export function TodayView({ onNavigate }: { onNavigate: (view: AppView) => void 
       <section className="expiry-card">
         <div className="expiry-icon"><Clock3 size={20} /></div>
         <div><p>ZUERST VERBRAUCHEN</p><h3>Lachs läuft morgen ab</h3><span>280 g im Kühlschrank</span></div>
-        <button onClick={() => onNavigate("inventory")}><ArrowRight size={18} /></button>
+        <button onClick={() => onNavigate("inventory")} aria-label="Dringende Charge im Vorrat öffnen"><ArrowRight size={18} /></button>
       </section>
 
       <section className="quick-section">

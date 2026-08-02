@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Bell, CalendarDays, Home, PackageOpen, ScanLine, ShoppingBasket, Sparkles } from "lucide-react";
 import { SignOutButton } from "@/features/auth/sign-out-button";
-import type { AppView } from "@/lib/types";
+import type { AppSnapshot, AppView } from "@/lib/types";
 import { TodayView } from "./today-view";
 import { InventoryView } from "./inventory-view";
 import { ScanView } from "./scan-view";
@@ -26,9 +27,15 @@ const titles: Record<AppView, { eyebrow: string; title: string }> = {
   shopping: { eyebrow: "Nächster Einkauf", title: "12 Dinge fehlen" }
 };
 
-export function FoodOsApp({ authenticated = false, preview = false }: { authenticated?: boolean; preview?: boolean }) {
+export function FoodOsApp({ authenticated = false, preview = false, initialSnapshot }: { authenticated?: boolean; preview?: boolean; initialSnapshot?: AppSnapshot }) {
+  const router = useRouter();
   const [view, setView] = useState<AppView>("today");
-  const current = useMemo(() => titles[view], [view]);
+  const current = useMemo(() => {
+    if (!initialSnapshot) return titles[view];
+    if (view === "today") return { eyebrow: initialSnapshot.household.name, title: "Heute" };
+    if (view === "inventory") return { eyebrow: `${initialSnapshot.inventory.length} Chargen`, title: "Dein Vorrat" };
+    return titles[view];
+  }, [initialSnapshot, view]);
 
   return (
     <main className="app-canvas">
@@ -52,11 +59,12 @@ export function FoodOsApp({ authenticated = false, preview = false }: { authenti
         </header>
 
         <div className="view-scroll" key={view}>
-          {view === "today" && <TodayView onNavigate={setView} />}
-          {view === "inventory" && <InventoryView onScan={() => setView("scan")} />}
-          {view === "scan" && <ScanView />}
-          {view === "plan" && <PlanView />}
-          {view === "shopping" && <ShoppingView />}
+          {preview && <div className="preview-banner" role="status">Preview-Modus · Beispieldaten werden nicht gespeichert</div>}
+          {view === "today" && <TodayView onNavigate={setView} snapshot={initialSnapshot} />}
+          {view === "inventory" && <InventoryView onScan={() => setView("scan")} onConsumed={initialSnapshot ? () => router.refresh() : undefined} items={initialSnapshot?.inventory} />}
+          {view === "scan" && <ScanView householdId={initialSnapshot?.household.id} onSaved={() => { setView("inventory"); router.refresh(); }} />}
+          {view === "plan" && <PlanView snapshot={initialSnapshot} onChanged={initialSnapshot ? () => router.refresh() : undefined} />}
+          {view === "shopping" && <ShoppingView snapshot={initialSnapshot} onChanged={initialSnapshot ? () => router.refresh() : undefined} />}
         </div>
 
         <nav className="bottom-nav" aria-label="Hauptnavigation">

@@ -1,15 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { GeistMono } from "geist/font/mono";
+import { GeistSans } from "geist/font/sans";
 import "./globals.css";
-
-const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
-const mono = Geist_Mono({ variable: "--font-mono", subsets: ["latin"] });
+import { PwaRegistration } from "@/components/pwa-registration";
 
 export const metadata: Metadata = {
   title: "FoodOS – dein Ernährungssystem",
   description: "Vorrat, MHD, Inhaltsstoffe, Wochenplan und Einkauf in einer App.",
   applicationName: "FoodOS",
   manifest: "/manifest.webmanifest",
+  icons: { icon: "/icon.svg", apple: "/icon.svg" },
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "FoodOS" },
   formatDetection: { telephone: false }
 };
@@ -17,7 +17,6 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
   viewportFit: "cover",
   themeColor: "#08130f"
 };
@@ -25,7 +24,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="de">
-      <body className={`${geist.variable} ${mono.variable}`}>{children}</body>
+      <body className={`${GeistSans.variable} ${GeistMono.variable}`}><PwaRegistration />{children}</body>
     </html>
   );
 }
