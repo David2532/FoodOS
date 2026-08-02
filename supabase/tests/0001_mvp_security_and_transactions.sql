@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(48);
+select plan(50);
 
 select has_function(
   'public',
@@ -438,6 +438,16 @@ select is(
   :'planned_id',
   'weekly planning is idempotent'
 );
+select throws_ok(
+  format(
+    'select public.plan_product(%L::uuid, %L::uuid, current_date, ''dinner'', 3, %L::uuid)',
+    :'owner_household', (select id::text from public.products order by created_at limit 1),
+    'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+  ),
+  '23505',
+  'Mutation ID payload conflict',
+  'weekly planning rejects a reused mutation ID with a different payload'
+);
 select public.generate_shopping_from_plan(:'owner_household'::uuid, current_date) as shopping_list_id \gset
 select results_eq(
   $$ select count(*)::bigint from public.shopping_items where source = 'plan' $$,
@@ -454,13 +464,22 @@ select public.add_manual_shopping_item(
   'dddddddd-dddd-4ddd-8ddd-dddddddddddd'::uuid
 ) as manual_item_id \gset
 select public.add_manual_shopping_item(
-  :'owner_household'::uuid, current_date, 'ignored replay', 9, 'piece',
+  :'owner_household'::uuid, current_date, 'Äpfel', 4, 'piece',
   'dddddddd-dddd-4ddd-8ddd-dddddddddddd'::uuid
 ) as manual_item_replay_id \gset
 select results_eq(
   $$ select count(*)::bigint from public.shopping_items where source = 'manual' $$,
   $$ values (1::bigint) $$,
   'manual shopping additions are idempotent'
+);
+select throws_ok(
+  format(
+    'select public.add_manual_shopping_item(%L::uuid, current_date, ''Birnen'', 9, ''piece'', %L::uuid)',
+    :'owner_household', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+  ),
+  '23505',
+  'Mutation ID payload conflict',
+  'manual shopping rejects a reused mutation ID with a different payload'
 );
 select public.set_shopping_item_checked(:'manual_item_id'::uuid, true);
 select ok(
