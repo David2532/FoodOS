@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, CalendarDays, Home, PackageOpen, ScanLine, ShoppingBasket, Sparkles } from "lucide-react";
 import { SignOutButton } from "@/features/auth/sign-out-button";
+import { DataExportButton } from "@/features/privacy/data-export-button";
 import type { AppSnapshot, AppView } from "@/lib/types";
 import { TodayView } from "./today-view";
 import { InventoryView } from "./inventory-view";
@@ -51,7 +52,7 @@ export function FoodOsApp({ authenticated = false, preview = false, initialSnaps
             <p>{current.eyebrow}</p>
             <h1>{current.title}</h1>
           </div>
-          {authenticated ? <SignOutButton /> : (
+          {authenticated ? <div className="account-actions"><DataExportButton /><SignOutButton /></div> : (
             <button className="icon-button" aria-label={preview ? "Lokaler Preview-Modus" : "Benachrichtigungen"}>
               <Bell size={20} />
               <span className="notification-dot" />

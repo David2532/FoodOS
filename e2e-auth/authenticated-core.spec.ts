@@ -23,6 +23,9 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
   const password = "FoodOS-E2E-Only-2026!";
 
   await page.goto("/");
+  const deniedExport = await page.request.get("/api/account/export");
+  expect(deniedExport.status()).toBe(401);
+  expect(deniedExport.headers()["cache-control"]).toContain("no-store");
   await page.getByRole("tab", { name: "Registrieren" }).click();
   await page.getByLabel("E-Mail-Adresse").fill(email);
   await page.getByLabel("Passwort").fill(password);
@@ -85,4 +88,15 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
   await expect(page.getByText(/Offline · auf diesem Gerät gespeichert/)).not.toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Vorrat", exact: true }).click();
   await expect(page.getByText(/Nutella/i).first()).toBeVisible();
+
+  const exportResponse = await page.request.get("/api/account/export");
+  expect(exportResponse.status()).toBe(200);
+  expect(exportResponse.headers()["cache-control"]).toContain("no-store");
+  expect(exportResponse.headers()["content-disposition"]).toContain("attachment");
+  const exportPayload = await exportResponse.json();
+  expect(exportPayload.exportVersion).toBe(1);
+  expect(exportPayload.identity.email).toBe(email);
+  expect(exportPayload.data.households).toHaveLength(1);
+  expect(exportPayload.data.inventoryBatches).toHaveLength(1);
+  expect(exportPayload.data.products[0].name).toMatch(/Nutella/i);
 });

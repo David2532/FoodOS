@@ -34,4 +34,11 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
     });
     expect(result.violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
   });
+
+  test("fails closed when the export service is not configured", async ({ request }) => {
+    const response = await request.get("/api/account/export");
+    expect(response.status()).toBe(503);
+    expect(response.headers()["cache-control"]).toContain("no-store");
+    await expect(response.json()).resolves.toEqual({ error: "SERVICE_UNAVAILABLE" });
+  });
 });

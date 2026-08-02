@@ -18,6 +18,7 @@ separate artifact check.
 | Playwright Pixel 7 + Desktop Chrome | `FLAKY` | Initial runs exposed a nameless button, dev-overlay interference and transient fade contrast. After fixes, 4/4 passed; per policy the gate remains flaky until an independent clean artifact. |
 | Real local Auth/TOTP/onboarding E2E | `PASS` | 1/1: registered an isolated local user, proved AAL1 stayed at MFA, enrolled and verified real TOTP, atomically created household/owner/profile, then loaded the AAL2 app. Local DB was reset afterward. |
 | Encrypted offline outbox reconnect E2E | `PASS` | The same real-stack browser flow looked up a product, confirmed a batch while offline, verified one `QUEUED` IndexedDB record exposed no payload/actor/household fields and contained AES-GCM ciphertext with a 12-byte IV, then reconnected and observed the server-accepted batch. |
+| AAL2/RLS data export E2E | `PASS` | Unauthenticated access returned 401 with `no-store`; the AAL2 user received a JSON attachment with exactly one isolated household, product and batch. A no-Supabase preview returned typed 503 instead of a generic server error. |
 | Automated serious/critical axe findings | `PASS on final run` | Zero serious/critical findings on the final Pixel-7 and Desktop-Chrome runs. |
 | Visual screenshots | `REVIEWED_LOCAL` | Fictitious preview screenshots under `docs/evidence/screenshots/`; no authenticated data. |
 | Dependency audit | `PASS` | Final `npm audit --audit-level=high`: 0 vulnerabilities. |
