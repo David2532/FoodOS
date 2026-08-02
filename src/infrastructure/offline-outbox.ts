@@ -83,9 +83,15 @@ async function getOrCreateMetadata<T>(db: IDBDatabase, key: string, create: () =
   if (existing !== undefined) return existing;
   const value = await create();
   const write = db.transaction(METADATA, "readwrite");
-  write.objectStore(METADATA).put(value, key);
-  await transactionDone(write);
-  return value;
+  write.objectStore(METADATA).add(value, key);
+  try {
+    await transactionDone(write);
+    return value;
+  } catch {
+    const winner = await requestValue(db.transaction(METADATA, "readonly").objectStore(METADATA).get(key)) as T | undefined;
+    if (winner !== undefined) return winner;
+    throw new Error("Device metadata could not be initialized");
+  }
 }
 
 async function encryptionKey(db: IDBDatabase): Promise<CryptoKey> {
@@ -243,7 +249,11 @@ export async function flushQueuedOperations(): Promise<OutboxSummary> {
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   for (const operation of operations) {
     if (!navigator.onLine) break;
-    await sendOperation(db, operation, client);
+    try {
+      await sendOperation(db, operation, client);
+    } catch {
+      await putOperation(db, { ...operation, state: "REJECTED", safeError: "session_revalidation_failed" });
+    }
   }
   return getOutboxSummary();
 }
@@ -266,6 +276,17 @@ export async function clearOfflineData(): Promise<void> {
     request.onerror = () => reject(request.error ?? new Error("Offline data could not be removed"));
     request.onblocked = () => reject(new Error("Offline data removal is blocked by another tab"));
   });
+  emitChange();
+}
+
+export async function discardRejectedOperations(): Promise<void> {
+  const db = await openDatabase();
+  const rejected = (await allOperations(db)).filter((operation) => operation.state === "REJECTED");
+  if (!rejected.length) return;
+  const transaction = db.transaction(OPERATIONS, "readwrite");
+  const store = transaction.objectStore(OPERATIONS);
+  rejected.forEach((operation) => store.delete(operation.id));
+  await transactionDone(transaction);
   emitChange();
 }
 
