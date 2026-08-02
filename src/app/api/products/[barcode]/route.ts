@@ -17,22 +17,56 @@ const fields = [
   "lang", "nutriments"
 ].join(",");
 
+const lookupWindows = new Map<string, { startedAt: number; count: number }>();
+let providerFailures = 0;
+let providerOpenUntil = 0;
+
+function allowLookup(key: string, now = Date.now()): boolean {
+  const current = lookupWindows.get(key);
+  if (!current || now - current.startedAt >= 60_000) {
+    lookupWindows.set(key, { startedAt: now, count: 1 });
+    return true;
+  }
+  if (current.count >= 30) return false;
+  current.count += 1;
+  return true;
+}
+
+function retryDelay(attempt: number) {
+  return new Promise((resolve) => setTimeout(resolve, 120 * 2 ** attempt));
+}
+
 async function fetchProduct(barcode: string) {
+  if (Date.now() < providerOpenUntil) throw new Error("Product provider circuit is open");
   const userAgent = process.env.OPEN_FOOD_FACTS_USER_AGENT ?? "FoodOS/0.1 (personal nutrition inventory app)";
   const endpoints = [
     `https://world.openfoodfacts.org/api/v3/product/${barcode}.json?fields=${fields}`,
     `https://world.openfoodfacts.org/api/v2/product/${barcode}.json?fields=${fields}`
   ];
 
-  for (const endpoint of endpoints) {
-    const response = await fetch(endpoint, {
-      headers: { "User-Agent": userAgent, Accept: "application/json" },
-      signal: AbortSignal.timeout(6_000),
-      next: { revalidate: 60 * 60 * 24 * 7 }
-    });
-    if (!response.ok) continue;
-    const body: unknown = await response.json();
-    if (body && typeof body === "object" && "product" in body) return body;
+  try {
+    for (const endpoint of endpoints) {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const response = await fetch(endpoint, {
+          headers: { "User-Agent": userAgent, Accept: "application/json" },
+          signal: AbortSignal.timeout(6_000),
+          next: { revalidate: 60 * 60 * 24 * 7 }
+        });
+        if (response.ok) {
+          providerFailures = 0;
+          const body: unknown = await response.json();
+          if (body && typeof body === "object" && "product" in body) return body;
+          break;
+        }
+        if (response.status !== 429 && response.status < 500) break;
+        if (attempt === 0) await retryDelay(attempt);
+      }
+    }
+    providerFailures = 0;
+  } catch (error) {
+    providerFailures += 1;
+    if (providerFailures >= 4) providerOpenUntil = Date.now() + 30_000;
+    throw error;
   }
   return null;
 }
@@ -76,6 +110,17 @@ export async function GET(_request: Request, context: { params: Promise<{ barcod
 
   try {
     const supabase = isSupabaseConfigured() ? await createSupabaseServerClient() : null;
+    const userResult = supabase ? await supabase.auth.getUser() : null;
+    if (supabase && (userResult?.error || !userResult?.data.user)) {
+      return NextResponse.json({ error: "Anmeldung erforderlich." }, { status: 401 });
+    }
+    const rateKey = userResult?.data.user?.id ?? "local-preview";
+    if (!allowLookup(rateKey)) {
+      return NextResponse.json({ error: "Zu viele Produktabfragen. Versuche es in einer Minute erneut." }, {
+        status: 429,
+        headers: { "Retry-After": "60", "Cache-Control": "no-store" }
+      });
+    }
     const preferences = await loadFoodRiskPreferences(supabase);
     const cached = await findCachedProduct(supabase, parsed.data);
     if (cached) {
