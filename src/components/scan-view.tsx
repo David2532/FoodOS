@@ -8,7 +8,7 @@ import type { Product, RiskLevel } from "@/lib/types";
 import { productApiResponseSchema } from "@/contracts/product";
 import { addBatchResultSchema, inventoryBatchInputSchema } from "@/contracts/inventory";
 import { hasValidGtinCheckDigit, parseGs1, type Gs1Elements } from "@/domain/gs1";
-import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { submitDurableRpc } from "@/infrastructure/offline-outbox";
 
 const riskLabels: Record<RiskLevel, { label: string; icon: typeof Check }> = {
   avoid: { label: "Persönlich meiden", icon: X },
@@ -196,7 +196,7 @@ function ProductResult({ product, householdId, gs1, onReset, onSaved }: { produc
       unit: form.get("unit"),
       location: form.get("location"),
       dateKind,
-      date: form.get("date"),
+      date: dateKind === "none" ? "" : form.get("date"),
       lotNumber: form.get("lotNumber"),
       serialNumber: gs1?.serialNumber,
       purchasePriceCents: price ? Math.round(Number(price) * 100) : undefined
@@ -207,7 +207,7 @@ function ProductResult({ product, householdId, gs1, onReset, onSaved }: { produc
     }
 
     setSaving(true);
-    const { data, error } = await getSupabaseBrowserClient().rpc("add_inventory_batch", {
+    const args = {
       target_household: householdId,
       product_payload: product,
       batch_payload: {
@@ -223,13 +223,29 @@ function ProductResult({ product, householdId, gs1, onReset, onSaved }: { produc
         personal_risk_confirmed: personalRiskConfirmed
       },
       mutation_id: mutationId.current
-    });
-    setSaving(false);
-    if (error || !addBatchResultSchema.safeParse(data).success) {
-      setSaveError("Die Charge wurde nicht vollständig gespeichert. Prüfe deine Verbindung und versuche es erneut; die Wiederholung erzeugt keine Doppelbuchung.");
-      return;
+    };
+    try {
+      const result = await submitDurableRpc<unknown>({
+        kind: "inventory.add_batch",
+        rpc: "add_inventory_batch",
+        args,
+        householdId,
+        operationId: mutationId.current
+      });
+      setSaving(false);
+      if (result.status === "queued") {
+        setSaveError("Auf diesem Gerät verschlüsselt gespeichert. Die Charge erscheint nach sicherer Serversynchronisierung im gemeinsamen Vorrat.");
+        return;
+      }
+      if (result.status === "rejected" || !addBatchResultSchema.safeParse(result.data).success) {
+        setSaveError(result.status === "rejected" ? result.message : "Der Server hat ein unerwartetes Ergebnis geliefert.");
+        return;
+      }
+      onSaved?.();
+    } catch {
+      setSaving(false);
+      setSaveError("Die Änderung konnte weder lokal sicher gespeichert noch vom Server bestätigt werden.");
     }
-    onSaved?.();
   }
 
   return (

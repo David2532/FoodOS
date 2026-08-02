@@ -10,6 +10,7 @@ import { InventoryView } from "./inventory-view";
 import { ScanView } from "./scan-view";
 import { PlanView } from "./plan-view";
 import { ShoppingView } from "./shopping-view";
+import { OutboxStatus } from "./outbox-status";
 
 const navigation: Array<{ id: AppView; label: string; icon: typeof Home }> = [
   { id: "today", label: "Heute", icon: Home },
@@ -60,8 +61,9 @@ export function FoodOsApp({ authenticated = false, preview = false, initialSnaps
 
         <div className="view-scroll" key={view}>
           {preview && <div className="preview-banner" role="status">Preview-Modus · Beispieldaten werden nicht gespeichert</div>}
+          {authenticated && <OutboxStatus />}
           {view === "today" && <TodayView onNavigate={setView} snapshot={initialSnapshot} />}
-          {view === "inventory" && <InventoryView onScan={() => setView("scan")} onConsumed={initialSnapshot ? () => router.refresh() : undefined} items={initialSnapshot?.inventory} />}
+          {view === "inventory" && <InventoryView householdId={initialSnapshot?.household.id} onScan={() => setView("scan")} onConsumed={initialSnapshot ? () => router.refresh() : undefined} items={initialSnapshot?.inventory} />}
           {view === "scan" && <ScanView householdId={initialSnapshot?.household.id} onSaved={() => { setView("inventory"); router.refresh(); }} />}
           {view === "plan" && <PlanView snapshot={initialSnapshot} onChanged={initialSnapshot ? () => router.refresh() : undefined} />}
           {view === "shopping" && <ShoppingView snapshot={initialSnapshot} onChanged={initialSnapshot ? () => router.refresh() : undefined} />}

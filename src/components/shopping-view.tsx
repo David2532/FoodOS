@@ -4,6 +4,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { AlertTriangle, Check, ListChecks, LoaderCircle, Plus, RefreshCw, ShoppingCart } from "lucide-react";
 import { z } from "zod";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { submitDurableRpc } from "@/infrastructure/offline-outbox";
 import type { AppSnapshot, ShoppingItem } from "@/lib/types";
 
 function amountLabel(item: ShoppingItem) {
@@ -41,21 +42,32 @@ export function ShoppingView({ snapshot, onChanged }: { snapshot?: AppSnapshot; 
     const rawAmount = String(form.get("amount") ?? "").trim();
     setBusy(true);
     setError(null);
-    const { data, error: rpcError } = await getSupabaseBrowserClient().rpc("add_manual_shopping_item", {
-      target_household: snapshot.household.id,
-      target_week_start: snapshot.weekStart,
-      item_label: String(form.get("label")),
-      item_amount: rawAmount ? Number(rawAmount) : null,
-      item_unit: rawAmount ? String(form.get("unit")) : null,
-      mutation_id: mutationId.current
-    });
-    setBusy(false);
-    if (rpcError || !z.uuid().safeParse(data).success) {
-      setError("Der manuelle Eintrag wurde nicht bestätigt. Eine sichere Wiederholung erzeugt keinen Doppelposten.");
-      return;
+    try {
+      const result = await submitDurableRpc<unknown>({
+        kind: "shopping.add_manual",
+        rpc: "add_manual_shopping_item",
+        householdId: snapshot.household.id,
+        operationId: mutationId.current,
+        args: {
+          target_household: snapshot.household.id,
+          target_week_start: snapshot.weekStart,
+          item_label: String(form.get("label")),
+          item_amount: rawAmount ? Number(rawAmount) : null,
+          item_unit: rawAmount ? String(form.get("unit")) : null,
+          mutation_id: mutationId.current
+        }
+      });
+      setBusy(false);
+      if (result.status === "rejected" || (result.status === "acked" && !z.uuid().safeParse(result.data).success)) {
+        setError(result.status === "rejected" ? result.message : "Der Server hat ein unerwartetes Ergebnis geliefert.");
+        return;
+      }
+      setFormOpen(false);
+      if (result.status === "acked") onChanged();
+    } catch {
+      setBusy(false);
+      setError("Der Posten konnte weder lokal sicher gespeichert noch vom Server bestätigt werden.");
     }
-    setFormOpen(false);
-    onChanged();
   }
 
   async function toggle(item: ShoppingItem) {

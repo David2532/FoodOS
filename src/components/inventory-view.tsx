@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { consumeBatchResultSchema, consumptionInputSchema } from "@/contracts/inventory";
 import { nutritionForAmount } from "@/lib/food-math";
-import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { submitDurableRpc } from "@/infrastructure/offline-outbox";
 import type { InventoryItem } from "@/lib/types";
 
 const previewRecall: InventoryItem["recall"] = {
@@ -35,9 +35,10 @@ interface InventoryViewProps {
   onScan: () => void;
   onConsumed?: () => void;
   items?: InventoryItem[];
+  householdId?: string;
 }
 
-export function InventoryView({ onScan, onConsumed, items }: InventoryViewProps) {
+export function InventoryView({ onScan, onConsumed, items, householdId }: InventoryViewProps) {
   const visibleItems = items ?? previewInventory;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
@@ -67,7 +68,7 @@ export function InventoryView({ onScan, onConsumed, items }: InventoryViewProps)
 
   async function consume(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selected || !onConsumed) return;
+    if (!selected || !onConsumed || !householdId) return;
     const parsed = consumptionInputSchema.safeParse({ batchId: selected.id, amount });
     if (!parsed.success || parsed.data.amount > selected.remainingAmount) {
       setError("Die Portion muss größer als 0 sein und darf den Bestand nicht überschreiten.");
@@ -80,24 +81,39 @@ export function InventoryView({ onScan, onConsumed, items }: InventoryViewProps)
 
     setSaving(true);
     setError(null);
-    const { data, error: rpcError } = await getSupabaseBrowserClient().rpc("consume_inventory_batch_v2", {
-      target_batch: parsed.data.batchId,
-      consumed_amount: parsed.data.amount,
-      mutation_id: mutationId.current,
-      confirm_past_best_before: pastBestBeforeConfirmed,
-      confirm_personal_risk: personalRiskConfirmed
-    });
-    setSaving(false);
-    if (rpcError || !consumeBatchResultSchema.safeParse(data).success) {
-      const knownError = rpcError?.message ?? "";
+    try {
+      const result = await submitDurableRpc<unknown>({
+        kind: "inventory.consume_batch",
+        rpc: "consume_inventory_batch_v2",
+        householdId,
+        operationId: mutationId.current,
+        args: {
+          target_batch: parsed.data.batchId,
+          consumed_amount: parsed.data.amount,
+          mutation_id: mutationId.current,
+          confirm_past_best_before: pastBestBeforeConfirmed,
+          confirm_personal_risk: personalRiskConfirmed
+        }
+      });
+      setSaving(false);
+      if (result.status === "queued") {
+        setSelectedId(null);
+        return;
+      }
+      if (result.status === "rejected" || !consumeBatchResultSchema.safeParse(result.data).success) {
+        const knownError = result.status === "rejected" ? result.message : "";
       setError(knownError.includes("Best-before confirmation") ? "Bestätige die Prüfung nach überschrittenem MHD."
         : knownError.includes("Personal risk confirmation") ? "Bestätige den persönlichen Konflikt vor der Buchung."
           : knownError.includes("Use-by date") || knownError.includes("recall") ? "Diese Charge darf nicht als Verzehr gebucht werden."
             : "Der Verzehr wurde nicht bestätigt. Du kannst sicher erneut versuchen; dieselbe Buchung wird nicht doppelt ausgeführt.");
       return;
+      }
+      setSelectedId(null);
+      onConsumed();
+    } catch {
+      setSaving(false);
+      setError("Die Buchung konnte weder lokal sicher gespeichert noch vom Server bestätigt werden.");
     }
-    setSelectedId(null);
-    onConsumed();
   }
 
   return (
@@ -119,7 +135,7 @@ export function InventoryView({ onScan, onConsumed, items }: InventoryViewProps)
         {visibleItems.length ? <div className="inventory-list">
           {visibleItems.map((item) => (
             <button className="inventory-row" key={item.id} onClick={() => choose(item)} aria-expanded={selectedId === item.id}>
-              <span className="inventory-emoji">{item.imageUrl ? <Image src={item.imageUrl} alt="" width={47} height={47} /> : <PackageOpen size={21} />}</span>
+              <span className="inventory-emoji">{item.imageUrl ? <Image src={item.imageUrl} alt="" width={47} height={47} unoptimized /> : <PackageOpen size={21} />}</span>
               <span className="inventory-copy"><small>{item.location}</small><strong>{item.name}</strong><em>{item.brand} · {item.remainingLabel}</em></span>
               {item.expiryDate ? <span className={`expiry-pill ${item.expiryState === "past_use_by" || item.expiryState === "today" ? "urgent" : ""}`}><small>{item.dateKind === "use_by" ? "ZU VERBRAUCHEN" : "MHD"}</small>{item.expiryDate}</span> : <span className="stock-pill">Kein Datum</span>}
               <ChevronRight size={17} />

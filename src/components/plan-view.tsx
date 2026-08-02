@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { AlertTriangle, CalendarPlus, LoaderCircle, PackageOpen, Plus } from "lucide-react";
 import { z } from "zod";
-import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { submitDurableRpc } from "@/infrastructure/offline-outbox";
 import type { AppSnapshot } from "@/lib/types";
 
 const mealLabels = { breakfast: "Frühstück", lunch: "Mittagessen", dinner: "Abendessen", snack: "Snack" } as const;
@@ -34,21 +34,32 @@ export function PlanView({ snapshot, onChanged }: { snapshot?: AppSnapshot; onCh
     const form = new FormData(event.currentTarget);
     setSaving(true);
     setError(null);
-    const { data, error: rpcError } = await getSupabaseBrowserClient().rpc("plan_product", {
-      target_household: snapshot.household.id,
-      target_product: String(form.get("product")),
-      target_date: String(form.get("date")),
-      target_meal_type: String(form.get("mealType")),
-      target_servings: Number(form.get("servings")),
-      mutation_id: mutationId.current
-    });
-    setSaving(false);
-    if (rpcError || !z.uuid().safeParse(data).success) {
-      setError("Der Planeintrag wurde nicht bestätigt. Ein erneuter Versuch mit derselben Anfrage erzeugt keinen doppelten Eintrag.");
-      return;
+    try {
+      const result = await submitDurableRpc<unknown>({
+        kind: "plan.add_product",
+        rpc: "plan_product",
+        householdId: snapshot.household.id,
+        operationId: mutationId.current,
+        args: {
+          target_household: snapshot.household.id,
+          target_product: String(form.get("product")),
+          target_date: String(form.get("date")),
+          target_meal_type: String(form.get("mealType")),
+          target_servings: Number(form.get("servings")),
+          mutation_id: mutationId.current
+        }
+      });
+      setSaving(false);
+      if (result.status === "rejected" || (result.status === "acked" && !z.uuid().safeParse(result.data).success)) {
+        setError(result.status === "rejected" ? result.message : "Der Server hat ein unerwartetes Ergebnis geliefert.");
+        return;
+      }
+      setFormOpen(false);
+      if (result.status === "acked") onChanged();
+    } catch {
+      setSaving(false);
+      setError("Der Planeintrag konnte weder lokal sicher gespeichert noch vom Server bestätigt werden.");
     }
-    setFormOpen(false);
-    onChanged();
   }
 
   if (!snapshot) return <div className="stack-lg page-enter"><section className="empty-state"><CalendarPlus size={26} /><h2>Plan-Preview</h2><p>Im Preview-Modus wird kein Wochenplan gespeichert. Melde dich mit AAL2 an, um Produkte aus deinem Vorrat verbindlich einzuplanen.</p></section></div>;
