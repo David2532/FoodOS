@@ -128,11 +128,14 @@ Mengen-/Logwirkung.
    Variablen aus `.env.example` setzen.
 3. Production-Deployment ausführen.
 
-### Google OAuth 2.0 / OpenID Connect
+### Apple und Google OAuth 2.0 / OpenID Connect
 
-FoodOS startet Google OAuth über Supabase Auth mit PKCE und fordert nur `openid email
-profile` an. OAuth liefert zunächst AAL1; bevor private Haushaltsdaten geladen werden,
-muss weiterhin der bestehende TOTP-Faktor AAL2 herstellen.
+FoodOS stellt Apple und Google als primäre Ein-Klick-Anmeldung vor die eingeklappte
+E-Mail-Alternative. Beide laufen über Supabase Auth mit PKCE. Google fordert nur
+`openid email profile`, Apple nur `name email` an. OAuth liefert zunächst AAL1; bevor
+private Haushaltsdaten geladen werden, muss weiterhin TOTP AAL2 herstellen. Die
+Supabase-Sitzung bleibt danach auf dem Gerät erhalten, bis sie abgemeldet wird oder
+abläuft.
 
 1. In Google Cloud einen Web-OAuth-Client anlegen. Als autorisierte Redirect-URI
    ausschließlich die von Supabase angezeigte Provider-Callback-URL
@@ -144,6 +147,18 @@ muss weiterhin der bestehende TOTP-Faktor AAL2 herstellen.
    erlauben. Keine Wildcards für Production verwenden.
 4. Erst danach in Vercel `NEXT_PUBLIC_OAUTH_GOOGLE_ENABLED=true` setzen. Preview-
    Deployments bleiben ohne eigene exakt freigegebene Callback-URL bei `false`.
+
+Für Apple wird zusätzlich ein Apple-Developer-Konto mit App ID, Services ID und Sign-in-
+with-Apple-Key benötigt. Die Werte werden ausschließlich unter **Authentication →
+Providers → Apple** hinterlegt; danach kann `NEXT_PUBLIC_OAUTH_APPLE_ENABLED=true`
+gesetzt werden. Apples OAuth-Secret muss spätestens alle sechs Monate rotiert werden;
+Rotation, Verantwortlicher und Ablaufwarnung sind vor Production festzulegen.
+
+Im lokalen Entwicklungsbetrieb erscheint stattdessen automatisch **FoodOS
+ausprobieren**. Dieser Ein-Klick-Weg öffnet ausschließlich die vorhandene Demo mit
+fiktiven Daten und liest keine privaten Supabase-Tabellen. In Production ist er
+standardmäßig aus und muss mit `NEXT_PUBLIC_DEMO_MODE_ENABLED=true` bewusst aktiviert
+werden.
 
 Der Callback akzeptiert nur lokale absolute Pfade als `next`; protokollrelative,
 Backslash- und externe Ziele werden auf `/` reduziert. Provider-Fehler werden ohne

@@ -1,6 +1,6 @@
 # OAuth and deployment readiness — 2026-08-04
 
-Scope: secure Google OAuth 2.0/OpenID Connect entry through Supabase Auth while
+Scope: simple Apple/Google OAuth 2.0/OpenID Connect entry through Supabase Auth while
 preserving the existing mandatory TOTP/AAL2 boundary before private household data.
 The repository branch is `agent/foodos-mvp`; the local runner is Node 25.2.1 while the
 project and CI pin Node 22.
@@ -12,12 +12,13 @@ project and CI pin Node 22.
 | `npm run test:coverage` | `PASS` | 93.13% statements, 89.04% branches, 98.03% functions and 97.87% lines. |
 | `supabase test db` | `PASS` | 58/58 pgTAP tests passed against the local Postgres/Supabase stack. |
 | `npm run test:e2e` | `PASS` | 6/6 Pixel 7 and Desktop Chrome preview tests passed, including keyboard-addressable navigation, overflow and serious/critical axe smoke. |
-| `npm run test:e2e:auth` | `PASS` | 2/2: Google authorize request contains PKCE/S256, minimal OIDC scopes and an exact same-origin callback; external redirect candidates and provider details are sanitized. A real local user still must enroll and verify TOTP before AAL2 onboarding and private data access. |
+| `npm run test:e2e:auth` | `PASS` | 2/2: Apple and Google authorize requests contain PKCE/S256, provider-minimal scopes and an exact same-origin callback; external redirect candidates and provider details are sanitized. The explicit fictitious demo is isolated, while a real local user still must enroll and verify TOTP before AAL2 onboarding and private data access. |
+| Local one-click demo | `PASS` | The running local app returned HTTP 200, exposed one primary `FoodOS ausprobieren` action and served `/?demo=1` with fictitious preview data only. Production requires an explicit flag. |
 | `npm audit --audit-level=high` | `PASS` | 0 vulnerabilities. |
 | OAuth login visual | `REVIEWED_LOCAL` | `screenshots/auth-google-desktop.png` contains no credentials or household data. |
-| Managed Supabase project and Google provider | `BLOCKED` | The local CLI has no managed-project access token. No Google client secret was requested, stored in Vercel or written to the repository. |
-| Vercel production URL and remote authenticated smoke | `NOT_RUN` | A Vercel account is available, but deployment is intentionally not represented as production-ready until the managed Supabase URL/key, exact production callback and Google provider are configured. |
+| Managed Supabase project and Apple/Google providers | `BLOCKED` | The local CLI has no managed-project access token. No provider secret was requested, stored in Vercel or written to the repository. |
+| Vercel production URL and remote authenticated smoke | `NOT_RUN` | A Vercel account is available, but deployment is intentionally not represented as production-ready until the managed Supabase URL/key, exact production callback and enabled providers are configured. |
 
-This evidence does not claim a successful remote Google login, production deployment,
+This evidence does not claim a successful remote Apple/Google login, production deployment,
 uptime, recovery, penetration test or legal/commercial release. Those require the exact
 managed environment and a post-deployment authenticated smoke test.

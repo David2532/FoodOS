@@ -292,11 +292,23 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .auth-message { margin: 0; border: 1px solid var(--line); border-radius: 13px; padding: 11px 12px; font-size: 11px; line-height: 1.45; }
 .auth-message.error { border-color: rgba(255,148,122,.24); color: #ffc0b0; background: rgba(255,148,122,.08); }
 .auth-message.success { border-color: rgba(183,243,106,.2); color: var(--lime); background: rgba(183,243,106,.07); }
-.oauth-button { width: 100%; min-height: 48px; border: 1px solid rgba(183,243,106,.24); border-radius: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--ink); background: rgba(183,243,106,.07); cursor: pointer; font-size: 12px; font-weight: 750; }
-.oauth-button:hover { border-color: rgba(183,243,106,.5); background: rgba(183,243,106,.11); }
+.oauth-stack { display: grid; gap: 10px; }
+.oauth-button { width: 100%; min-height: 52px; border: 1px solid rgba(255,255,255,.16); border-radius: 15px; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--ink); background: rgba(255,255,255,.07); cursor: pointer; font-size: 13px; font-weight: 780; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+.oauth-button:hover { border-color: rgba(255,255,255,.34); background: rgba(255,255,255,.11); transform: translateY(-1px); }
+.oauth-button.google { border-color: rgba(183,243,106,.24); background: rgba(183,243,106,.07); }
+.oauth-button.google:hover { border-color: rgba(183,243,106,.5); background: rgba(183,243,106,.11); }
+.oauth-button.demo { border-color: var(--lime); color: #0a160d; background: var(--lime); box-shadow: 0 10px 28px rgba(183,243,106,.14); }
+.oauth-button.demo:hover { border-color: #caff88; background: #caff88; }
 .oauth-button:disabled { opacity: .55; cursor: wait; }
-.auth-divider { display: flex; align-items: center; gap: 10px; margin: 14px 0; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
-.auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.provider-mark { width: 23px; height: 23px; border-radius: 50%; display: grid; place-items: center; color: #07100b; background: #fff; font-size: 12px; font-weight: 900; }
+.oauth-button.google .provider-mark { color: #15351f; background: var(--lime); }
+.auth-level-message { margin-top: 12px; }
+.email-auth { margin-top: 14px; border-top: 1px solid var(--line); }
+.email-auth summary { min-height: 45px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted-2); cursor: pointer; font-size: 11px; font-weight: 700; list-style: none; }
+.email-auth summary::-webkit-details-marker { display: none; }
+.email-auth summary:hover { color: var(--ink); }
+.email-auth summary:focus-visible { border-radius: 10px; outline: 3px solid rgba(183,243,106,.35); outline-offset: 2px; }
+.email-auth-panel { padding-top: 4px; }
 .auth-privacy { margin: 20px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; text-align: center; }
 .mfa-intro { border: 1px solid var(--line); border-radius: 20px; padding: 18px; text-align: center; background: rgba(7,16,12,.48); }
 .mfa-intro > span { width: 54px; height: 54px; margin: 0 auto 13px; border-radius: 17px; display: grid; place-items: center; color: var(--lime); background: rgba(183,243,106,.09); }

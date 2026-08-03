@@ -21,6 +21,8 @@ export default defineConfig({
     env: {
       NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: supabaseKey,
+      NEXT_PUBLIC_DEMO_MODE_ENABLED: "true",
+      NEXT_PUBLIC_OAUTH_APPLE_ENABLED: "true",
       NEXT_PUBLIC_OAUTH_GOOGLE_ENABLED: "true",
       HOSTNAME: "127.0.0.1",
       PORT: "3101"

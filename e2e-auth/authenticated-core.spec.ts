@@ -1,20 +1,30 @@
 import { createHmac } from "node:crypto";
 import { expect, test } from "@playwright/test";
 
-test("Google OAuth starts with PKCE and a same-origin callback", async ({ page }) => {
+test("Apple and Google OAuth start with PKCE and a same-origin callback", async ({ page }) => {
   await page.route("http://127.0.0.1:54321/auth/v1/authorize**", async (route) => {
     await route.fulfill({ status: 200, contentType: "text/plain", body: "OAuth request captured" });
   });
   await page.goto("/");
   await page.screenshot({ path: "docs/evidence/screenshots/auth-google-desktop.png", fullPage: true });
-  await page.getByRole("button", { name: "Mit Google fortfahren" }).click();
-  await page.waitForURL(/\/auth\/v1\/authorize/);
-  const authorizationUrl = new URL(page.url());
-  expect(authorizationUrl.searchParams.get("provider")).toBe("google");
-  expect(authorizationUrl.searchParams.get("redirect_to")).toBe("http://127.0.0.1:3101/auth/confirm?next=%2F");
-  expect(authorizationUrl.searchParams.get("code_challenge_method")).toBe("s256");
-  expect(authorizationUrl.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]{43,128}$/);
-  expect(authorizationUrl.searchParams.get("scopes")).toBe("openid email profile");
+  await expect(page.locator(".oauth-button")).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Mit Apple fortfahren" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mit Google fortfahren" })).toBeVisible();
+
+  for (const provider of [
+    { name: "Apple", value: "apple", scopes: "name email" },
+    { name: "Google", value: "google", scopes: "openid email profile" }
+  ]) {
+    await page.getByRole("button", { name: `Mit ${provider.name} fortfahren` }).click();
+    await page.waitForURL(/\/auth\/v1\/authorize/);
+    const authorizationUrl = new URL(page.url());
+    expect(authorizationUrl.searchParams.get("provider")).toBe(provider.value);
+    expect(authorizationUrl.searchParams.get("redirect_to")).toBe("http://127.0.0.1:3101/auth/confirm?next=%2F");
+    expect(authorizationUrl.searchParams.get("code_challenge_method")).toBe("s256");
+    expect(authorizationUrl.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]{43,128}$/);
+    expect(authorizationUrl.searchParams.get("scopes")).toBe(provider.scopes);
+    await page.goto("/");
+  }
 
   const providerError = await page.request.get(
     "/auth/confirm?error=access_denied&error_description=provider-secret-detail",
@@ -24,6 +34,10 @@ test("Google OAuth starts with PKCE and a same-origin callback", async ({ page }
   const safeErrorLocation = new URL(providerError.headers().location);
   expect(`${safeErrorLocation.pathname}${safeErrorLocation.search}`).toBe("/?auth_error=oauth");
   expect(providerError.headers().location).not.toContain("provider-secret-detail");
+
+  await page.goto("/?demo=1");
+  await expect(page.getByRole("heading", { name: "Hey David" })).toBeVisible();
+  await expect(page.getByText("Preview-Modus · Beispieldaten werden nicht gespeichert", { exact: true })).toBeVisible();
 });
 
 function decodeBase32(secret: string): Buffer {
@@ -54,7 +68,8 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
   const deniedExport = await page.request.get("/api/account/export");
   expect(deniedExport.status()).toBe(401);
   expect(deniedExport.headers()["cache-control"]).toContain("no-store");
-  await page.getByRole("tab", { name: "Registrieren" }).click();
+  await page.getByText("Mit E-Mail weitermachen", { exact: true }).click();
+  await page.getByRole("tab", { name: "Neu hier" }).click();
   await page.getByLabel("E-Mail-Adresse").fill(email);
   await page.getByLabel("Passwort").fill(password);
   await page.getByRole("button", { name: "Konto erstellen" }).click();
