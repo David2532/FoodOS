@@ -1,6 +1,31 @@
 import { createHmac } from "node:crypto";
 import { expect, test } from "@playwright/test";
 
+test("Google OAuth starts with PKCE and a same-origin callback", async ({ page }) => {
+  await page.route("http://127.0.0.1:54321/auth/v1/authorize**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "text/plain", body: "OAuth request captured" });
+  });
+  await page.goto("/");
+  await page.screenshot({ path: "docs/evidence/screenshots/auth-google-desktop.png", fullPage: true });
+  await page.getByRole("button", { name: "Mit Google fortfahren" }).click();
+  await page.waitForURL(/\/auth\/v1\/authorize/);
+  const authorizationUrl = new URL(page.url());
+  expect(authorizationUrl.searchParams.get("provider")).toBe("google");
+  expect(authorizationUrl.searchParams.get("redirect_to")).toBe("http://127.0.0.1:3101/auth/confirm?next=%2F");
+  expect(authorizationUrl.searchParams.get("code_challenge_method")).toBe("s256");
+  expect(authorizationUrl.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]{43,128}$/);
+  expect(authorizationUrl.searchParams.get("scopes")).toBe("openid email profile");
+
+  const providerError = await page.request.get(
+    "/auth/confirm?error=access_denied&error_description=provider-secret-detail",
+    { maxRedirects: 0 }
+  );
+  expect(providerError.status()).toBe(307);
+  const safeErrorLocation = new URL(providerError.headers().location);
+  expect(`${safeErrorLocation.pathname}${safeErrorLocation.search}`).toBe("/?auth_error=oauth");
+  expect(providerError.headers().location).not.toContain("provider-secret-detail");
+});
+
 function decodeBase32(secret: string): Buffer {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
   const bits = secret.replace(/=+$/g, "").toUpperCase().split("")
@@ -23,6 +48,9 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
   const password = "FoodOS-E2E-Only-2026!";
 
   await page.goto("/");
+  const unsafeRedirect = await page.request.get("/auth/confirm?next=%2F%5Cevil.example", { maxRedirects: 0 });
+  expect(unsafeRedirect.status()).toBe(307);
+  expect(new URL(unsafeRedirect.headers().location).pathname).toBe("/");
   const deniedExport = await page.request.get("/api/account/export");
   expect(deniedExport.status()).toBe(401);
   expect(deniedExport.headers()["cache-control"]).toContain("no-store");

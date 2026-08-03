@@ -128,6 +128,27 @@ Mengen-/Logwirkung.
    Variablen aus `.env.example` setzen.
 3. Production-Deployment ausführen.
 
+### Google OAuth 2.0 / OpenID Connect
+
+FoodOS startet Google OAuth über Supabase Auth mit PKCE und fordert nur `openid email
+profile` an. OAuth liefert zunächst AAL1; bevor private Haushaltsdaten geladen werden,
+muss weiterhin der bestehende TOTP-Faktor AAL2 herstellen.
+
+1. In Google Cloud einen Web-OAuth-Client anlegen. Als autorisierte Redirect-URI
+   ausschließlich die von Supabase angezeigte Provider-Callback-URL
+   `https://<project-ref>.supabase.co/auth/v1/callback` eintragen.
+2. Client-ID und Client-Secret nur im Supabase-Dashboard unter **Authentication →
+   Providers → Google** speichern. Diese Werte gehören weder nach Vercel noch ins Repo.
+3. In Supabase unter **Authentication → URL Configuration** die echte Production-Site-
+   URL setzen und `https://<production-host>/auth/confirm` als exakte Redirect-URL
+   erlauben. Keine Wildcards für Production verwenden.
+4. Erst danach in Vercel `NEXT_PUBLIC_OAUTH_GOOGLE_ENABLED=true` setzen. Preview-
+   Deployments bleiben ohne eigene exakt freigegebene Callback-URL bei `false`.
+
+Der Callback akzeptiert nur lokale absolute Pfade als `next`; protokollrelative,
+Backslash- und externe Ziele werden auf `/` reduziert. Provider-Fehler werden ohne
+ungeprüfte Fehlermeldung oder Token in die Login-Oberfläche zurückgeführt.
+
 Für die aktuellen Nutzerflows wird kein Service-Role-Key benötigt. Künftige Adminjobs
 müssen Secrets ausschließlich in der jeweiligen Server-/Deployment-Secret-Verwaltung
 halten und dürfen sie nie als `NEXT_PUBLIC_*` setzen.

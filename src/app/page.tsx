@@ -10,12 +10,20 @@ import { loadFoodOsSnapshot } from "@/infrastructure/foodos-repository";
 // Authentication depends on request cookies and runtime deployment configuration.
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default async function Home({ searchParams }: { searchParams: Promise<{ auth_error?: string | string[] }> }) {
   if (!isSupabaseConfigured()) return <FoodOsApp preview />;
 
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.auth.getClaims();
-  if (!data?.claims) return <SignInScreen />;
+  if (!data?.claims) {
+    const authError = (await searchParams).auth_error;
+    return (
+      <SignInScreen
+        authError={typeof authError === "string" ? authError : undefined}
+        googleEnabled={process.env.NEXT_PUBLIC_OAUTH_GOOGLE_ENABLED === "true"}
+      />
+    );
+  }
   if (data.claims.aal !== "aal2") return <MfaGate />;
 
   const app = await loadFoodOsSnapshot(supabase);

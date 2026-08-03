@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { AtSign, KeyRound, LoaderCircle } from "lucide-react";
+import { AtSign, KeyRound, LoaderCircle, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
+import { oauthCallbackUrl } from "@/domain/auth-redirect";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { AuthFrame } from "./auth-frame";
 
@@ -14,11 +15,16 @@ const credentialsSchema = z.object({
 
 type Mode = "login" | "register";
 
-export function SignInScreen() {
+const authErrorMessages: Record<string, string> = {
+  oauth: "Die Anmeldung beim Identitätsanbieter wurde abgebrochen oder abgelehnt. Versuche es erneut.",
+  confirmation: "Der Anmeldelink ist ungültig oder abgelaufen. Starte die Anmeldung erneut."
+};
+
+export function SignInScreen({ authError, googleEnabled = false }: { authError?: string; googleEnabled?: boolean }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("login");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(authError ? authErrorMessages[authError] ?? "Die Anmeldung konnte nicht bestätigt werden." : null);
   const [notice, setNotice] = useState<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -58,16 +64,39 @@ export function SignInScreen() {
     router.refresh();
   }
 
+  async function signInWithGoogle() {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    const result = await getSupabaseBrowserClient().auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: oauthCallbackUrl(window.location.origin),
+        scopes: "openid email profile"
+      }
+    });
+    if (result.error) {
+      setBusy(false);
+      setError("Google-Anmeldung konnte nicht gestartet werden. Prüfe die Provider-Konfiguration oder verwende E-Mail und Passwort.");
+    }
+  }
+
   return (
     <AuthFrame
       eyebrow="Geschützter Zugang"
       title={mode === "login" ? "Willkommen zurück" : "FoodOS einrichten"}
-      description="Melde dich zuerst mit E-Mail und Passwort an. Danach bestätigt deine Authenticator-App den zweiten Faktor."
+      description="Melde dich sicher mit Google oder E-Mail und Passwort an. Danach bestätigt deine Authenticator-App den zweiten Faktor."
     >
       <div className="auth-tabs" role="tablist" aria-label="Anmeldemodus">
         <button role="tab" aria-selected={mode === "login"} onClick={() => setMode("login")}>Anmelden</button>
         <button role="tab" aria-selected={mode === "register"} onClick={() => setMode("register")}>Registrieren</button>
       </div>
+      {googleEnabled && <>
+        <button className="oauth-button" type="button" onClick={() => void signInWithGoogle()} disabled={busy}>
+          <ShieldCheck size={18} /> Mit Google fortfahren
+        </button>
+        <div className="auth-divider"><span>oder mit E-Mail</span></div>
+      </>}
       <form className="auth-form" onSubmit={submit}>
         <label>
           <span>E-Mail-Adresse</span>
