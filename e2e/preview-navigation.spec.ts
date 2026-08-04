@@ -2,6 +2,38 @@ import { expect, test } from "@playwright/test";
 import axe from "axe-core";
 
 test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
+  test("Q-UX-THEME-E2E-001 changes the appearance with the keyboard and persists it", async ({ page }) => {
+    await page.goto("/");
+
+    const themeMenuButton = page.getByRole("button", { name: /^Darstellung ändern/ });
+    await themeMenuButton.focus();
+    await page.keyboard.press("Enter");
+    await expect(themeMenuButton).toHaveAttribute("aria-expanded", "true");
+
+    const systemOption = page.getByRole("radio", { name: /^System/ });
+    await expect(systemOption).toBeFocused();
+    await expect(systemOption).toBeChecked();
+    await page.keyboard.press("ArrowDown");
+
+    await expect(themeMenuButton).toHaveAttribute("aria-expanded", "false");
+    await expect(themeMenuButton).toBeFocused();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(page.getByRole("button", { name: /Darstellung ändern\. Aktuell: Hell/ })).toBeVisible();
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+
+    await page.addScriptTag({ content: axe.source });
+    const accessibility = await page.evaluate(async () => {
+      const runner = (window as typeof window & { axe: typeof axe }).axe;
+      return runner.run(document, { resultTypes: ["violations"] });
+    });
+    expect(accessibility.violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
+  });
+
   test("keeps the five canonical destinations usable without horizontal overflow", async ({ page }, testInfo) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Heute in FoodOS" })).toBeVisible();

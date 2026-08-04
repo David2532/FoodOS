@@ -197,6 +197,30 @@ halten und dürfen sie nie als `NEXT_PUBLIC_*` setzen.
 Der geplante Rückrufjob und seine getrennte Quellenfreigabe sind unter
 [`docs/RECALL_INGESTION.md`](docs/RECALL_INGESTION.md) beschrieben.
 
+### Konto, Darstellung und Passwort
+
+Der rechte Konto-Button öffnet die eigene Einstellungsansicht; er erweitert die fünf
+Hauptbereiche nicht um einen sechsten Tab. Dort können Nutzer die lokale Darstellung
+**System**, **Hell** oder **Dunkel** wählen, Datenschutzzwecke prüfen, einen Export
+herunterladen und sich abmelden. Die Theme-Präferenz ist nicht sensibel und bleibt pro
+Gerät in einem validierten Cookie plus Browser-Speicher erhalten.
+
+E-Mail-Konten können das Passwort im AAL2-geschützten Bereich mit aktuellem Passwort
+ändern. Die lokale Supabase-Konfiguration verlangt mindestens zwölf Zeichen,
+`secure_password_change = true` und unterstützt den E-Mail-Sicherheitscode für nicht
+mehr frische Sitzungen. Nach erfolgreicher Änderung werden andere Sitzungen widerrufen.
+Der Link **Passwort vergessen?** bestätigt aus Schutz vor Konto-Enumeration immer gleich
+und führt nach dem verifizierten Callback zu `/auth/passwort-zuruecksetzen`; die
+ Rücksetzung versucht anschließend den serverseitig bestätigten Widerruf aller Sitzungen
+ und führt erst nach vollständigem Sicherheitsabschluss wieder durch den normalen
+ TOTP-AAL2-Gate. Falls das serverseitige Beenden weiterer Sitzungen fehlschlaegt,
+ behauptet die Oberflaeche keinen vollstaendigen Widerruf: Sie versucht zuerst die
+ lokale Abmeldung dieses Geraets. Gelingt diese, bleibt der eingeschraenkte Zustand
+ sichtbar und verweist auf die manuelle Abmeldung anderer Geraete; scheitert auch sie,
+ bleibt die Seite auf einem sicheren Wiederholen-Pfad statt in eine noch aktive Sitzung
+ weiterzuleiten. Die genaue Produktions-Checkliste steht in
+[`docs/ACCOUNT_SETTINGS_AND_PASSWORDS.md`](docs/ACCOUNT_SETTINGS_AND_PASSWORDS.md).
+
 ## Rechtlicher Status
 
 Die Unterlagen bilden eine technische und organisatorische Compliance-Baseline, keine

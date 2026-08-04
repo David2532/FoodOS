@@ -109,7 +109,10 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
   await expect(page.getByText("E2E Haushalt", { exact: true })).toBeVisible();
   await expect(page.getByText("Rückrufprüfung nicht verfügbar", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Datenschutz verwalten" }).click();
+  await page.getByRole("button", { name: "Konto und Einstellungen öffnen" }).click();
+  const initialSettings = page.locator(".settings-view");
+  await expect(initialSettings.getByRole("heading", { name: "Einstellungen" })).toBeVisible();
+  await initialSettings.getByRole("button", { name: "Datenschutz verwalten" }).click();
   const privacyDialog = page.getByRole("dialog");
   await privacyDialog.getByLabel(/Nutzungsanalyse/).check();
   await privacyDialog.getByRole("button", { name: "Auswahl speichern" }).click();
@@ -201,4 +204,42 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
   expect(exportPayload.data.products[0].name).toMatch(/Nutella/i);
   expect(exportPayload.data.privacyChoiceEvents).toHaveLength(3);
   expect(exportPayload.data.privacyChoiceEvents.at(-1).analytics).toBe(false);
+
+  // Account settings intentionally live outside the five primary navigation destinations.
+  // The real Supabase session is AAL2 here, so this verifies the password-change contract
+  // against Auth rather than stubbing a client response.
+  await page.getByRole("button", { name: "Konto und Einstellungen öffnen" }).click();
+  const settings = page.locator(".settings-view");
+  await expect(settings.getByRole("heading", { name: "Einstellungen" })).toBeVisible();
+  await expect(settings.getByText(email, { exact: true })).toBeVisible();
+
+  await settings.getByRole("radio", { name: /^Hell/ }).check();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.screenshot({ path: "docs/evidence/screenshots/account-settings-authenticated-desktop.png", fullPage: true });
+
+  const changedPassword = "FoodOS-E2E-Changed-2026!";
+  const passwordForm = settings.locator(".password-change-form");
+  await passwordForm.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "docs/evidence/screenshots/account-security-authenticated-desktop.png", fullPage: true });
+  await passwordForm.getByLabel("Aktuelles Passwort").fill(password);
+  await passwordForm.getByLabel("Neues Passwort", { exact: true }).fill(changedPassword);
+  await passwordForm.getByLabel("Neues Passwort wiederholen").fill(changedPassword);
+  await passwordForm.getByRole("button", { name: "Passwort ändern" }).click();
+  await expect(passwordForm.getByRole("status")).toContainText("Dein Passwort wurde geändert.");
+  await expect(passwordForm.getByRole("status")).toContainText("Andere angemeldete Geräte wurden abgemeldet.");
+
+  await settings.getByRole("button", { name: "Sicher abmelden" }).click();
+  await expect(page.getByRole("heading", { name: "Privat starten" })).toBeVisible();
+  await acceptNecessaryPrivacy(page);
+  await page.getByText("Mit E-Mail weitermachen", { exact: true }).click();
+
+  await page.getByLabel("E-Mail-Adresse").fill(email);
+  await page.getByLabel("Passwort").fill(password);
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page.locator(".auth-message.error")).toContainText("Anmeldung fehlgeschlagen");
+
+  await page.getByLabel("Passwort").fill(changedPassword);
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Anmeldung bestätigen" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Heute" })).not.toBeVisible();
 });

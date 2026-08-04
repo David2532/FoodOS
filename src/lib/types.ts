@@ -1,4 +1,4 @@
-export type AppView = "today" | "inventory" | "scan" | "plan" | "shopping";
+export type AppView = "today" | "inventory" | "scan" | "plan" | "shopping" | "settings";
 
 export type RiskLevel = "avoid" | "watch" | "info" | "ok" | "unknown";
 

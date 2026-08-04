@@ -1,8 +1,11 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 import { PwaRegistration } from "@/components/pwa-registration";
+import { ThemeProvider } from "@/features/settings/theme-provider";
+import { normalizeThemePreference, THEME_PREFERENCE_COOKIE } from "@/features/settings/theme-preference";
 
 export const metadata: Metadata = {
   title: "FoodOS – dein Ernährungssystem",
@@ -21,10 +24,13 @@ export const viewport: Viewport = {
   themeColor: "#08130f"
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const cookieStore = await cookies();
+  const storedThemePreference = cookieStore.get(THEME_PREFERENCE_COOKIE)?.value;
+  const initialThemePreference = normalizeThemePreference(storedThemePreference);
   return (
-    <html lang="de">
-      <body className={`${GeistSans.variable} ${GeistMono.variable}`}><PwaRegistration />{children}</body>
+    <html lang="de" data-theme={initialThemePreference} suppressHydrationWarning>
+      <body className={`${GeistSans.variable} ${GeistMono.variable}`}><ThemeProvider initialPreference={storedThemePreference}><PwaRegistration />{children}</ThemeProvider></body>
     </html>
   );
 }

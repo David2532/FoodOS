@@ -10,7 +10,7 @@ function choiceKey(choices: PrivacyChoices): string {
   return [choices.sensitiveProfile, choices.analytics, choices.marketing, choices.imageCloudProcessing, choices.offContribution, choices.advertising].map(Number).join("");
 }
 
-export function PrivacyCenterButton({ initialChoices }: { initialChoices: PrivacyChoices }) {
+export function PrivacyCenterButton({ initialChoices, variant = "icon" }: { initialChoices: PrivacyChoices; variant?: "icon" | "settings" }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [choices, setChoices] = useState(initialChoices);
   const [busy, setBusy] = useState(false);
@@ -35,7 +35,12 @@ export function PrivacyCenterButton({ initialChoices }: { initialChoices: Privac
 
   return (
     <>
-      <button className="icon-button" aria-label="Datenschutz verwalten" onClick={() => dialog.current?.showModal()}><SlidersHorizontal size={18} /></button>
+      {variant === "settings" ? (
+        <button className="settings-action" type="button" onClick={() => dialog.current?.showModal()}>
+          <SlidersHorizontal size={19} aria-hidden="true" />
+          <span><strong>Datenschutz verwalten</strong><small>Optionale Zwecke getrennt prüfen oder jederzeit zurückziehen.</small></span>
+        </button>
+      ) : <button className="icon-button" aria-label="Datenschutz verwalten" onClick={() => dialog.current?.showModal()}><SlidersHorizontal size={18} /></button>}
       <dialog className="privacy-dialog" ref={dialog} onClose={() => { setMessage(null); setError(null); }}>
         <div className="privacy-dialog-header"><div><span>F00 · Privacy Center</span><h2>Datenschutz</h2></div><button className="icon-button" aria-label="Datenschutz schließen" onClick={() => dialog.current?.close()}><X size={19} /></button></div>
         <p>Optionale Zwecke sind getrennt. Ablehnen oder Zurückziehen verändert die Kernfunktionen nicht.</p>

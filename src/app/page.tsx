@@ -43,5 +43,5 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ a
     return <AuthFrame showSignOut eyebrow="Datenzugriff" title="FoodOS konnte nicht geladen werden" description={app.message}><p className="auth-message error" role="alert">Versuche es erneut. Bleibt der Fehler bestehen, nutze die sichere Referenz FOS-LOAD-PRIVATE.</p></AuthFrame>;
   }
 
-  return <FoodOsApp authenticated initialPrivacyChoices={privacy.choices} initialSnapshot={app.snapshot} />;
+  return <FoodOsApp authenticated accountEmail={typeof data.claims.email === "string" ? data.claims.email : undefined} initialPrivacyChoices={privacy.choices} initialSnapshot={app.snapshot} />;
 }

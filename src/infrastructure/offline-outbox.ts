@@ -16,6 +16,24 @@ const DB_VERSION = 1;
 const OPERATIONS = "operations";
 const METADATA = "metadata";
 const OUTBOX_EVENT = "foodos:outbox-change";
+const OFFLINE_DATA_STATE_EVENT = "foodos:offline-data-state";
+const OFFLINE_DATA_PURGED_KEY = "foodos:offline-data-purged-v1";
+const OFFLINE_DATA_CLEANUP_OBSERVATION_MS = 1_500;
+
+export type OfflineDataStorageState = "available" | "cleanup-pending" | "cleared";
+
+export type OfflineDataCleanupResult =
+  | { status: "cleared" }
+  | { status: "pending" }
+  | { status: "unconfirmed" };
+
+interface OfflineDataCleanupAttempt {
+  completion: Promise<OfflineDataCleanupResult>;
+  blocked: Promise<OfflineDataCleanupResult>;
+}
+
+let offlineDataStorageStateInThisTab: OfflineDataStorageState = "available";
+let activeOfflineDataCleanup: OfflineDataCleanupAttempt | null = null;
 
 interface StoredOperation {
   id: string;
@@ -68,13 +86,18 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
 
 async function openDatabase(): Promise<IDBDatabase> {
   if (typeof indexedDB === "undefined") throw new Error("Durable browser storage unavailable");
+  if (isOfflineDataPurged()) throw new Error("Offline data has been purged for this browser session");
   const request = indexedDB.open(DB_NAME, DB_VERSION);
   request.onupgradeneeded = () => {
     const db = request.result;
     if (!db.objectStoreNames.contains(OPERATIONS)) db.createObjectStore(OPERATIONS, { keyPath: "id" });
     if (!db.objectStoreNames.contains(METADATA)) db.createObjectStore(METADATA);
   };
-  return requestValue(request);
+  const db = await requestValue(request);
+  // A delete/upgrade request from another FoodOS tab must not leave private data
+  // locked in this tab. Every caller also closes in a finally block below.
+  db.onversionchange = () => db.close();
+  return db;
 }
 
 async function getOrCreateMetadata<T>(db: IDBDatabase, key: string, create: () => Promise<T> | T): Promise<T> {
@@ -146,8 +169,63 @@ function emitChange() {
   globalThis.dispatchEvent?.(new Event(OUTBOX_EVENT));
 }
 
+function emitOfflineDataStorageState() {
+  globalThis.dispatchEvent?.(new Event(OFFLINE_DATA_STATE_EVENT));
+}
+
+export function getOfflineDataStorageState(): OfflineDataStorageState {
+  try {
+    const marker = localStorage.getItem(OFFLINE_DATA_PURGED_KEY);
+    // "1" was used by the first safe-cleanup implementation. Treat it as pending
+    // instead of assuming the older request actually completed.
+    offlineDataStorageStateInThisTab = marker === "cleared"
+      ? "cleared"
+      : marker === "pending" || marker === "1"
+        ? "cleanup-pending"
+        : "available";
+  } catch {
+    // Storage-restricted browsers cannot notify another tab, but this tab still keeps
+    // its conservative state and never silently recreates the database.
+  }
+  return offlineDataStorageStateInThisTab;
+}
+
+function setOfflineDataStorageState(state: OfflineDataStorageState): void {
+  const changed = offlineDataStorageStateInThisTab !== state;
+  offlineDataStorageStateInThisTab = state;
+  try {
+    // This is a non-sensitive lifecycle marker, never an account or payload value.
+    if (state === "available") localStorage.removeItem(OFFLINE_DATA_PURGED_KEY);
+    else localStorage.setItem(OFFLINE_DATA_PURGED_KEY, state === "cleared" ? "cleared" : "pending");
+  } catch {
+    // The in-memory marker still prevents this tab from recreating the database.
+  }
+  if (changed) emitOfflineDataStorageState();
+}
+
+function isOfflineDataPurged(): boolean {
+  return getOfflineDataStorageState() !== "available";
+}
+
+function allowOfflineDataForAuthenticatedMutation(): boolean {
+  if (getOfflineDataStorageState() === "cleanup-pending") return false;
+  // A confirmed cleanup can be followed by a new AAL2-verified offline mutation. An
+  // unresolved delete request cannot be cancelled, so reopening the database while it
+  // is pending could let that old request later delete newly written local data.
+  setOfflineDataStorageState("available");
+  return true;
+}
+
 async function allOperations(db: IDBDatabase): Promise<StoredOperation[]> {
   return requestValue(db.transaction(OPERATIONS, "readonly").objectStore(OPERATIONS).getAll());
+}
+
+function summarizeOperations(operations: StoredOperation[]): OutboxSummary {
+  return {
+    queued: operations.filter((operation) => operation.state === "QUEUED").length,
+    sending: operations.filter((operation) => operation.state === "SENDING").length,
+    rejected: operations.filter((operation) => operation.state === "REJECTED").length
+  };
 }
 
 async function putOperation(db: IDBDatabase, operation: StoredOperation): Promise<void> {
@@ -212,85 +290,158 @@ export async function submitDurableRpc<T>(input: {
   if (!isAllowedOfflineRpc(input.kind, input.rpc)) return { status: "rejected", message: "Offline operation is not allowed" };
   const client = getSupabaseBrowserClient();
   const actorId = await authenticatedActor(client);
+  if (!allowOfflineDataForAuthenticatedMutation()) {
+    return { status: "rejected", message: "Die sichere Entfernung lokaler Offline-Daten ist noch nicht bestätigt. Schließe weitere FoodOS-Tabs oder beende die sichere Abmeldung, bevor du neue Offline-Änderungen speicherst." };
+  }
   const db = await openDatabase();
-  const operations = await allOperations(db);
-  if (operations.length >= OFFLINE_QUEUE_CAP) return { status: "rejected", message: "Die Offline-Warteschlange ist voll. Stelle eine Verbindung her, bevor du weitere Änderungen bestätigst." };
-  const existing = operations.find((operation) => operation.id === input.operationId);
-  if (existing?.state === "REJECTED") return { status: "rejected", message: "Diese Änderung wurde vom Server abgelehnt." };
-  if (existing) return navigator.onLine ? sendOperation<T>(db, existing, client) : { status: "queued" };
-  const secret: OperationSecret = {
-    rpc: input.rpc,
-    args: input.args,
-    householdId: input.householdId,
-    actorId,
-    deviceId: await deviceId(db),
-    baseRevision: null,
-    payloadSha256: await sha256(input.args)
-  };
-  const operation: StoredOperation = {
-    id: input.operationId,
-    kind: input.kind,
-    schemaVersion: 1,
-    state: "QUEUED",
-    createdAt: new Date().toISOString(),
-    attempts: 0,
-    nextAttemptAt: 0,
-    ...(await encrypt(db, secret))
-  };
-  await putOperation(db, operation);
-  return navigator.onLine ? sendOperation<T>(db, operation, client) : { status: "queued" };
+  try {
+    const operations = await allOperations(db);
+    if (operations.length >= OFFLINE_QUEUE_CAP) return { status: "rejected", message: "Die Offline-Warteschlange ist voll. Stelle eine Verbindung her, bevor du weitere Änderungen bestätigst." };
+    const existing = operations.find((operation) => operation.id === input.operationId);
+    if (existing?.state === "REJECTED") return { status: "rejected", message: "Diese Änderung wurde vom Server abgelehnt." };
+    if (existing) return navigator.onLine ? await sendOperation<T>(db, existing, client) : { status: "queued" };
+    const secret: OperationSecret = {
+      rpc: input.rpc,
+      args: input.args,
+      householdId: input.householdId,
+      actorId,
+      deviceId: await deviceId(db),
+      baseRevision: null,
+      payloadSha256: await sha256(input.args)
+    };
+    const operation: StoredOperation = {
+      id: input.operationId,
+      kind: input.kind,
+      schemaVersion: 1,
+      state: "QUEUED",
+      createdAt: new Date().toISOString(),
+      attempts: 0,
+      nextAttemptAt: 0,
+      ...(await encrypt(db, secret))
+    };
+    await putOperation(db, operation);
+    return navigator.onLine ? await sendOperation<T>(db, operation, client) : { status: "queued" };
+  } finally {
+    db.close();
+  }
 }
 
 export async function flushQueuedOperations(): Promise<OutboxSummary> {
   const db = await openDatabase();
-  const client = getSupabaseBrowserClient();
-  const operations = (await allOperations(db))
-    .filter((operation) => (operation.state === "QUEUED" || operation.state === "SENDING") && operation.nextAttemptAt <= Date.now())
-    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
-  for (const operation of operations) {
-    if (!navigator.onLine) break;
-    try {
-      await sendOperation(db, operation, client);
-    } catch {
-      await putOperation(db, { ...operation, state: "REJECTED", safeError: "session_revalidation_failed" });
+  try {
+    const client = getSupabaseBrowserClient();
+    const operations = (await allOperations(db))
+      .filter((operation) => (operation.state === "QUEUED" || operation.state === "SENDING") && operation.nextAttemptAt <= Date.now())
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+    for (const operation of operations) {
+      if (!navigator.onLine) break;
+      try {
+        await sendOperation(db, operation, client);
+      } catch {
+        await putOperation(db, { ...operation, state: "REJECTED", safeError: "session_revalidation_failed" });
+      }
     }
+    return summarizeOperations(await allOperations(db));
+  } finally {
+    db.close();
   }
-  return getOutboxSummary();
 }
 
 export async function getOutboxSummary(): Promise<OutboxSummary> {
   const db = await openDatabase();
-  const operations = await allOperations(db);
-  return {
-    queued: operations.filter((operation) => operation.state === "QUEUED").length,
-    sending: operations.filter((operation) => operation.state === "SENDING").length,
-    rejected: operations.filter((operation) => operation.state === "REJECTED").length
-  };
+  try {
+    return summarizeOperations(await allOperations(db));
+  } finally {
+    db.close();
+  }
 }
 
-export async function clearOfflineData(): Promise<void> {
-  if (typeof indexedDB === "undefined") return;
-  await new Promise<void>((resolve, reject) => {
-    const request = indexedDB.deleteDatabase(DB_NAME);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error ?? new Error("Offline data could not be removed"));
-    request.onblocked = () => reject(new Error("Offline data removal is blocked by another tab"));
+function startOfflineDataCleanup(): OfflineDataCleanupAttempt {
+  let resolveCompletion: (result: OfflineDataCleanupResult) => void;
+  let resolveBlocked: (result: OfflineDataCleanupResult) => void;
+  const completion = new Promise<OfflineDataCleanupResult>((resolve) => {
+    resolveCompletion = resolve;
   });
-  emitChange();
+  const blocked = new Promise<OfflineDataCleanupResult>((resolve) => {
+    resolveBlocked = resolve;
+  });
+  const attempt: OfflineDataCleanupAttempt = { completion, blocked };
+  activeOfflineDataCleanup = attempt;
+
+  const finish = (result: OfflineDataCleanupResult) => {
+    if (activeOfflineDataCleanup === attempt) activeOfflineDataCleanup = null;
+    resolveCompletion(result);
+  };
+
+  try {
+    const request = indexedDB.deleteDatabase(DB_NAME);
+    request.onsuccess = () => {
+      setOfflineDataStorageState("cleared");
+      finish({ status: "cleared" });
+    };
+    request.onerror = () => finish({ status: "unconfirmed" });
+    // Crucially, onblocked is an observation, not a cancellation. The request remains
+    // live and may succeed once the last tab releases its database connection.
+    request.onblocked = () => resolveBlocked({ status: "pending" });
+  } catch {
+    finish({ status: "unconfirmed" });
+  }
+  return attempt;
+}
+
+function observeOfflineDataCleanup(attempt: OfflineDataCleanupAttempt): Promise<OfflineDataCleanupResult> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (result: OfflineDataCleanupResult) => {
+      if (settled) return;
+      settled = true;
+      globalThis.clearTimeout(timeout);
+      resolve(result);
+    };
+    const timeout = globalThis.setTimeout(() => settle({ status: "pending" }), OFFLINE_DATA_CLEANUP_OBSERVATION_MS);
+    void attempt.completion.then(settle);
+    void attempt.blocked.then(settle);
+  });
+}
+
+export async function clearOfflineData(): Promise<OfflineDataCleanupResult> {
+  const state = getOfflineDataStorageState();
+  if (state === "cleared") return { status: "cleared" };
+  if (state === "available") setOfflineDataStorageState("cleanup-pending");
+  if (typeof indexedDB === "undefined") return { status: "unconfirmed" };
+  const attempt = activeOfflineDataCleanup ?? startOfflineDataCleanup();
+  return observeOfflineDataCleanup(attempt);
 }
 
 export async function discardRejectedOperations(): Promise<void> {
   const db = await openDatabase();
-  const rejected = (await allOperations(db)).filter((operation) => operation.state === "REJECTED");
-  if (!rejected.length) return;
-  const transaction = db.transaction(OPERATIONS, "readwrite");
-  const store = transaction.objectStore(OPERATIONS);
-  rejected.forEach((operation) => store.delete(operation.id));
-  await transactionDone(transaction);
-  emitChange();
+  try {
+    const rejected = (await allOperations(db)).filter((operation) => operation.state === "REJECTED");
+    if (!rejected.length) return;
+    const transaction = db.transaction(OPERATIONS, "readwrite");
+    const store = transaction.objectStore(OPERATIONS);
+    rejected.forEach((operation) => store.delete(operation.id));
+    await transactionDone(transaction);
+    emitChange();
+  } finally {
+    db.close();
+  }
 }
 
 export function subscribeToOutbox(listener: () => void): () => void {
   globalThis.addEventListener?.(OUTBOX_EVENT, listener);
   return () => globalThis.removeEventListener?.(OUTBOX_EVENT, listener);
+}
+
+export function subscribeToOfflineDataStorageState(listener: (state: OfflineDataStorageState) => void): () => void {
+  const notify = () => listener(getOfflineDataStorageState());
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === OFFLINE_DATA_PURGED_KEY || event.key === null) notify();
+  };
+  globalThis.addEventListener?.(OFFLINE_DATA_STATE_EVENT, notify);
+  globalThis.addEventListener?.("storage", handleStorage);
+  return () => {
+    globalThis.removeEventListener?.(OFFLINE_DATA_STATE_EVENT, notify);
+    globalThis.removeEventListener?.("storage", handleStorage);
+  };
 }

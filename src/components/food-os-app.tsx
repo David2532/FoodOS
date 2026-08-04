@@ -2,10 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, CalendarDays, Home, PackageOpen, ScanLine, ShoppingBasket, Sparkles } from "lucide-react";
-import { SignOutButton } from "@/features/auth/sign-out-button";
-import { DataExportButton } from "@/features/privacy/data-export-button";
-import { PrivacyCenterButton } from "@/features/privacy/privacy-center-button";
+import { Bell, CalendarDays, CircleUserRound, Home, PackageOpen, ScanLine, ShoppingBasket, Sparkles } from "lucide-react";
+import { AccountSettingsView } from "@/features/settings/account-settings-view";
+import { ThemeMenu } from "@/features/settings/theme-menu";
 import type { PrivacyChoices } from "@/domain/privacy";
 import type { AppSnapshot, AppView } from "@/lib/types";
 import { TodayView } from "./today-view";
@@ -28,10 +27,11 @@ const titles: Record<AppView, { eyebrow: string; title: string }> = {
   inventory: { eyebrow: "Chargen · Sicherheit · Bestand", title: "Dein Vorrat" },
   scan: { eyebrow: "Katalog · Barcode · MHD", title: "Finden & erfassen" },
   plan: { eyebrow: "Aus deinem echten Vorrat", title: "Deine Woche" },
-  shopping: { eyebrow: "Aus Plan und Bestand", title: "Dein Einkauf" }
+  shopping: { eyebrow: "Aus Plan und Bestand", title: "Dein Einkauf" },
+  settings: { eyebrow: "Konto · Sicherheit · Darstellung", title: "Einstellungen" }
 };
 
-export function FoodOsApp({ authenticated = false, preview = false, initialPrivacyChoices, initialSnapshot }: { authenticated?: boolean; preview?: boolean; initialPrivacyChoices?: PrivacyChoices; initialSnapshot?: AppSnapshot }) {
+export function FoodOsApp({ authenticated = false, preview = false, accountEmail, initialPrivacyChoices, initialSnapshot }: { authenticated?: boolean; preview?: boolean; accountEmail?: string; initialPrivacyChoices?: PrivacyChoices; initialSnapshot?: AppSnapshot }) {
   const router = useRouter();
   const [view, setView] = useState<AppView>("today");
   const current = useMemo(() => {
@@ -54,11 +54,11 @@ export function FoodOsApp({ authenticated = false, preview = false, initialPriva
             <p>{current.eyebrow}</p>
             <h1>{current.title}</h1>
           </div>
-          {authenticated ? <div className="account-actions">{initialPrivacyChoices && <PrivacyCenterButton initialChoices={initialPrivacyChoices} />}<DataExportButton /><SignOutButton /></div> : (
-            <button className="icon-button" aria-label={preview ? "Lokaler Preview-Modus" : "Benachrichtigungen"}>
+          {authenticated ? <div className="topbar-actions"><button className="icon-button" type="button" aria-label="Konto und Einstellungen öffnen" onClick={() => setView("settings")}><CircleUserRound size={20} aria-hidden="true" /></button></div> : (
+            <div className="topbar-actions"><ThemeMenu /><button className="icon-button" aria-label={preview ? "Lokaler Preview-Modus" : "Benachrichtigungen"}>
               <Bell size={20} />
               <span className="notification-dot" />
-            </button>
+            </button></div>
           )}
         </header>
 
@@ -70,6 +70,7 @@ export function FoodOsApp({ authenticated = false, preview = false, initialPriva
           {view === "scan" && <ScanView householdId={initialSnapshot?.household.id} onSaved={() => { setView("inventory"); router.refresh(); }} />}
           {view === "plan" && <PlanView snapshot={initialSnapshot} onChanged={initialSnapshot ? () => router.refresh() : undefined} />}
           {view === "shopping" && <ShoppingView snapshot={initialSnapshot} onChanged={initialSnapshot ? () => router.refresh() : undefined} />}
+          {view === "settings" && authenticated && <AccountSettingsView accountEmail={accountEmail} initialPrivacyChoices={initialPrivacyChoices} onClose={() => setView("today")} />}
         </div>
 
         <nav className="bottom-nav" aria-label="Hauptnavigation">
