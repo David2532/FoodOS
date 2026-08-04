@@ -50,6 +50,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .scan-nav.active .nav-icon { background: #caff82; }
 
 .hero-card { border: 1px solid rgba(183,243,106,.16); padding: 20px; border-radius: 26px; background: linear-gradient(145deg, rgba(31,59,37,.96), rgba(12,30,20,.96)); box-shadow: inset 0 1px rgba(255,255,255,.04), 0 18px 46px rgba(0,0,0,.2); position: relative; overflow: hidden; }
+.catalog-shortcut { border: 1px solid rgba(131,201,255,.22); border-radius: 20px; padding: 14px; display: grid; grid-template-columns: 42px minmax(0,1fr) 44px; gap: 11px; align-items: center; background: linear-gradient(120deg, rgba(23,63,74,.4), rgba(12,27,22,.84)); }
+.catalog-shortcut-icon { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; color: var(--blue); background: rgba(131,201,255,.12); }
+.catalog-shortcut p { margin: 0 0 3px; color: var(--blue); font-size: 9px; font-weight: 800; letter-spacing: .12em; }
+.catalog-shortcut h2 { margin: 0; font-size: 14px; letter-spacing: -.02em; }
+.catalog-shortcut div > span { display: block; margin-top: 3px; color: var(--muted-2); font-size: 10px; line-height: 1.4; }
+.catalog-shortcut button { width: 44px; height: 44px; border: 1px solid rgba(131,201,255,.28); border-radius: 13px; display: grid; place-items: center; color: var(--blue); background: rgba(131,201,255,.1); cursor: pointer; }
+.catalog-shortcut button:hover { border-color: var(--blue); background: rgba(131,201,255,.18); }
 .hero-card::after { content: ""; position: absolute; width: 180px; height: 180px; border: 35px solid rgba(183,243,106,.045); border-radius: 50%; right: -76px; top: -90px; }
 .hero-topline { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
 .hero-topline > div { display: flex; align-items: center; gap: 7px; color: var(--lime); text-transform: uppercase; letter-spacing: .1em; font-weight: 750; }

@@ -1,4 +1,4 @@
-import { ArrowRight, Beef, Clock3, Flame, PackageCheck, Plus, ShieldAlert, Wheat } from "lucide-react";
+import { ArrowRight, Beef, Clock3, Database, Flame, PackageCheck, Plus, ShieldAlert, Wheat } from "lucide-react";
 import type { AppSnapshot, AppView } from "@/lib/types";
 
 export function TodayView({ onNavigate, snapshot }: { onNavigate: (view: AppView) => void; snapshot?: AppSnapshot }) {
@@ -19,6 +19,7 @@ export function TodayView({ onNavigate, snapshot }: { onNavigate: (view: AppView
           </div>
           <button className="primary-button" onClick={() => onNavigate("inventory")}><PackageCheck size={18} /> Verzehr aus Vorrat buchen</button>
         </section>
+        <CatalogShortcut onNavigate={onNavigate} />
         {snapshot.recallSource.status !== "fresh" && <section className="recall-source-warning" role="status"><ShieldAlert size={21} /><div><strong>{snapshot.recallSource.status === "stale" ? "Rückrufquelle ist veraltet" : "Rückrufprüfung nicht verfügbar"}</strong><p>Es ist keine aktuelle Aussage zur Betroffenheit oder Sicherheit möglich. Prüfe im Zweifel die amtliche Quelle lebensmittelwarnung.de.</p></div></section>}
         {urgent ? (
           <section className="expiry-card">
@@ -47,6 +48,8 @@ export function TodayView({ onNavigate, snapshot }: { onNavigate: (view: AppView
           <div><Flame size={16} /><span>Fett</span><strong>46 <small>/ 70 g</small></strong></div>
         </div>
       </section>
+
+      <CatalogShortcut onNavigate={onNavigate} />
 
       <section>
         <div className="section-heading">
@@ -83,4 +86,16 @@ export function TodayView({ onNavigate, snapshot }: { onNavigate: (view: AppView
       </section>
     </div>
   );
+}
+
+function CatalogShortcut({ onNavigate }: { onNavigate: (view: AppView) => void }) {
+  return <section className="catalog-shortcut" aria-labelledby="catalog-shortcut-title">
+    <span className="catalog-shortcut-icon"><Database size={21} /></span>
+    <div>
+      <p>ECHTER LEBENSMITTELKATALOG</p>
+      <h2 id="catalog-shortcut-title">Produkt suchen oder scannen</h2>
+      <span>Marke, Produktname oder Barcode – mit Quellen und Packungsdaten.</span>
+    </div>
+    <button type="button" onClick={() => onNavigate("scan")} aria-label="Lebensmittelkatalog öffnen"><ArrowRight size={18} /></button>
+  </section>;
 }
