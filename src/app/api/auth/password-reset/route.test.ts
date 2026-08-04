@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const testState = vi.hoisted(() => ({
   claims: {
@@ -50,6 +50,7 @@ function post(body: unknown, options: PostOptions = {}) {
 
 describe("recovery password reset API", () => {
   beforeEach(() => {
+    vi.stubEnv("FOODOS_APP_ORIGIN", "https://foodos.test");
     testState.claims = {
       sub: "18f4292d-778e-4384-9ab7-70b98b1acadb",
       session_id: "f3cd9fd6-7684-4f2f-b2d5-6047399e43f0",
@@ -60,6 +61,10 @@ describe("recovery password reset API", () => {
     testState.signOut.mockReset();
     testState.updateUser.mockResolvedValue({ error: null });
     testState.signOut.mockResolvedValue({ error: null });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("accepts a direct same-origin request before rejecting a normal AAL1 session", async () => {
@@ -109,7 +114,30 @@ describe("recovery password reset API", () => {
     expect(testState.updateUser).not.toHaveBeenCalled();
   });
 
-  it("uses a complete forwarded public origin when a proxy supplies it", async () => {
+  it("never trusts Host or forwarded headers as the password-reset origin", async () => {
+    testState.claims = {
+      sub: "18f4292d-778e-4384-9ab7-70b98b1acadb",
+      session_id: "f3cd9fd6-7684-4f2f-b2d5-6047399e43f0",
+      amr: [{ method: "recovery", timestamp: 1_785_843_422 }]
+    };
+
+    const response = await post(
+      { action: "reset", newPassword: "A-new-password-2026!", passwordConfirmation: "A-new-password-2026!" },
+      {
+        host: "evil.example",
+        origin: "https://evil.example",
+        forwardedHost: "evil.example",
+        forwardedProtocol: "https"
+      }
+    );
+
+    expect(response.status).toBe(403);
+    expect(testState.updateUser).not.toHaveBeenCalled();
+    expect(testState.signOut).not.toHaveBeenCalled();
+  });
+
+  it("uses the configured canonical origin despite reverse-proxy headers", async () => {
+    vi.stubEnv("FOODOS_APP_ORIGIN", "https://app.foodos.test");
     const response = await post(
       { action: "reset", newPassword: "A-new-password-2026!", passwordConfirmation: "A-new-password-2026!" },
       {
@@ -121,6 +149,21 @@ describe("recovery password reset API", () => {
     );
 
     expect(response.status).toBe(401);
+    expect(testState.updateUser).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the canonical public origin is absent or malformed", async () => {
+    vi.stubEnv("FOODOS_APP_ORIGIN", "https://foodos.test/unsafe-path");
+    const malformed = await post(
+      { action: "reset", newPassword: "A-new-password-2026!", passwordConfirmation: "A-new-password-2026!" }
+    );
+    vi.stubEnv("FOODOS_APP_ORIGIN", "");
+    const missing = await post(
+      { action: "reset", newPassword: "A-new-password-2026!", passwordConfirmation: "A-new-password-2026!" }
+    );
+
+    expect(malformed.status).toBe(403);
+    expect(missing.status).toBe(403);
     expect(testState.updateUser).not.toHaveBeenCalled();
   });
 

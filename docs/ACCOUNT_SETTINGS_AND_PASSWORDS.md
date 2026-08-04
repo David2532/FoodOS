@@ -44,6 +44,10 @@ bleibt; das ist **keine** Production-Freigabe.
 
 ## Verpflichtende Managed-Production-Konfiguration
 
+`FOODOS_APP_ORIGIN` muss die exakte öffentliche Production-Origin ohne Pfad enthalten.
+Der Passwort-Reset vergleicht den Browser-Origin ausschließlich damit und akzeptiert
+keine per Request gelieferten `Host`- oder Forwarded-Origin-Informationen.
+
 Vor einem echten Release müssen in der verwendeten EU-Supabase-Instanz nachweisbar
 gesetzt und getestet werden:
 

@@ -24,6 +24,7 @@ export default defineConfig({
       NEXT_PUBLIC_DEMO_MODE_ENABLED: "true",
       NEXT_PUBLIC_OAUTH_APPLE_ENABLED: "true",
       NEXT_PUBLIC_OAUTH_GOOGLE_ENABLED: "true",
+      FOODOS_APP_ORIGIN: "http://127.0.0.1:3101",
       HOSTNAME: "127.0.0.1",
       PORT: "3101"
     }

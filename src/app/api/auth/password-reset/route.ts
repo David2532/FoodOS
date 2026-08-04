@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { isRecoverySessionClaims } from "@/domain/auth-recovery";
 import { passwordResetSchema } from "@/domain/password";
-import { publicRequestOrigin } from "@/domain/request-origin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +11,33 @@ function noStoreJson(body: unknown, status: number): Response {
     status,
     headers: { "Cache-Control": "no-store, max-age=0", Pragma: "no-cache" }
   });
+}
+
+/**
+ * Returns the server-owned public origin for state-changing browser requests.
+ * Request Host and forwarding headers remain untrusted input and must never decide
+ * whether a password-changing request passes the CSRF boundary.
+ */
+function configuredApplicationOrigin(): string | null {
+  const configured = process.env.FOODOS_APP_ORIGIN?.trim();
+  if (!configured) return null;
+
+  try {
+    const url = new URL(configured);
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      (url.pathname !== "" && url.pathname !== "/")
+    ) {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
 }
 
 function hasSameOrigin(request: Request): boolean {
@@ -26,7 +52,7 @@ function hasSameOrigin(request: Request): boolean {
   }
   if (origin.origin !== rawOrigin) return false;
 
-  const expectedOrigin = publicRequestOrigin(request);
+  const expectedOrigin = configuredApplicationOrigin();
   return expectedOrigin !== null && origin.origin === expectedOrigin;
 }
 
