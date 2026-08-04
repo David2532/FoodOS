@@ -76,9 +76,9 @@ test("blocked offline cleanup remains pending, updates both tabs, and confirms d
     await signOut.click();
     const cleanupAlert = settings.getByRole("alert");
     await expect(cleanupAlert).toContainText("Die Löschung lokaler Offline-Daten ist noch nicht bestätigt");
-    await expect(cleanupAlert).toContainText("Schließe weitere FoodOS-Tabs und versuche die Abmeldung erneut");
-    await expect(cleanupAlert).toContainText("Du bleibst angemeldet");
-    await expect(signOut).toBeEnabled();
+    await expect(cleanupAlert).toContainText("die Abmeldung wird automatisch fortgesetzt");
+    await expect(cleanupAlert).toContainText("Du bleibst bis dahin angemeldet");
+    await expect(signOut).toBeDisabled();
     await expect.poll(() => page.evaluate(() => localStorage.getItem("foodos:offline-data-purged-v1"))).toBe("pending");
 
     // A `storage` event updates the other live tab. It must not reopen the database or
@@ -90,16 +90,13 @@ test("blocked offline cleanup remains pending, updates both tabs, and confirms d
     });
     await blocker.close();
 
-    // The first delete request remains live after `onblocked`; no second sign-out click
-    // is required for it to finish and preserve a confirmed lifecycle marker.
+    // The first delete request remains live after `onblocked`; the user-initiated
+    // secure sign-out resumes automatically once that request confirms deletion.
     await expect.poll(() => page.evaluate(() => localStorage.getItem("foodos:offline-data-purged-v1"))).toBe("cleared");
-    await expect(page.locator(".outbox-status[role='status']")).toContainText("Lokale Offline-Daten bestätigt entfernt");
     await expect.poll(async () => page.evaluate(async () => {
       const databases = await indexedDB.databases();
       return databases.some((database) => database.name === "foodos-device-v1");
     })).toBe(false);
-
-    await signOut.click();
     await expect(page.getByRole("heading", { name: "Privat starten" })).toBeVisible();
   } finally {
     if (!blocker.isClosed()) {

@@ -15,8 +15,9 @@ export const dynamic = "force-dynamic";
 export default async function Home({ searchParams }: { searchParams: Promise<{ auth_error?: string | string[]; demo?: string | string[] }> }) {
   const params = await searchParams;
   const demoEnabled = process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEMO_MODE_ENABLED === "true";
-  if (demoEnabled && params.demo === "1") return <FoodOsApp preview />;
-  if (!isSupabaseConfigured()) return <FoodOsApp preview />;
+  const supabaseConfigured = isSupabaseConfigured();
+  if (demoEnabled && params.demo === "1") return <FoodOsApp preview authEntryAvailable={supabaseConfigured} />;
+  if (!supabaseConfigured) return <FoodOsApp preview />;
 
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.auth.getClaims();

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { AtSign, KeyRound, LoaderCircle, Mail, Play } from "lucide-react";
+import { Apple, AtSign, KeyRound, LoaderCircle, Mail, Play } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { emailAddressSchema, passwordSignInSchema, passwordSignUpSchema } from "@/domain/password";
 import { oauthCallbackUrl } from "@/domain/auth-redirect";
@@ -17,6 +17,13 @@ const authErrorMessages: Record<string, string> = {
   confirmation: "Der Anmeldelink ist ungültig oder abgelaufen. Starte die Anmeldung erneut.",
   recovery: "Der Passwort-Link ist ungültig oder abgelaufen. Fordere einen neuen Link an."
 };
+
+function ProviderMark({ provider }: { provider: OAuthProvider }) {
+  if (provider === "apple") {
+    return <span className="provider-mark provider-mark-apple" aria-hidden="true"><Apple size={17} strokeWidth={2.2} /></span>;
+  }
+  return <span className="provider-mark provider-mark-google" aria-hidden="true"><span>G</span></span>;
+}
 
 export function SignInScreen({
   authError,
@@ -154,7 +161,8 @@ export function SignInScreen({
           <p className="auth-flow-note">Meldest du dich nur mit Apple oder Google an, verwaltest du dein Passwort direkt bei diesem Anbieter.</p>
         </form>
       ) : <>
-        <div className="oauth-stack" aria-label="Schnelle Anmeldung">
+        <fieldset className="oauth-stack" aria-busy={busy || undefined}>
+          <legend>Mit einem Konto anmelden</legend>
           {showDemoEntry && (
             <button className="oauth-button demo" type="button" onClick={() => router.push("/?demo=1")}>
               <Play size={18} aria-hidden="true" /> FoodOS ausprobieren
@@ -162,17 +170,18 @@ export function SignInScreen({
           )}
           {appleEnabled && (
             <button className="oauth-button apple" type="button" onClick={() => void signInWithProvider("apple")} disabled={busy}>
-              <span className="provider-mark" aria-hidden="true">A</span>
+              <ProviderMark provider="apple" />
               {activeProvider === "apple" ? "Apple wird geöffnet …" : "Mit Apple fortfahren"}
             </button>
           )}
           {googleEnabled && (
             <button className="oauth-button google" type="button" onClick={() => void signInWithProvider("google")} disabled={busy}>
-              <span className="provider-mark" aria-hidden="true">G</span>
+              <ProviderMark provider="google" />
               {activeProvider === "google" ? "Google wird geöffnet …" : "Mit Google fortfahren"}
             </button>
           )}
-        </div>
+          {activeProvider && <p className="sr-only" role="status">{activeProvider === "apple" ? "Apple" : "Google"} wird geöffnet.</p>}
+        </fieldset>
         {error && <p className="auth-message error auth-level-message" role="alert">{error}</p>}
         {notice && <p className="auth-message success auth-level-message" role="status">{notice}</p>}
         <details className="email-auth" open={!hasSimpleEntry}>

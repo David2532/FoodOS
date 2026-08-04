@@ -207,6 +207,11 @@ Hauptbereiche nicht um einen sechsten Tab. Dort können Nutzer die lokale Darste
 herunterladen und sich abmelden. Die Theme-Präferenz ist nicht sensibel und bleibt pro
 Gerät in einem validierten Cookie plus Browser-Speicher erhalten.
 
+Beim sicheren Abmelden bleibt die Session erhalten, solange die verschlüsselte lokale
+Offline-Ablage in einem weiteren FoodOS-Tab noch gelöscht wird. Sobald derselbe
+Löschvorgang bestätigt ist, setzt FoodOS die bereits gestartete Abmeldung automatisch
+fort; ein zweiter Klick darf die Bestätigung nicht umgehen.
+
 E-Mail-Konten können das Passwort im AAL2-geschützten Bereich mit aktuellem Passwort
 ändern. Die lokale Supabase-Konfiguration verlangt mindestens zwölf Zeichen,
 `secure_password_change = true` und unterstützt den E-Mail-Sicherheitscode für nicht

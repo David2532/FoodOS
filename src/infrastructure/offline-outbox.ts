@@ -413,6 +413,17 @@ export async function clearOfflineData(): Promise<OfflineDataCleanupResult> {
   return observeOfflineDataCleanup(attempt);
 }
 
+/**
+ * Wait for the deletion request already started by `clearOfflineData` to settle.
+ * This deliberately does not start a new deletion request: callers use it only after
+ * a user has explicitly begun secure sign-out and the initial observation was blocked.
+ */
+export async function waitForOfflineDataCleanupCompletion(): Promise<OfflineDataCleanupResult> {
+  const attempt = activeOfflineDataCleanup;
+  if (attempt) return attempt.completion;
+  return getOfflineDataStorageState() === "cleared" ? { status: "cleared" } : { status: "unconfirmed" };
+}
+
 export async function discardRejectedOperations(): Promise<void> {
   const db = await openDatabase();
   try {

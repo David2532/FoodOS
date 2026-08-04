@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell, CalendarDays, CircleUserRound, Home, PackageOpen, ScanLine, ShoppingBasket, Sparkles } from "lucide-react";
 import { AccountSettingsView } from "@/features/settings/account-settings-view";
@@ -31,7 +32,21 @@ const titles: Record<AppView, { eyebrow: string; title: string }> = {
   settings: { eyebrow: "Konto · Sicherheit · Darstellung", title: "Einstellungen" }
 };
 
-export function FoodOsApp({ authenticated = false, preview = false, accountEmail, initialPrivacyChoices, initialSnapshot }: { authenticated?: boolean; preview?: boolean; accountEmail?: string; initialPrivacyChoices?: PrivacyChoices; initialSnapshot?: AppSnapshot }) {
+export function FoodOsApp({
+  authenticated = false,
+  preview = false,
+  authEntryAvailable = false,
+  accountEmail,
+  initialPrivacyChoices,
+  initialSnapshot
+}: {
+  authenticated?: boolean;
+  preview?: boolean;
+  authEntryAvailable?: boolean;
+  accountEmail?: string;
+  initialPrivacyChoices?: PrivacyChoices;
+  initialSnapshot?: AppSnapshot;
+}) {
   const router = useRouter();
   const [view, setView] = useState<AppView>("today");
   const current = useMemo(() => {
@@ -63,7 +78,12 @@ export function FoodOsApp({ authenticated = false, preview = false, accountEmail
         </header>
 
         <div className="view-scroll" key={view}>
-          {preview && <div className="preview-banner" role="status">Preview-Modus · Beispieldaten werden nicht gespeichert</div>}
+          {preview && (
+            <aside className="preview-banner" aria-label="Preview-Modus">
+              <p role="status">Preview-Modus · Beispieldaten werden nicht gespeichert</p>
+              {authEntryAvailable && <Link className="preview-account-link" href="/">Konto erstellen oder anmelden</Link>}
+            </aside>
+          )}
           {authenticated && <OutboxStatus />}
           {view === "today" && <TodayView onNavigate={setView} snapshot={initialSnapshot} />}
           {view === "inventory" && <InventoryView householdId={initialSnapshot?.household.id} onScan={() => setView("scan")} onConsumed={initialSnapshot ? () => router.refresh() : undefined} items={initialSnapshot?.inventory} />}

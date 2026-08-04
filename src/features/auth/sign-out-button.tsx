@@ -2,12 +2,18 @@
 
 import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { clearStagedPrivacyChoice } from "@/features/privacy/privacy-client";
-import { clearOfflineData, getOfflineDataStorageState, getOutboxSummary } from "@/infrastructure/offline-outbox";
+import {
+  clearOfflineData,
+  getOfflineDataStorageState,
+  getOutboxSummary,
+  type OfflineDataCleanupResult,
+  waitForOfflineDataCleanupCompletion
+} from "@/infrastructure/offline-outbox";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
-const cleanupPendingMessage = "Die Löschung lokaler Offline-Daten ist noch nicht bestätigt. Schließe weitere FoodOS-Tabs und versuche die Abmeldung erneut. Du bleibst angemeldet, bis die Löschung bestätigt ist.";
+const cleanupPendingMessage = "Die Löschung lokaler Offline-Daten ist noch nicht bestätigt. Schließe weitere FoodOS-Tabs; die Abmeldung wird automatisch fortgesetzt, sobald die Löschung bestätigt ist. Du bleibst bis dahin angemeldet.";
 const cleanupUnconfirmedMessage = "Die sichere Entfernung lokaler Offline-Daten konnte nicht bestätigt werden. Du bleibst angemeldet. Prüfe den Browser-Speicher und versuche die Abmeldung erneut.";
 const summaryFailureMessage = "Die lokale Offline-Warteschlange konnte nicht sicher gelesen werden. Du bleibst angemeldet. Prüfe den Browser-Speicher und versuche es erneut.";
 const signOutFailureMessage = "Die lokale Löschung wurde bestätigt, aber FoodOS konnte die Abmeldung nicht bestätigen. Versuche es erneut, bevor du dieses Gerät unbeaufsichtigt lässt.";
@@ -15,10 +21,13 @@ const signOutFailureMessage = "Die lokale Löschung wurde bestätigt, aber FoodO
 export function SignOutButton({ variant = "icon" }: { variant?: "icon" | "settings" }) {
   const router = useRouter();
   const errorId = useId();
+  const signOutInFlight = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function signOut() {
+    if (signOutInFlight.current) return;
+    signOutInFlight.current = true;
     setBusy(true);
     setError(null);
 
@@ -38,15 +47,15 @@ export function SignOutButton({ variant = "icon" }: { variant?: "icon" | "settin
         if (!confirmation) return;
       }
 
-      let cleanup;
+      let cleanup: OfflineDataCleanupResult;
       try {
         cleanup = await clearOfflineData();
+        if (cleanup.status === "pending") {
+          setError(cleanupPendingMessage);
+          cleanup = await waitForOfflineDataCleanupCompletion();
+        }
       } catch {
         setError(cleanupUnconfirmedMessage);
-        return;
-      }
-      if (cleanup.status === "pending") {
-        setError(cleanupPendingMessage);
         return;
       }
       if (cleanup.status === "unconfirmed") {
@@ -69,6 +78,7 @@ export function SignOutButton({ variant = "icon" }: { variant?: "icon" | "settin
       clearStagedPrivacyChoice();
       router.refresh();
     } finally {
+      signOutInFlight.current = false;
       setBusy(false);
     }
   }

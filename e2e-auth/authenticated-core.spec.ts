@@ -22,6 +22,7 @@ test("Apple and Google OAuth start with PKCE and a same-origin callback", async 
   await acceptNecessaryPrivacy(page);
   expect([...externalRequests]).toEqual([]);
   await page.screenshot({ path: "docs/evidence/screenshots/auth-google-desktop.png", fullPage: true });
+  await expect(page.getByRole("group", { name: "Mit einem Konto anmelden" })).toBeVisible();
   await expect(page.locator(".oauth-button")).toHaveCount(2);
   await expect(page.getByRole("button", { name: "Mit Apple fortfahren" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Mit Google fortfahren" })).toBeVisible();
@@ -51,8 +52,13 @@ test("Apple and Google OAuth start with PKCE and a same-origin callback", async 
   expect(providerError.headers().location).not.toContain("provider-secret-detail");
 
   await page.goto("/?demo=1");
+  const accountEntry = page.getByRole("link", { name: "Konto erstellen oder anmelden" });
+  await expect(accountEntry).toHaveAttribute("href", "/");
   await expect(page.getByRole("heading", { name: "Heute in FoodOS" })).toBeVisible();
   await expect(page.getByText("Preview-Modus · Beispieldaten werden nicht gespeichert", { exact: true })).toBeVisible();
+  await accountEntry.click();
+  await expect(page).toHaveURL("/");
+  await expect(page.getByRole("heading", { name: "Einfach loslegen" })).toBeVisible();
 });
 
 function decodeBase32(secret: string): Buffer {
@@ -169,11 +175,19 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
-    const read = database.transaction("operations", "readonly").objectStore("operations").getAll();
-    const operations = await new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
-      read.onsuccess = () => resolve(read.result);
-      read.onerror = () => reject(read.error);
-    });
+    const transaction = database.transaction("operations", "readonly");
+    const read = transaction.objectStore("operations").getAll();
+    const [operations] = await Promise.all([
+      new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
+        read.onsuccess = () => resolve(read.result);
+        read.onerror = () => reject(read.error);
+      }),
+      new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      })
+    ]);
     database.close();
     const operation = operations[0];
     return {
@@ -228,8 +242,9 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
   await expect(passwordForm.getByRole("status")).toContainText("Dein Passwort wurde geändert.");
   await expect(passwordForm.getByRole("status")).toContainText("Andere angemeldete Geräte wurden abgemeldet.");
 
+  const signedOutHeading = page.getByRole("heading", { name: "Privat starten" });
   await settings.getByRole("button", { name: "Sicher abmelden" }).click();
-  await expect(page.getByRole("heading", { name: "Privat starten" })).toBeVisible();
+  await expect(signedOutHeading).toBeVisible();
   await acceptNecessaryPrivacy(page);
   await page.getByText("Mit E-Mail weitermachen", { exact: true }).click();
 
