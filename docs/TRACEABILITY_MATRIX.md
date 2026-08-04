@@ -1,6 +1,6 @@
 # FoodOS production-beta traceability matrix
 
-Status: **living audit for Draft PR #5** · Baseline commit: `c6e610b2373b8c231514948ef867adcbfb59c9ca`
+Status: **living audit for Draft PR #5** · CI-verified artifact: `7f2e8c6bc3f067eca239fdd3220e080ef7d26fd6` · [GitHub Actions run 30883156141](https://github.com/David2532/FoodOS/actions/runs/30883156141)
 
 This matrix separates code, test and external evidence. `CI_VERIFIED` is used only when
 the exact artifact was exercised by GitHub Actions; `TESTED` means a named local test
@@ -14,7 +14,7 @@ converted to an evidence-backed state before the technical audit can close.
 
 | Requirement / gate | Flow / risk | Status | Implementation evidence | Test / CI evidence and remaining gap |
 |---|---|---|---|---|
-| Locked install, lint, types, unit tests and production build | Stage 0 | `CI_VERIFIED` | `package.json`, `.nvmrc`, `.github/workflows/ci.yml` | Run 30766373087 passed all three Node-22/Supabase/browser jobs at `ff74f42`; the current offline slice passes local verify with 37/37 tests and a production build on Node 25.2.1, pending its new CI artifact. |
+| Locked install, lint, types, unit tests and production build | Stage 0 | `CI_VERIFIED` | `package.json`, `.nvmrc`, `.github/workflows/ci.yml` | GitHub Actions run 30883156141 passed all three Node-22 jobs for the named artifact: locked install; lint/types/unit/build plus coverage; fresh local Supabase migrations, pgTAP/RLS and Auth/TOTP E2E; and Pixel-7/Desktop preview E2E with axe smoke. This CI evidence does not prove the unimplemented release gates listed below. |
 | Collapsed email auth or Apple/Google OAuth/OIDC with PKCE, SSR session refresh and TOTP AAL2 gate | F01 / C0 | `TESTED` | `src/features/auth/`, `src/domain/auth-redirect.ts`, `src/lib/supabase/`, `src/proxy.ts`, migration `0002` | Local browser E2E proves Apple and Google PKCE/S256, minimal scopes, exact same-origin callback, sanitized provider errors and the real email/TOTP onboarding path; recovery codes, factor replacement and all-device session revocation remain `NOT_IMPLEMENTED`. |
 | Transactional household onboarding | F01 / C1 | `TESTED` | migration `0003`, `src/features/auth/onboarding-screen.tsx` | pgTAP and real local Auth/TOTP E2E passed. |
 | AAL1 denial and household isolation | F01 / C0 | `TESTED` | migrations `0001`–`0005` | `supabase/tests/0001_mvp_security_and_transactions.sql` proves AAL1 denial and a second unrelated user; removed-member matrix is not yet covered. |
