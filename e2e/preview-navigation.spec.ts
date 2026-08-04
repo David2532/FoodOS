@@ -79,4 +79,22 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
     expect(response.status()).toBe(400);
     expect(response.headers()["cache-control"]).toContain("no-store");
   });
+
+  test("Q-SCAN-PROVIDER-OUTAGE-E2E-003 keeps manual product entry available after a lookup outage", async ({ page }) => {
+    await page.route("**/api/products/3017624010701", async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Produktdaten sind gerade nicht erreichbar." })
+      });
+    });
+    await page.goto("/");
+    await page.getByRole("button", { name: "Scan", exact: true }).click();
+    await page.getByLabel("EAN, UPC oder GS1-Code").fill("3017624010701");
+    await page.getByRole("button", { name: "Prüfen", exact: true }).click();
+
+    await expect(page.getByRole("heading", { name: "Produktquelle gerade nicht erreichbar" })).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: "Die Suche konnte nicht" })).toContainText("manuelle Eintrag");
+    await expect(page.getByLabel("Produktname")).toBeVisible();
+  });
 });

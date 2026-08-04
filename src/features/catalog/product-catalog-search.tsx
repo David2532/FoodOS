@@ -72,6 +72,12 @@ export function ProductCatalogSearch({ onSelect, selectingBarcode }: {
     void searchCatalog(value, 1, false);
   }
 
+  const catalogState = response?.globalCatalogStatus === "unavailable"
+    ? "Teilweise verfügbar"
+    : response
+      ? "Bereit"
+      : "Nach Absenden";
+
   return (
     <section className="catalog-card" aria-labelledby="catalog-title">
       <div className="catalog-heading">
@@ -79,9 +85,9 @@ export function ProductCatalogSearch({ onSelect, selectingBarcode }: {
         <div>
           <p>REALER LEBENSMITTELKATALOG</p>
           <h2 id="catalog-title">Produkt statt Barcode suchen</h2>
-          <span>Weltweiter offener Katalog plus dein geprüfter Haushaltscache.</span>
+          <span>Dein Cache, der FoodOS-Katalog und danach Open Food Facts.</span>
         </div>
-        <em><span className="status-pulse" /> Live</em>
+        <em aria-live="polite"><span className="status-pulse" /> {catalogState}</em>
       </div>
 
       <form className="catalog-search-form" onSubmit={submit} role="search">
@@ -106,7 +112,7 @@ export function ProductCatalogSearch({ onSelect, selectingBarcode }: {
         {suggestions.map((suggestion) => <button key={suggestion} onClick={() => selectSuggestion(suggestion)}>{suggestion}</button>)}
       </div>}
 
-      <p className="catalog-privacy"><ShieldCheck size={14} /> Erst beim Absenden geht nur der Suchbegriff an Open Food Facts – nie an Werbung oder Analytics.</p>
+      <p className="catalog-privacy"><ShieldCheck size={14} /> Erst beim Absenden prüft FoodOS deinen Cache und den gemeinsamen Katalog. Nur wenn nötig geht der Suchbegriff an Open Food Facts – nie an Werbung oder Analytics.</p>
 
       {error && <div className="error-banner" role="alert"><WifiOff size={17} /><span>{error}</span></div>}
       {loading && <div className="catalog-skeletons" aria-label="Lebensmittel werden gesucht" aria-busy="true">
@@ -143,21 +149,26 @@ function CatalogResults({ response, selectingBarcode, loadingMore, onSelect, onM
   const formattedCount = new Intl.NumberFormat("de-DE").format(response.providerCount);
   return <div className="catalog-results-wrap">
     <div className="catalog-result-meta" aria-live="polite">
-      <span><strong>{response.providerCountExact ? formattedCount : `mind. ${formattedCount}`}</strong> Treffer im offenen Katalog</span>
+      {response.providerStatus === "not-needed"
+        ? <span>Open Food Facts nicht angefragt: lokale Treffer reichen aus</span>
+        : <span><strong>{response.providerCountExact ? formattedCount : `mind. ${formattedCount}`}</strong> Treffer bei Open Food Facts</span>}
       {response.cachedCount > 0 && <span>{response.cachedCount} aus deinem Haushalt zuerst</span>}
+      {response.globalCatalogCount > 0 && <span>{response.globalCatalogCount} aus dem FoodOS-Katalog</span>}
     </div>
-    {response.providerStatus === "unavailable" && <div className="safety-banner" role="status"><WifiOff size={17} /><span>Open Food Facts ist gerade nicht erreichbar. Gezeigt werden nur bereits geprüfte Haushaltsprodukte.</span></div>}
+    {response.globalCatalogStatus === "unavailable" && <div className="safety-banner" role="status"><WifiOff size={17} /><span>Der gemeinsame FoodOS-Katalog ist gerade nicht erreichbar. Die Suche läuft mit verfügbarem Haushaltscache und Open Food Facts weiter.</span></div>}
+    {response.providerStatus === "unavailable" && <div className="safety-banner" role="status"><WifiOff size={17} /><span>Open Food Facts ist gerade nicht erreichbar. Gezeigt werden nur bereits bekannte Haushalts- und FoodOS-Katalogprodukte.</span></div>}
     {response.results.length ? <div className="catalog-results">
       {response.results.map((item, index) => <article className="catalog-result" key={item.barcode}>
         <CatalogProductImage item={item} eager={index < 4} />
         <div className="catalog-product-copy">
           <div className="catalog-source-line">
-            <span>{item.source === "household-cache" ? "Dein Haushalt" : "Open Food Facts"}</span>
+            <span>{sourceLabel(item.source)}</span>
             {item.nutriScore && <em className={`nutri-score grade-${item.nutriScore}`} aria-label={`Nutri-Score ${item.nutriScore.toUpperCase()}`}>{item.nutriScore.toUpperCase()}</em>}
           </div>
           <h3>{item.name}</h3>
           <p>{[item.brand, item.quantity].filter(Boolean).join(" · ") || "Marke und Menge nicht angegeben"}</p>
           <small>GTIN {item.barcode}</small>
+          {item.source === "global-catalog" && <CatalogProvenance item={item} />}
         </div>
         <button onClick={() => onSelect(item.barcode)} disabled={Boolean(selectingBarcode)}>
           {selectingBarcode === item.barcode ? <LoaderCircle className="spin" size={17} /> : <><span>Prüfen</span><ArrowRight size={16} /></>}
@@ -166,6 +177,32 @@ function CatalogResults({ response, selectingBarcode, loadingMore, onSelect, onM
     </div> : <div className="catalog-empty"><PackageSearch size={23} /><div><strong>Kein belastbarer Treffer</strong><span>Versuche Marke plus Produktname oder erfasse den Barcode.</span></div></div>}
     {response.hasMore && <button className="catalog-more" onClick={onMore} disabled={loadingMore}>{loadingMore ? <LoaderCircle className="spin" size={17} /> : <Database size={17} />}{loadingMore ? "Weitere Treffer werden geladen …" : "Weitere echte Produkte laden"}</button>}
   </div>;
+}
+
+function sourceLabel(source: CatalogSearchItem["source"]): string {
+  if (source === "household-cache") return "Dein Haushalt";
+  if (source === "global-catalog") return "FoodOS-Katalog";
+  return "Open Food Facts";
+}
+
+function CatalogProvenance({ item }: { item: CatalogSearchItem }) {
+  const updatedAt = item.sourceUpdatedAt
+    ? new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(new Date(item.sourceUpdatedAt))
+    : "unbekannt";
+  const retrievedAt = item.sourceRetrievedAt
+    ? new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(new Date(item.sourceRetrievedAt))
+    : "unbekannt";
+  return <details className="catalog-provenance">
+    <summary>Quelle und Datenqualität</summary>
+    <dl>
+      <dt>Quelle aktualisiert</dt><dd>{updatedAt}</dd>
+      <dt>FoodOS abgerufen</dt><dd>{retrievedAt}</dd>
+      <dt>Konfidenz</dt><dd>{Math.round(item.confidence * 100)} %</dd>
+      {item.databaseLicense && <><dt>Datenbank</dt><dd>{item.databaseLicense}</dd></>}
+      {item.imageLicense && <><dt>Bild</dt><dd>{item.imageLicense}</dd></>}
+      {item.sourceUrl && <><dt>Quelle</dt><dd><a href={item.sourceUrl} target="_blank" rel="noreferrer">Originaldatensatz öffnen</a></dd></>}
+    </dl>
+  </details>;
 }
 
 function CatalogProductImage({ item, eager }: { item: CatalogSearchItem; eager: boolean }) {

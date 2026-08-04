@@ -5,7 +5,8 @@ import { productApiResponseSchema } from "@/contracts/product";
 import { normalizeCachedProduct } from "@/lib/product-cache";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { personalizeProductAssessments, type FoodRiskPreference } from "@/domain/ingredient-relevance";
+import { assessIngredientFacts, personalizeProductAssessments, type FoodRiskPreference } from "@/domain/ingredient-relevance";
+import type { Product } from "@/lib/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const barcodeSchema = z.string().regex(/^\d{8,14}$/, "Barcode muss 8 bis 14 Ziffern enthalten.");
@@ -16,6 +17,48 @@ const fields = [
   "labels_tags", "categories_tags", "countries_tags", "nutriscore_grade", "nova_group",
   "lang", "nutriments"
 ].join(",");
+
+const catalogTimestampSchema = z.string().refine((value) => !Number.isNaN(Date.parse(value)));
+const catalogNutritionNumber = z.coerce.number().finite().nonnegative();
+const globalCatalogRowSchema = z.object({
+  barcode: z.string().regex(/^\d{8,14}$/),
+  name: z.string().min(1).max(240),
+  brand: z.string().nullable(),
+  image_url: z.string().nullable(),
+  quantity: z.string().nullable(),
+  nutri_score: z.string().nullable(),
+  nova_group: z.coerce.number().int().min(1).max(4).nullable(),
+  serving_size: z.string().nullable(),
+  categories: z.array(z.string().min(1).max(160)).max(100),
+  countries: z.array(z.string().min(1).max(160)).max(100),
+  labels: z.array(z.string().min(1).max(160)).max(100),
+  ingredients_text: z.string().nullable(),
+  structured_ingredients: z.array(z.object({
+    name: z.string().min(1).max(500),
+    normalizedName: z.string().max(240).optional(),
+    percentage: z.coerce.number().finite().min(0).max(100).optional()
+  })).max(500),
+  allergens: z.array(z.string().min(1).max(160)).max(100),
+  traces: z.array(z.string().min(1).max(160)).max(100),
+  additives: z.array(z.string().min(1).max(80)).max(100),
+  nutrition_per_100g: z.object({
+    energy_kcal_100g: catalogNutritionNumber.max(1_200).optional(),
+    proteins_100g: catalogNutritionNumber.max(100).optional(),
+    carbohydrates_100g: catalogNutritionNumber.max(100).optional(),
+    sugars_100g: catalogNutritionNumber.max(100).optional(),
+    fat_100g: catalogNutritionNumber.max(100).optional(),
+    "saturated-fat_100g": catalogNutritionNumber.max(100).optional(),
+    fiber_100g: catalogNutritionNumber.max(100).optional(),
+    salt_100g: catalogNutritionNumber.max(100).optional()
+  }),
+  confidence: z.coerce.number(),
+  source_url: z.string().nullable(),
+  source_language: z.string().nullable(),
+  source_updated_at: z.string().nullable(),
+  source_retrieved_at: catalogTimestampSchema,
+  database_license: z.string().nullable(),
+  image_license: z.string().nullable()
+});
 
 const lookupWindows = new Map<string, { startedAt: number; count: number }>();
 let providerFailures = 0;
@@ -83,6 +126,77 @@ async function findCachedProduct(supabase: SupabaseClient | null, barcode: strin
   return normalizeCachedProduct(result.data);
 }
 
+function validUrl(value: string | null): string | undefined {
+  return value && z.url().safeParse(value).success ? value : undefined;
+}
+
+function catalogTimestamp(value: string): string {
+  return new Date(value).toISOString();
+}
+
+function cleanCatalogTag(value: string): string {
+  return value.replace(/^[a-z]{2}:/i, "").replaceAll("-", " ").trim();
+}
+
+async function findGlobalCatalogProduct(supabase: SupabaseClient | null, barcode: string): Promise<{
+  product: Product | null;
+  status: "live" | "unavailable" | "not-configured";
+}> {
+  if (!supabase) return { product: null, status: "not-configured" };
+  const result = await supabase.rpc("lookup_global_catalog_product", { target_gtin: barcode });
+  if (result.error) return { product: null, status: "unavailable" };
+  const parsed = z.array(globalCatalogRowSchema).max(1).safeParse(result.data);
+  if (!parsed.success) return { product: null, status: "unavailable" };
+  const row = parsed.data[0];
+  if (!row) return { product: null, status: "live" };
+  return {
+    status: "live",
+    product: {
+      barcode: row.barcode,
+      name: row.name,
+      brand: row.brand ?? undefined,
+      imageUrl: validUrl(row.image_url),
+      quantity: row.quantity ?? undefined,
+      categories: row.categories.map(cleanCatalogTag).slice(0, 40),
+      countries: row.countries.map(cleanCatalogTag).slice(0, 40),
+      ingredientsText: row.ingredients_text ?? undefined,
+      structuredIngredients: row.structured_ingredients,
+      allergens: row.allergens.map(cleanCatalogTag),
+      traces: row.traces.map(cleanCatalogTag),
+      additives: row.additives.map(cleanCatalogTag),
+      labels: row.labels.map(cleanCatalogTag).slice(0, 40),
+      nutriScore: row.nutri_score && /^[a-e]$/i.test(row.nutri_score)
+        ? row.nutri_score.toLowerCase()
+        : undefined,
+      novaGroup: row.nova_group ?? undefined,
+      servingSize: row.serving_size ?? undefined,
+      nutrition: {
+        kcal100g: row.nutrition_per_100g.energy_kcal_100g,
+        protein100g: row.nutrition_per_100g.proteins_100g,
+        carbs100g: row.nutrition_per_100g.carbohydrates_100g,
+        sugar100g: row.nutrition_per_100g.sugars_100g,
+        fat100g: row.nutrition_per_100g.fat_100g,
+        saturatedFat100g: row.nutrition_per_100g["saturated-fat_100g"],
+        fiber100g: row.nutrition_per_100g.fiber_100g,
+        salt100g: row.nutrition_per_100g.salt_100g
+      },
+      assessments: assessIngredientFacts([
+        ...row.allergens.map((name) => ({ name: cleanCatalogTag(name), normalizedName: name, allergen: true, confidence: .95, sourceLabel: "Produktkennzeichnung" })),
+        ...row.structured_ingredients.map((ingredient) => ({ name: ingredient.name, normalizedName: ingredient.normalizedName, allergen: false, confidence: .82, sourceLabel: "Zutatenliste" })),
+        ...row.additives.map((name) => ({ name: cleanCatalogTag(name), normalizedName: name, eNumber: cleanCatalogTag(name).toUpperCase(), allergen: false, confidence: .82, sourceLabel: "Zusatzstoffkennzeichnung" }))
+      ], []),
+      source: "global-catalog",
+      sourceUrl: validUrl(row.source_url),
+      sourceLanguage: row.source_language ?? undefined,
+      sourceUpdatedAt: row.source_updated_at ? catalogTimestamp(row.source_updated_at) : undefined,
+      retrievedAt: catalogTimestamp(row.source_retrieved_at),
+      confidence: Math.max(0, Math.min(1, row.confidence)),
+      databaseLicense: row.database_license ?? undefined,
+      imageLicense: row.image_license ?? undefined
+    }
+  };
+}
+
 async function loadFoodRiskPreferences(supabase: SupabaseClient | null): Promise<FoodRiskPreference[]> {
   if (!supabase) return [];
   const result = await supabase
@@ -133,7 +247,10 @@ export async function GET(_request: Request, context: { params: Promise<{ barcod
     const preferences = await loadFoodRiskPreferences(supabase);
     const cached = await findCachedProduct(supabase, parsed.data);
     if (cached) {
-      const response = productApiResponseSchema.parse({ product: personalizeProductAssessments(cached, preferences) });
+      const response = productApiResponseSchema.parse({
+        product: personalizeProductAssessments(cached, preferences),
+        globalCatalogStatus: supabase ? "live" : "not-configured"
+      });
       return NextResponse.json(response, {
         headers: {
           "Cache-Control": "private, max-age=0, must-revalidate",
@@ -141,10 +258,23 @@ export async function GET(_request: Request, context: { params: Promise<{ barcod
         }
       });
     }
+    const globalCatalog = await findGlobalCatalogProduct(supabase, parsed.data);
+    if (globalCatalog.product) {
+      const response = productApiResponseSchema.parse({
+        product: personalizeProductAssessments(globalCatalog.product, preferences),
+        globalCatalogStatus: globalCatalog.status
+      });
+      return NextResponse.json(response, {
+        headers: {
+          "Cache-Control": "private, max-age=0, must-revalidate",
+          "X-FoodOS-Product-Source": "global-catalog"
+        }
+      });
+    }
     const raw = await fetchProduct(parsed.data);
     if (!raw) return NextResponse.json({ error: "Produkt nicht gefunden.", barcode: parsed.data }, { status: 404 });
     const product = personalizeProductAssessments(normalizeOpenFoodFacts(raw, parsed.data), preferences);
-    const response = productApiResponseSchema.parse({ product });
+    const response = productApiResponseSchema.parse({ product, globalCatalogStatus: globalCatalog.status });
     return NextResponse.json(response, {
       headers: {
         "Cache-Control": "private, max-age=0, must-revalidate",

@@ -192,6 +192,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .catalog-results-wrap { display: grid; gap: 11px; }
 .catalog-result-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; color: var(--muted); font-size: 9px; }
 .catalog-result-meta strong { color: var(--ink); }
+.catalog-provenance { margin-top: 7px; color: var(--muted-2); font-size: 10px; line-height: 1.45; }
+.catalog-provenance summary { min-height: 32px; display: inline-flex; align-items: center; color: var(--lime); cursor: pointer; font-weight: 700; }
+.catalog-provenance dl, .product-source-details dl { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 4px 8px; margin: 4px 0 0; }
+.catalog-provenance dt, .product-source-details dt { color: var(--muted); }
+.catalog-provenance dd, .product-source-details dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.catalog-provenance a, .product-source-details a { color: var(--lime); }
 .catalog-results { display: grid; gap: 8px; }
 .catalog-result { min-width: 0; border: 1px solid var(--line); border-radius: 17px; padding: 9px; display: grid; grid-template-columns: 64px minmax(0,1fr) auto; gap: 10px; align-items: center; background: rgba(5,15,9,.64); }
 .catalog-product-image { width: 64px; height: 64px; border-radius: 14px; display: grid; place-items: center; overflow: hidden; color: var(--muted); background: #f7faf7; }
@@ -219,6 +225,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .product-hero > div > span { color: var(--muted); font-size: 10px; }
 .product-provenance { margin-top: 6px; display: flex; align-items: center; gap: 5px; color: var(--lime); font-size: 9px; font-weight: 750; }
 .confidence-badge { align-self: flex-start; display: flex; align-items: center; gap: 3px; border-radius: 8px; padding: 4px 6px; font-style: normal; color: var(--lime); background: rgba(183,243,106,.08); font-size: 8px; }
+.product-source-details { border: 1px solid var(--line); border-radius: 15px; padding: 11px 12px; color: var(--muted-2); background: var(--surface); font-size: 11px; line-height: 1.45; }
+.product-source-details summary { min-height: 32px; display: flex; align-items: center; color: var(--lime); cursor: pointer; font-weight: 750; }
 .mhd-prompt { width: 100%; border: 1px solid rgba(183,243,106,.16); border-radius: 17px; background: linear-gradient(100deg, rgba(40,65,30,.72), rgba(14,30,19,.8)); padding: 12px; display: grid; grid-template-columns: 42px 1fr 20px; gap: 11px; align-items: center; text-align: left; cursor: pointer; }
 .mhd-prompt > span { width: 42px; height: 42px; border-radius: 13px; background: rgba(183,243,106,.1); color: var(--lime); display: grid; place-items: center; }
 .mhd-prompt strong { font-size: 12px; display: block; }

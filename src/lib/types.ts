@@ -42,9 +42,12 @@ export interface Product {
   servingSize?: string;
   nutrition: ProductNutrition;
   assessments: IngredientAssessment[];
-  source: "open-food-facts" | "manual" | "cache";
+  source: "open-food-facts" | "global-catalog" | "manual" | "cache";
   sourceUrl?: string;
   sourceLanguage?: string;
+  sourceUpdatedAt?: string;
+  databaseLicense?: string;
+  imageLicense?: string;
   retrievedAt: string;
   confidence: number;
 }

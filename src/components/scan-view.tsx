@@ -22,17 +22,20 @@ const riskLabels: Record<RiskLevel, { label: string; icon: typeof Check }> = {
 export function ScanView({ householdId, onSaved }: { householdId?: string; onSaved?: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
+  const lookupInFlightRef = useRef(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [barcode, setBarcode] = useState("");
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [gs1, setGs1] = useState<Gs1Elements | null>(null);
-  const [manualBarcode, setManualBarcode] = useState<string | null>(null);
+  const [manualEntry, setManualEntry] = useState<{ barcode: string; reason: "not-found" | "unavailable" } | null>(null);
+  const [globalCatalogStatus, setGlobalCatalogStatus] = useState<"live" | "unavailable" | "not-configured">("not-configured");
 
   useEffect(() => () => controlsRef.current?.stop(), []);
 
   async function lookup(code: string) {
+    if (lookupInFlightRef.current) return;
     const trimmed = code.trim();
     let gtin = trimmed;
     let parsedGs1: Gs1Elements | null = null;
@@ -49,16 +52,17 @@ export function ScanView({ householdId, onSaved }: { householdId?: string; onSav
       setError("Die Prüfziffer des EAN-/UPC-/GTIN-Codes ist ungültig.");
       return;
     }
+    lookupInFlightRef.current = true;
     setLoading(true);
     setError(null);
-    setManualBarcode(null);
+    setManualEntry(null);
     controlsRef.current?.stop();
     setCameraActive(false);
     try {
       const response = await fetch(`/api/products/${gtin}`);
       const body: unknown = await response.json();
-      if (response.status === 404) {
-        setManualBarcode(gtin);
+      if (response.status === 404 || response.status === 429 || response.status >= 500) {
+        setManualEntry({ barcode: gtin, reason: response.status === 404 ? "not-found" : "unavailable" });
         setGs1(parsedGs1);
         return;
       }
@@ -71,11 +75,14 @@ export function ScanView({ householdId, onSaved }: { householdId?: string; onSav
       const parsed = productApiResponseSchema.safeParse(body);
       if (!parsed.success) throw new Error("Die Produktquelle hat unerwartete Daten geliefert.");
       setProduct(parsed.data.product);
+      setGlobalCatalogStatus(parsed.data.globalCatalogStatus);
       setGs1(parsedGs1);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Produkt konnte nicht geladen werden.");
+    } catch {
+      setManualEntry({ barcode: gtin, reason: "unavailable" });
+      setGs1(parsedGs1);
     } finally {
       setLoading(false);
+      lookupInFlightRef.current = false;
     }
   }
 
@@ -99,8 +106,8 @@ export function ScanView({ householdId, onSaved }: { householdId?: string; onSav
     }
   }
 
-  if (product) return <ProductResult product={product} householdId={householdId} gs1={gs1} onSaved={onSaved} onReset={() => { setProduct(null); setBarcode(""); setGs1(null); setManualBarcode(null); }} />;
-  if (manualBarcode) return <ManualProductEntry barcode={manualBarcode} onCancel={() => setManualBarcode(null)} onConfirm={(manualProduct) => setProduct(manualProduct)} />;
+  if (product) return <ProductResult product={product} globalCatalogStatus={globalCatalogStatus} householdId={householdId} gs1={gs1} onSaved={onSaved} onReset={() => { setProduct(null); setBarcode(""); setGs1(null); setManualEntry(null); setGlobalCatalogStatus("not-configured"); }} />;
+  if (manualEntry) return <ManualProductEntry barcode={manualEntry.barcode} reason={manualEntry.reason} onCancel={() => setManualEntry(null)} onConfirm={(manualProduct) => setProduct(manualProduct)} />;
 
   return (
     <div className="scan-page page-enter">
@@ -127,7 +134,7 @@ export function ScanView({ householdId, onSaved }: { householdId?: string; onSav
         <label><span className="sr-only">EAN, UPC oder GS1-Code</span><Keyboard size={18} /><input inputMode="text" autoComplete="off" value={barcode} onChange={(event) => setBarcode(event.target.value)} maxLength={120} placeholder="EAN / UPC / GS1 eingeben" /></label>
         <button disabled={loading}>{loading ? <LoaderCircle className="spin" size={19} /> : "Prüfen"}</button>
       </form>
-      {error && <div className="error-banner"><AlertTriangle size={17} /><span>{error}</span></div>}
+      {error && <div className="error-banner" role="alert"><AlertTriangle size={17} /><span>{error}</span></div>}
 
       <ProductCatalogSearch
         selectingBarcode={loading ? barcode : undefined}
@@ -147,7 +154,7 @@ export function ScanView({ householdId, onSaved }: { householdId?: string; onSav
   );
 }
 
-function ManualProductEntry({ barcode, onCancel, onConfirm }: { barcode: string; onCancel: () => void; onConfirm: (product: Product) => void }) {
+function ManualProductEntry({ barcode, reason, onCancel, onConfirm }: { barcode: string; reason: "not-found" | "unavailable"; onCancel: () => void; onConfirm: (product: Product) => void }) {
   function confirm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -175,7 +182,14 @@ function ManualProductEntry({ barcode, onCancel, onConfirm }: { barcode: string;
 
   return <div className="product-result page-enter">
     <button className="reset-scan" onClick={onCancel}><ScanLine size={17} /> Anderen Code prüfen</button>
-    <section className="empty-state"><Keyboard size={25} /><h2>Produkt noch nicht im Katalog</h2><p>Der Code {barcode} wurde nicht bei Open Food Facts gefunden. Lege das Produkt mit einem bestätigten Namen an; fehlende Angaben bleiben sichtbar unbekannt.</p></section>
+    <section className="empty-state" aria-labelledby="manual-product-title">
+      <Keyboard size={25} />
+      <h2 id="manual-product-title">{reason === "not-found" ? "Produkt noch nicht im Katalog" : "Produktquelle gerade nicht erreichbar"}</h2>
+      <p>{reason === "not-found"
+        ? `Der Code ${barcode} wurde in den verfügbaren Katalogquellen nicht gefunden. Lege das Produkt mit einem bestätigten Namen an; fehlende Angaben bleiben sichtbar unbekannt.`
+        : "Du kannst das Produkt jetzt manuell erfassen. FoodOS ergänzt keine unbekannten Zutaten, Nährwerte oder Haltbarkeitsdaten."}</p>
+    </section>
+    {reason === "unavailable" && <div className="safety-banner" role="alert"><AlertTriangle size={17} /><span>Die Suche konnte nicht abgeschlossen werden. Der manuelle Eintrag wird erst mit deinen bestätigten Angaben gespeichert.</span></div>}
     <form className="batch-form" onSubmit={confirm}>
       <label className="field-label"><span>Produktname</span><input name="name" minLength={1} maxLength={240} autoFocus required /></label>
       <label className="field-label"><span>Marke · optional</span><input name="brand" maxLength={160} /></label>
@@ -184,7 +198,7 @@ function ManualProductEntry({ barcode, onCancel, onConfirm }: { barcode: string;
   </div>;
 }
 
-function ProductResult({ product, householdId, gs1, onReset, onSaved }: { product: Product; householdId?: string; gs1: Gs1Elements | null; onReset: () => void; onSaved?: () => void }) {
+function ProductResult({ product, globalCatalogStatus, householdId, gs1, onReset, onSaved }: { product: Product; globalCatalogStatus: "live" | "unavailable" | "not-configured"; householdId?: string; gs1: Gs1Elements | null; onReset: () => void; onSaved?: () => void }) {
   const [showIngredients, setShowIngredients] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -268,11 +282,23 @@ function ProductResult({ product, householdId, gs1, onReset, onSaved }: { produc
           <span>{product.quantity ?? product.barcode}</span>
           <small className="product-provenance">
             <ShieldCheck size={12} />
-            {product.source === "open-food-facts" ? "Open Food Facts" : product.source === "cache" ? "Geprüfter Haushaltscache" : "Manuell bestätigt"}
+            {product.source === "open-food-facts" ? "Open Food Facts" : product.source === "global-catalog" ? "FoodOS-Katalog" : product.source === "cache" ? "Geprüfter Haushaltscache" : "Manuell bestätigt"}
           </small>
         </div>
         <i className="confidence-badge"><Check size={12} />{Math.round(product.confidence * 100)} %</i>
       </section>
+
+      {globalCatalogStatus === "unavailable" && product.source === "open-food-facts" && <div className="safety-banner" role="status"><AlertTriangle size={17} /><span>Der gemeinsame FoodOS-Katalog war nicht erreichbar. Dieses Ergebnis kommt direkt von Open Food Facts; Quelle und fehlende Angaben bleiben sichtbar.</span></div>}
+      {product.source === "global-catalog" && (product.sourceUrl || product.databaseLicense || product.imageLicense) && <details className="product-source-details">
+        <summary>Quelle, Aktualität und Lizenz</summary>
+        <dl>
+          {product.sourceUrl && <><dt>Quelle</dt><dd><a href={product.sourceUrl} target="_blank" rel="noreferrer">Originaldatensatz öffnen</a></dd></>}
+          <dt>Quelle aktualisiert</dt><dd>{product.sourceUpdatedAt ? new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(new Date(product.sourceUpdatedAt)) : "unbekannt"}</dd>
+          <dt>Aktualität</dt><dd>{new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(new Date(product.retrievedAt))}</dd>
+          {product.databaseLicense && <><dt>Datenbank</dt><dd>{product.databaseLicense}</dd></>}
+          {product.imageLicense && <><dt>Bild</dt><dd>{product.imageLicense}</dd></>}
+        </dl>
+      </details>}
 
       <form className="batch-form" onSubmit={saveBatch}>
         <div className="batch-form-heading"><span><Camera size={20} /></span><div><p>PACKUNG BESTÄTIGEN</p><strong>MHD/Verbrauchsdatum und Charge</strong><small>{gs1 ? "Aus GS1 erkannt – vor dem Speichern prüfen" : "Bei normalem EAN manuell von der Packung übernehmen"}</small></div></div>

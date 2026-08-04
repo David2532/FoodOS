@@ -12,8 +12,13 @@ export const catalogSearchItemSchema = z.object({
   quantity: z.string().max(120).optional(),
   imageUrl: z.url().optional(),
   nutriScore: z.enum(["a", "b", "c", "d", "e"]).optional(),
-  source: z.enum(["household-cache", "open-food-facts"]),
-  confidence: z.number().min(0).max(1)
+  source: z.enum(["household-cache", "global-catalog", "open-food-facts"]),
+  confidence: z.number().min(0).max(1),
+  sourceUrl: z.url().optional(),
+  sourceUpdatedAt: z.iso.datetime().optional(),
+  sourceRetrievedAt: z.iso.datetime().optional(),
+  databaseLicense: z.string().max(160).optional(),
+  imageLicense: z.string().max(160).optional()
 });
 
 export const catalogSearchResponseSchema = z.object({
@@ -23,7 +28,9 @@ export const catalogSearchResponseSchema = z.object({
   providerCount: z.number().int().nonnegative(),
   providerCountExact: z.boolean(),
   cachedCount: z.number().int().nonnegative(),
-  providerStatus: z.enum(["live", "unavailable"]),
+  globalCatalogCount: z.number().int().nonnegative(),
+  globalCatalogStatus: z.enum(["live", "unavailable", "not-configured"]),
+  providerStatus: z.enum(["live", "unavailable", "not-needed"]),
   hasMore: z.boolean(),
   results: z.array(catalogSearchItemSchema).max(20)
 });

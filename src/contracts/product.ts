@@ -44,11 +44,17 @@ export const productSchema = z.object({
     salt100g: optionalNumber
   }),
   assessments: z.array(ingredientAssessmentSchema).max(200),
-  source: z.enum(["open-food-facts", "manual", "cache"]),
+  source: z.enum(["open-food-facts", "global-catalog", "manual", "cache"]),
   sourceUrl: z.url().optional(),
   sourceLanguage: z.string().max(16).optional(),
+  sourceUpdatedAt: z.iso.datetime().optional(),
+  databaseLicense: z.string().max(160).optional(),
+  imageLicense: z.string().max(160).optional(),
   retrievedAt: z.iso.datetime(),
   confidence: z.number().min(0).max(1)
 });
 
-export const productApiResponseSchema = z.object({ product: productSchema });
+export const productApiResponseSchema = z.object({
+  product: productSchema,
+  globalCatalogStatus: z.enum(["live", "unavailable", "not-configured"])
+});
