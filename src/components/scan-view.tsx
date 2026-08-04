@@ -9,6 +9,7 @@ import { productApiResponseSchema } from "@/contracts/product";
 import { addBatchResultSchema, inventoryBatchInputSchema } from "@/contracts/inventory";
 import { hasValidGtinCheckDigit, parseGs1, type Gs1Elements } from "@/domain/gs1";
 import { submitDurableRpc } from "@/infrastructure/offline-outbox";
+import { ProductCatalogSearch } from "@/features/catalog/product-catalog-search";
 
 const riskLabels: Record<RiskLevel, { label: string; icon: typeof Check }> = {
   avoid: { label: "Persönlich meiden", icon: X },
@@ -127,6 +128,14 @@ export function ScanView({ householdId, onSaved }: { householdId?: string; onSav
         <button disabled={loading}>{loading ? <LoaderCircle className="spin" size={19} /> : "Prüfen"}</button>
       </form>
       {error && <div className="error-banner"><AlertTriangle size={17} /><span>{error}</span></div>}
+
+      <ProductCatalogSearch
+        selectingBarcode={loading ? barcode : undefined}
+        onSelect={(selectedBarcode) => {
+          setBarcode(selectedBarcode);
+          void lookup(selectedBarcode);
+        }}
+      />
 
       <section className="scan-steps">
         <p>WAS FOODOS DANACH MACHT</p>
@@ -253,7 +262,15 @@ function ProductResult({ product, householdId, gs1, onReset, onSaved }: { produc
       <button className="reset-scan" onClick={onReset}><ScanLine size={17} /> Anderes Produkt</button>
       <section className="product-hero">
         <div className="product-image">{product.imageUrl ? <Image src={product.imageUrl} alt={product.name} width={144} height={144} unoptimized /> : <span>🥫</span>}</div>
-        <div><p>{product.brand ?? "Unbekannte Marke"}</p><h2>{product.name}</h2><span>{product.quantity ?? product.barcode}</span></div>
+        <div>
+          <p>{product.brand ?? "Unbekannte Marke"}</p>
+          <h2>{product.name}</h2>
+          <span>{product.quantity ?? product.barcode}</span>
+          <small className="product-provenance">
+            <ShieldCheck size={12} />
+            {product.source === "open-food-facts" ? "Open Food Facts" : product.source === "cache" ? "Geprüfter Haushaltscache" : "Manuell bestätigt"}
+          </small>
+        </div>
         <i className="confidence-badge"><Check size={12} />{Math.round(product.confidence * 100)} %</i>
       </section>
 

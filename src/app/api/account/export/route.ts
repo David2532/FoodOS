@@ -39,11 +39,12 @@ export async function GET(): Promise<Response> {
 
   const user = userResult.data.user;
   try {
-    const [profiles, memberships, foodRiskProfiles, foodLogEntries] = await Promise.all([
+    const [profiles, memberships, foodRiskProfiles, foodLogEntries, privacyChoiceEvents] = await Promise.all([
       requiredRows(supabase.from("profiles").select("user_id, display_name, locale, timezone, week_starts_on, calorie_target, protein_target_g, calorie_carryover_percent, created_at, updated_at").eq("user_id", user.id), "profiles"),
       requiredRows(supabase.from("household_members").select("household_id, role, joined_at").eq("user_id", user.id), "memberships"),
       requiredRows(supabase.from("user_food_risk_profiles").select("id, canonical_key, kind, severity, confirmed_at, created_at").eq("user_id", user.id), "food_risk_profiles"),
-      requiredRows(supabase.from("food_log_entries").select("id, household_id, product_id, batch_id, amount, unit, nutrition_snapshot, eaten_at, client_mutation_id, created_at").eq("user_id", user.id), "food_log_entries")
+      requiredRows(supabase.from("food_log_entries").select("id, household_id, product_id, batch_id, amount, unit, nutrition_snapshot, eaten_at, client_mutation_id, created_at").eq("user_id", user.id), "food_log_entries"),
+      requiredRows(supabase.from("privacy_choice_events").select("id, event_sequence, notice_version, market, locale, age_confirmed, terms_accepted, sensitive_profile, analytics, marketing, image_cloud_processing, off_contribution, advertising, recorded_at").eq("user_id", user.id).order("event_sequence", { ascending: true }), "privacy_choice_events")
     ]);
     const householdIds = memberships.map((membership) => String(membership.household_id));
     const [households, products, inventoryBatches, inventoryEvents, recipes, mealPlanSlots, shoppingLists] = householdIds.length ? await Promise.all([
@@ -70,14 +71,14 @@ export async function GET(): Promise<Response> {
 
     const exportedAt = new Date().toISOString();
     const payload = JSON.stringify({
-      exportVersion: 1,
+      exportVersion: 2,
       exportedAt,
       identity: { id: user.id, email: user.email ?? null, createdAt: user.created_at, lastSignInAt: user.last_sign_in_at ?? null },
       data: {
         profiles, memberships, households, foodRiskProfiles, products, productNutrition,
         productMetadata, productIngredients, ingredientAssessments, inventoryBatches,
         inventoryEvents, foodLogEntries, recipes, recipeItems, mealPlanSlots,
-        shoppingLists, shoppingItems
+        shoppingLists, shoppingItems, privacyChoiceEvents
       }
     });
     if (Buffer.byteLength(payload, "utf8") > MAX_EXPORT_BYTES) {

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Bell, CalendarDays, Home, PackageOpen, ScanLine, ShoppingBasket, Sparkles } from "lucide-react";
 import { SignOutButton } from "@/features/auth/sign-out-button";
 import { DataExportButton } from "@/features/privacy/data-export-button";
+import { PrivacyCenterButton } from "@/features/privacy/privacy-center-button";
+import type { PrivacyChoices } from "@/domain/privacy";
 import type { AppSnapshot, AppView } from "@/lib/types";
 import { TodayView } from "./today-view";
 import { InventoryView } from "./inventory-view";
@@ -22,14 +24,14 @@ const navigation: Array<{ id: AppView; label: string; icon: typeof Home }> = [
 ];
 
 const titles: Record<AppView, { eyebrow: string; title: string }> = {
-  today: { eyebrow: "Sonntag, 2. August", title: "Hey David" },
-  inventory: { eyebrow: "24 Lebensmittel", title: "Dein Vorrat" },
-  scan: { eyebrow: "Barcode · MHD · Zutaten", title: "Produkt scannen" },
-  plan: { eyebrow: "3.–9. August", title: "Deine Woche" },
-  shopping: { eyebrow: "Nächster Einkauf", title: "12 Dinge fehlen" }
+  today: { eyebrow: "Dein Überblick", title: "Heute in FoodOS" },
+  inventory: { eyebrow: "Chargen · Sicherheit · Bestand", title: "Dein Vorrat" },
+  scan: { eyebrow: "Katalog · Barcode · MHD", title: "Finden & erfassen" },
+  plan: { eyebrow: "Aus deinem echten Vorrat", title: "Deine Woche" },
+  shopping: { eyebrow: "Aus Plan und Bestand", title: "Dein Einkauf" }
 };
 
-export function FoodOsApp({ authenticated = false, preview = false, initialSnapshot }: { authenticated?: boolean; preview?: boolean; initialSnapshot?: AppSnapshot }) {
+export function FoodOsApp({ authenticated = false, preview = false, initialPrivacyChoices, initialSnapshot }: { authenticated?: boolean; preview?: boolean; initialPrivacyChoices?: PrivacyChoices; initialSnapshot?: AppSnapshot }) {
   const router = useRouter();
   const [view, setView] = useState<AppView>("today");
   const current = useMemo(() => {
@@ -52,7 +54,7 @@ export function FoodOsApp({ authenticated = false, preview = false, initialSnaps
             <p>{current.eyebrow}</p>
             <h1>{current.title}</h1>
           </div>
-          {authenticated ? <div className="account-actions"><DataExportButton /><SignOutButton /></div> : (
+          {authenticated ? <div className="account-actions">{initialPrivacyChoices && <PrivacyCenterButton initialChoices={initialPrivacyChoices} />}<DataExportButton /><SignOutButton /></div> : (
             <button className="icon-button" aria-label={preview ? "Lokaler Preview-Modus" : "Benachrichtigungen"}>
               <Bell size={20} />
               <span className="notification-dot" />

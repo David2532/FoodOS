@@ -25,12 +25,14 @@ export function SignInScreen({
   authError,
   appleEnabled = false,
   demoEnabled = false,
-  googleEnabled = false
+  googleEnabled = false,
+  onEditPrivacy
 }: {
   authError?: string;
   appleEnabled?: boolean;
   demoEnabled?: boolean;
   googleEnabled?: boolean;
+  onEditPrivacy?: () => void;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("login");
@@ -152,6 +154,7 @@ export function SignInScreen({
           </form>
         </div>
       </details>
+      {onEditPrivacy && <button className="privacy-text-button auth-privacy-link" type="button" onClick={onEditPrivacy}>Datenschutz-Auswahl ändern</button>}
     </AuthFrame>
   );
 }

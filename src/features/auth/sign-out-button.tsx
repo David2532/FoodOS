@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { clearOfflineData, getOutboxSummary } from "@/infrastructure/offline-outbox";
+import { clearStagedPrivacyChoice } from "@/features/privacy/privacy-client";
 
 export function SignOutButton() {
   const router = useRouter();
@@ -22,7 +23,12 @@ export function SignOutButton() {
           setBusy(false);
           return;
         }
-        await getSupabaseBrowserClient().auth.signOut({ scope: "local" });
+        const { error } = await getSupabaseBrowserClient().auth.signOut({ scope: "local" });
+        if (error) {
+          setBusy(false);
+          return;
+        }
+        clearStagedPrivacyChoice();
         await clearOfflineData();
         router.refresh();
       }}

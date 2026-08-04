@@ -1,11 +1,26 @@
 import { createHmac } from "node:crypto";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function acceptNecessaryPrivacy(page: Page) {
+  await expect(page.getByRole("heading", { name: "Privat starten" })).toBeVisible();
+  await page.getByLabel(/Ich bin mindestens 16 Jahre alt/).check();
+  await page.getByLabel(/Ich habe die Hinweise gelesen/).check();
+  await page.getByRole("button", { name: "Nur notwendige verwenden" }).click();
+  await expect(page.getByRole("heading", { name: "Einfach loslegen" })).toBeVisible();
+}
 
 test("Apple and Google OAuth start with PKCE and a same-origin callback", async ({ page }) => {
+  const externalRequests = new Set<string>();
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.protocol.startsWith("http") && url.hostname !== "127.0.0.1" && url.hostname !== "localhost") externalRequests.add(url.origin);
+  });
   await page.route("http://127.0.0.1:54321/auth/v1/authorize**", async (route) => {
     await route.fulfill({ status: 200, contentType: "text/plain", body: "OAuth request captured" });
   });
   await page.goto("/");
+  await acceptNecessaryPrivacy(page);
+  expect([...externalRequests]).toEqual([]);
   await page.screenshot({ path: "docs/evidence/screenshots/auth-google-desktop.png", fullPage: true });
   await expect(page.locator(".oauth-button")).toHaveCount(2);
   await expect(page.getByRole("button", { name: "Mit Apple fortfahren" })).toBeVisible();
@@ -36,7 +51,7 @@ test("Apple and Google OAuth start with PKCE and a same-origin callback", async 
   expect(providerError.headers().location).not.toContain("provider-secret-detail");
 
   await page.goto("/?demo=1");
-  await expect(page.getByRole("heading", { name: "Hey David" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Heute in FoodOS" })).toBeVisible();
   await expect(page.getByText("Preview-Modus · Beispieldaten werden nicht gespeichert", { exact: true })).toBeVisible();
 });
 
@@ -62,6 +77,7 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
   const password = "FoodOS-E2E-Only-2026!";
 
   await page.goto("/");
+  await acceptNecessaryPrivacy(page);
   const unsafeRedirect = await page.request.get("/auth/confirm?next=%2F%5Cevil.example", { maxRedirects: 0 });
   expect(unsafeRedirect.status()).toBe(307);
   expect(new URL(unsafeRedirect.headers().location).pathname).toBe("/");
@@ -92,6 +108,15 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
   await expect(page.getByRole("heading", { name: "Heute" })).toBeVisible();
   await expect(page.getByText("E2E Haushalt", { exact: true })).toBeVisible();
   await expect(page.getByText("Rückrufprüfung nicht verfügbar", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Datenschutz verwalten" }).click();
+  const privacyDialog = page.getByRole("dialog");
+  await privacyDialog.getByLabel(/Nutzungsanalyse/).check();
+  await privacyDialog.getByRole("button", { name: "Auswahl speichern" }).click();
+  await expect(privacyDialog.getByRole("status")).toContainText("wurde gespeichert");
+  await privacyDialog.getByRole("button", { name: "Alle optionalen Zwecke zurückziehen" }).click();
+  await expect(privacyDialog.getByLabel(/Nutzungsanalyse/)).not.toBeChecked();
+  await privacyDialog.getByRole("button", { name: "Datenschutz schließen" }).click();
 
   await page.getByRole("button", { name: "Scan", exact: true }).click();
   await page.getByPlaceholder("EAN / UPC / GS1 eingeben").fill("3017624010701");
@@ -137,9 +162,11 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
   expect(exportResponse.headers()["cache-control"]).toContain("no-store");
   expect(exportResponse.headers()["content-disposition"]).toContain("attachment");
   const exportPayload = await exportResponse.json();
-  expect(exportPayload.exportVersion).toBe(1);
+  expect(exportPayload.exportVersion).toBe(2);
   expect(exportPayload.identity.email).toBe(email);
   expect(exportPayload.data.households).toHaveLength(1);
   expect(exportPayload.data.inventoryBatches).toHaveLength(1);
   expect(exportPayload.data.products[0].name).toMatch(/Nutella/i);
+  expect(exportPayload.data.privacyChoiceEvents).toHaveLength(3);
+  expect(exportPayload.data.privacyChoiceEvents.at(-1).analytics).toBe(false);
 });

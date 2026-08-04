@@ -8,10 +8,10 @@ project and CI pin Node 22.
 | Gate | Result | Evidence |
 |---|---|---|
 | `npm install` baseline | `PASS_WITH_WARNING` | Install completed; npm reported the expected local Node 25 versus pinned Node 22 engine warning. No dependency or lockfile change is retained. |
-| `npm run verify` | `PASS` | Lint, TypeScript, 14 files/45 tests and the Next.js production build passed. |
-| `npm run test:coverage` | `PASS` | 93.13% statements, 89.04% branches, 98.03% functions and 97.87% lines. |
-| `supabase test db` | `PASS` | 58/58 pgTAP tests passed against the local Postgres/Supabase stack. |
-| `npm run test:e2e` | `PASS` | 6/6 Pixel 7 and Desktop Chrome preview tests passed, including keyboard-addressable navigation, overflow and serious/critical axe smoke. |
+| `npm run verify` | `PASS` | Lint, TypeScript, 17 files/52 tests and the Next.js production build passed. |
+| `npm run test:coverage` | `PASS` | 93.69% statements, 89.59% branches, 98.11% functions and 97.92% lines. |
+| `supabase test db` | `PASS` | 80/80 pgTAP tests passed against the local Postgres/Supabase stack, including the privacy ledger and AAL2 household catalog search. |
+| `npm run test:e2e` | `PASS` | 10/10 Pixel 7 and Desktop Chrome preview tests passed serially, including real Open Food Facts catalog data, overflow and serious/critical axe smoke. |
 | `npm run test:e2e:auth` | `PASS` | 2/2: Apple and Google authorize requests contain PKCE/S256, provider-minimal scopes and an exact same-origin callback; external redirect candidates and provider details are sanitized. The explicit fictitious demo is isolated, while a real local user still must enroll and verify TOTP before AAL2 onboarding and private data access. |
 | Local one-click demo | `PASS` | The running local app returned HTTP 200, exposed one primary `FoodOS ausprobieren` action and served `/?demo=1` with fictitious preview data only. Production requires an explicit flag. |
 | `npm audit --audit-level=high` | `PASS` | 0 vulnerabilities. |

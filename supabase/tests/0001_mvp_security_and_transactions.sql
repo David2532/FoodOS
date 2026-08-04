@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(58);
+select plan(80);
 
 select has_function(
   'public',
@@ -29,13 +29,26 @@ select has_function(
   'safety-aware consumption RPC exists'
 );
 select has_table('public', 'mutation_receipts', 'payload-bound mutation receipts exist');
+select has_table('public', 'privacy_choice_events', 'append-only privacy choice ledger exists');
+select has_function(
+  'public',
+  'record_privacy_choices',
+  array['text', 'boolean', 'boolean', 'boolean', 'boolean', 'boolean', 'boolean', 'boolean', 'boolean', 'uuid'],
+  'versioned privacy choice RPC exists'
+);
+select has_function(
+  'public',
+  'search_cached_products',
+  array['text', 'integer'],
+  'AAL2 household product search RPC exists'
+);
 select results_eq(
   $$
     select count(*)::bigint
     from pg_policies
     where schemaname = 'public' and policyname = 'require_aal2'
   $$,
-  $$ values (21::bigint) $$,
+  $$ values (22::bigint) $$,
   'every private MVP table has the restrictive AAL2 policy'
 );
 select has_table('public', 'recall_sources', 'approved recall-source registry exists');
@@ -150,10 +163,27 @@ select throws_ok(
   'AAL2 required',
   'AAL1 cannot create a household'
 );
+select throws_ok(
+  $$ select public.record_privacy_choices('2026-08-04.de-1', true, true, false, false, false, false, false, false, '13131313-1313-4313-8313-131313131313'::uuid) $$,
+  '42501',
+  'AAL2 required',
+  'AAL1 cannot create a privacy proof event'
+);
+select results_eq(
+  $$ select count(*)::bigint from public.privacy_choice_events $$,
+  $$ values (0::bigint) $$,
+  'AAL1 cannot read privacy proof rows'
+);
 select results_eq(
   $$ select count(*)::bigint from public.profiles $$,
   $$ values (0::bigint) $$,
   'AAL1 cannot read private profile rows'
+);
+select throws_ok(
+  $$ select * from public.search_cached_products('Milch', 8) $$,
+  '42501',
+  'AAL2 required',
+  'AAL1 cannot search the private household product cache'
 );
 
 reset role;
@@ -163,6 +193,100 @@ select set_config(
   true
 );
 set local role authenticated;
+select throws_ok(
+  $$ select public.record_privacy_choices('stale-notice', true, true, false, false, false, false, false, false, '13131313-1313-4313-8313-131313131314'::uuid) $$,
+  '22023',
+  'Privacy notice version is not current',
+  'a stale notice cannot create current proof'
+);
+select throws_ok(
+  $$ select public.record_privacy_choices('2026-08-04.de-1', false, true, false, false, false, false, false, false, '13131313-1313-4313-8313-131313131315'::uuid) $$,
+  '22023',
+  'Minimum age confirmation required',
+  'the Germany 16+ gate is enforced in the trust boundary'
+);
+select throws_ok(
+  $$ select public.record_privacy_choices('2026-08-04.de-1', true, false, false, false, false, false, false, false, '13131313-1313-4313-8313-131313131316'::uuid) $$,
+  '22023',
+  'Notice acknowledgement required',
+  'notice acknowledgement cannot be omitted'
+);
+select public.record_privacy_choices(
+  '2026-08-04.de-1', true, true, false, false, false, false, false, false,
+  '13131313-1313-4313-8313-131313131317'::uuid
+)::text as privacy_event_id \gset
+select results_eq(
+  $$ select count(*)::bigint from public.privacy_choice_events $$,
+  $$ values (1::bigint) $$,
+  'necessary-only creates one versioned privacy event'
+);
+select results_eq(
+  $$
+    select not sensitive_profile and not analytics and not marketing
+      and not image_cloud_processing and not off_contribution and not advertising
+    from public.privacy_choice_events order by event_sequence desc limit 1
+  $$,
+  $$ values (true) $$,
+  'necessary-only leaves every optional purpose disabled'
+);
+select is(
+  public.record_privacy_choices(
+    '2026-08-04.de-1', true, true, false, false, false, false, false, false,
+    '13131313-1313-4313-8313-131313131317'::uuid
+  )::text,
+  :'privacy_event_id',
+  'an identical privacy mutation replay is idempotent'
+);
+select throws_ok(
+  $$ select public.record_privacy_choices('2026-08-04.de-1', true, true, false, true, false, false, false, false, '13131313-1313-4313-8313-131313131317'::uuid) $$,
+  '23505',
+  'Privacy mutation ID payload conflict',
+  'a reused privacy mutation ID cannot change its payload'
+);
+select public.record_privacy_choices(
+  '2026-08-04.de-1', true, true, true, true, false, false, false, false,
+  '13131313-1313-4313-8313-131313131318'::uuid
+);
+select results_eq(
+  $$ select count(*)::bigint from public.privacy_choice_events $$,
+  $$ values (2::bigint) $$,
+  'a changed optional choice appends rather than overwrites'
+);
+select results_eq(
+  $$ select sensitive_profile and analytics and not marketing and not advertising from public.privacy_choice_events order by event_sequence desc limit 1 $$,
+  $$ values (true) $$,
+  'optional purposes remain independently recorded'
+);
+select public.record_privacy_choices(
+  '2026-08-04.de-1', true, true, false, false, false, false, false, false,
+  '13131313-1313-4313-8313-131313131319'::uuid
+);
+select results_eq(
+  $$ select count(*)::bigint from public.privacy_choice_events $$,
+  $$ values (3::bigint) $$,
+  'withdrawal appends a third audit event'
+);
+select results_eq(
+  $$
+    select not sensitive_profile and not analytics and not marketing
+      and not image_cloud_processing and not off_contribution and not advertising
+    from public.privacy_choice_events order by event_sequence desc limit 1
+  $$,
+  $$ values (true) $$,
+  'the current event proves complete optional withdrawal'
+);
+select throws_ok(
+  $$ update public.privacy_choice_events set analytics = true $$,
+  '42501',
+  'permission denied for table privacy_choice_events',
+  'clients cannot rewrite privacy history'
+);
+select throws_ok(
+  $$ delete from public.privacy_choice_events $$,
+  '42501',
+  'permission denied for table privacy_choice_events',
+  'clients cannot delete privacy history directly'
+);
 select public.onboard_household('Küche Nord', 'David', 2200, 150) as owner_household \gset
 
 select results_eq(
@@ -193,6 +317,11 @@ select results_eq(
   $$ select count(*)::bigint from public.households $$,
   $$ values (0::bigint) $$,
   'a second AAL2 user cannot read another household'
+);
+select results_eq(
+  $$ select count(*)::bigint from public.privacy_choice_events $$,
+  $$ values (0::bigint) $$,
+  'a second AAL2 user cannot read another user privacy history'
 );
 select throws_ok(
   format(
@@ -242,6 +371,16 @@ select results_eq(
   $$ select count(*)::bigint from public.products $$,
   $$ values (1::bigint) $$,
   'inventory intake persists one normalized product'
+);
+select results_eq(
+  $$ select barcode, name from public.search_cached_products('Testprodukt', 8) $$,
+  $$ values ('3017624010701'::text, 'Testprodukt'::text) $$,
+  'AAL2 product search returns a matching household product'
+);
+select results_eq(
+  $$ select count(*)::bigint from public.search_cached_products('Schokolade', 8) $$,
+  $$ values (0::bigint) $$,
+  'product search does not invent an unmatched household product'
 );
 select results_eq(
   $$ select remaining_amount from public.inventory_batches $$,

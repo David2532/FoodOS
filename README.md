@@ -14,7 +14,7 @@ personalisierte Werbung außerhalb sensibler Flows zeigen.
 
 - Next.js 16 + TypeScript
 - Supabase Postgres/Auth/Storage mit Row Level Security
-- Open Food Facts mit lokalem Cache
+- föderierte Open-Food-Facts-Volltextsuche mit AAL2-geschütztem Haushaltscache
 - ZXing Browser für EAN/UPC/GS1-Scans
 - Vitest für deterministische Fachlogik
 - Next.js Standalone-Output für Vercel oder Docker
@@ -35,8 +35,10 @@ npm run dev
 `npm exec supabase status` zeigt die ausschließlich lokalen URL-/Publishable-Key-Werte,
 die in `.env.local` gehören. Keine Secret-/Service-Role-Keys in Client-Variablen oder Git
 ablegen. Ohne Supabase-Variablen startet die Oberfläche im klar gekennzeichneten
-Preview-Modus. Der Barcode-Lookup funktioniert dann serverseitig über Open Food Facts;
-private Haushaltsdaten werden nicht simuliert.
+Preview-Modus. Barcode-Lookup und die bewusst abgesendete Produktsuche funktionieren
+dann serverseitig über Open Food Facts; private Haushaltsdaten werden nicht simuliert.
+Die Suche läuft nicht bei jedem Tastendruck, überträgt keine Profil-/Haushaltsdaten und
+zeigt Quelle, fehlende Angaben sowie Provider-Ausfälle ausdrücklich an.
 
 ## Verifizieren
 
@@ -116,7 +118,12 @@ Onboarding, idempotentes Erfassen/Verzehren, explizite Data-API-Rechte, append-o
 Inventar-Events sowie persistente Plan-/Einkaufs-RPCs. Die C0-Forward-Migrationen binden
 Mutation-IDs an einen Payload-Hash, sperren überschrittene Verbrauchsdaten und exakte
 Rückrufe, verlangen eine bewusste MHD-/Risikobestätigung und berechnen Fehlmengen per
-geplantem Nutzungstag mit FEFO-Zuordnung. `supabase/tests/` beweist AAL1-Verweigerung,
+geplantem Nutzungstag mit FEFO-Zuordnung. Migration `0013` ergänzt ein append-only,
+versioniertes Privacy-Choice-Ledger; `0014` ergänzt eine deutsche Volltextprojektion und
+eine ausschließlich unter AAL2 nutzbare Suche über bestätigte Haushaltsprodukte. Der
+große öffentliche Katalog wird nicht als unkontrollierte Rohkopie importiert: FoodOS
+speichert nur die validierte Allowlist tatsächlich verwendeter Produkte mit Provenienz.
+`supabase/tests/` beweist AAL1-Verweigerung,
 zweiten Nutzer, Haushaltsisolation, Replay/Payload-Konflikt, Safety-Sperren und atomare
 Mengen-/Logwirkung.
 
@@ -180,14 +187,15 @@ Lebensmittel-Claims, Werbung, Barrierefreiheit und das konkrete Land freigegeben
 ## Aktueller Reifegrad
 
 Der Web-MVP besitzt Auth-/AAL2-Gates, transaktionales Onboarding, Cache-first-Produktlookup,
-EAN/UPC/GS1-Erfassung, manuellen unbekannten Produkt-/MHD-Fallback, chargenbezogenen
+absendebasierte reale Katalogsuche mit responsiven Produktkarten, EAN/UPC/GS1-Erfassung,
+manuellen unbekannten Produkt-/MHD-Fallback, chargenbezogenen
 Vorrat, atomaren Verzehr, Tageswerte sowie persistente Wochenplan-/Einkaufsflows. Lokale
 Unit-/Property-, Coverage-, pgTAP/RLS- und Playwright/axe-Suiten sind vorhanden; der
 konkrete Stand steht unter `docs/evidence/`.
 
 Stage -1 ist weiterhin nicht bestanden: Es gibt keine erfundenen Interviews,
-Concierge-Beta, Zahlungs-, Marken- oder echte Usability-Evidence. Recall-Ingestion,
-verlustfreie Offline-Outbox, Datenschutzrechte/Retention, Ops-/CEO-Ledger, native Apps,
+Concierge-Beta, Zahlungs-, Marken- oder echte Usability-Evidence. Recall-Quellenfreigabe,
+vollständige Offline-Read-Synchronisation, Kontolöschung/Retention, Ops-/CEO-Ledger, native Apps,
 Maestro/Store-Sandbox, Restore/Last/Security-Pentest und Production-RUM/Deployment sind
 nicht durch den Web-MVP bewiesen. Das Repository bleibt bis zu Markt-, Marken-,
 Sicherheits- und Rechtsfreigabe privat und enthält keine Open-Source-Lizenz.

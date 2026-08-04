@@ -7,6 +7,12 @@ only explicitly fictitious preview data and no authenticated household informati
 They are visual review aids, not production RUM, usability-study, native-device or
 deployment evidence.
 
+`catalog-chromium-mobile.png` and `catalog-chromium-desktop.png` are written by the
+explicit live-provider E2E after submitting “Haferflocken”. They contain current public
+Open Food Facts product metadata and no authenticated household/profile data. Product
+ordering, images and result counts can change at the provider and are not golden business
+fixtures; the deterministic provider contract is tested separately.
+
 `auth-google-desktop.png` is produced by the local Supabase Auth E2E before any
 credentials are entered. The legacy filename now documents the Apple and Google
 one-click options and contains no user or household data; it is not evidence that either

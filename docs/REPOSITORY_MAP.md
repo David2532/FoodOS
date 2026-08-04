@@ -1,6 +1,6 @@
 # FoodOS repository map for humans and Codex
 
-Status: **orientation and precedence contract** · Last updated: **2026-08-02**
+Status: **orientation and precedence contract** · Last updated: **2026-08-04**
 
 This file is the shortest safe entry point after `AGENTS.md`. It separates what exists
 today from the commercial target and tells an implementation agent which documents are
@@ -11,11 +11,13 @@ binding for a change.
 ### Implemented in this repository
 
 - Next.js/TypeScript consumer prototype;
-- Supabase email auth and TOTP/AAL2 gate foundations;
-- initial household/product/batch/inventory/nutrition/planning schema and RLS migrations;
-- Open Food Facts server lookup and browser barcode scanning foundation;
-- FoodOS consumer UI prototype and generated visual direction boards;
-- three deterministic unit tests for existing food-math logic;
+- collapsed email plus Apple/Google PKCE entry points, SSR sessions and mandatory TOTP/AAL2 gates;
+- transactional household/product/batch/inventory/nutrition/planning schema, RLS and pgTAP coverage;
+- Open Food Facts barcode lookup, full-text catalog search, purpose-limited normalization and AAL2 household cache;
+- append-only versioned privacy-choice ledger with necessary-only defaults and in-app withdrawal;
+- adaptive FoodOS consumer UI with compact bottom navigation and desktop rail;
+- deterministic domain/provider/API tests plus Pixel-7/Desktop Playwright and axe coverage;
+- encrypted durable mutation outbox for the currently allowlisted idempotent mutations;
 - Next.js standalone Docker image and a self-hosting compose hand-off;
 - comprehensive product, legal-risk, quality, operations and commercial target plans.
 
@@ -23,10 +25,10 @@ binding for a change.
 
 - production Supabase/Vercel environment and verified public URL;
 - native Expo iOS/Android applications and store releases;
-- durable offline projection/outbox and conflict/tombstone implementation;
+- durable offline private read projection, canonical revisions and conflict/tombstone implementation;
 - live official recall ingestion and correction pipeline;
 - OCR/model governance implementation;
-- complete unit/property/mutation/component/API/pgTAP/integration/Playwright/Maestro suite;
+- complete mutation/component/load/security/restore/native/Maestro suite;
 - signed OTA rollout/rollback system;
 - live billing, contextual ads, finance reconciliation, CEO/Ops consoles and tax workflow;
 - external legal, privacy, food-claims, accessibility and country-pack approvals.

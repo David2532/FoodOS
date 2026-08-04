@@ -27,7 +27,7 @@ function allowLookup(key: string, now = Date.now()): boolean {
     lookupWindows.set(key, { startedAt: now, count: 1 });
     return true;
   }
-  if (current.count >= 30) return false;
+  if (current.count >= 7) return false;
   current.count += 1;
   return true;
 }
@@ -40,7 +40,7 @@ async function fetchProduct(barcode: string) {
   if (Date.now() < providerOpenUntil) throw new Error("Product provider circuit is open");
   const userAgent = process.env.OPEN_FOOD_FACTS_USER_AGENT ?? "FoodOS/0.1 (personal nutrition inventory app)";
   const endpoints = [
-    `https://world.openfoodfacts.org/api/v3/product/${barcode}.json?fields=${fields}`,
+    `https://world.openfoodfacts.org/api/v3.6/product/${barcode}.json?fields=${fields}`,
     `https://world.openfoodfacts.org/api/v2/product/${barcode}.json?fields=${fields}`
   ];
 
@@ -113,6 +113,15 @@ export async function GET(_request: Request, context: { params: Promise<{ barcod
     const userResult = supabase ? await supabase.auth.getUser() : null;
     if (supabase && (userResult?.error || !userResult?.data.user)) {
       return NextResponse.json({ error: "Anmeldung erforderlich." }, { status: 401 });
+    }
+    if (supabase) {
+      const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (assurance.error || assurance.data.currentLevel !== "aal2") {
+        return NextResponse.json({ error: "Zwei-Faktor-Bestätigung erforderlich." }, {
+          status: 403,
+          headers: { "Cache-Control": "no-store" }
+        });
+      }
     }
     const rateKey = userResult?.data.user?.id ?? "local-preview";
     if (!allowLookup(rateKey)) {
