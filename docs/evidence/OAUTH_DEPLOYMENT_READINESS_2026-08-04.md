@@ -1,5 +1,9 @@
 # OAuth and deployment readiness — 2026-08-04
 
+Status: **ARCHIVED / STALE local snapshot.** The 17-file/52-test and live-provider
+preview figures below predate the current `0015`/`0016` public-catalog integrity slice.
+They do not prove the current branch, current CI, a managed deployment or a live catalog.
+
 Scope: simple Apple/Google OAuth 2.0/OpenID Connect entry through Supabase Auth while
 preserving the existing mandatory TOTP/AAL2 boundary before private household data.
 The repository branch is `agent/foodos-mvp`; the local runner is Node 25.2.1 while the

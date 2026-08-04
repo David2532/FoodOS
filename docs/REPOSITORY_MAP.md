@@ -25,7 +25,7 @@ binding for a change.
 ### Planned but not yet proven
 
 - production Supabase/Vercel environment and verified public URL;
-- applied managed migration `0015` plus a verified active public catalog generation;
+- applied managed migrations `0015`/`0016` plus a verified active public catalog generation;
 - native Expo iOS/Android applications and store releases;
 - durable offline private read projection, canonical revisions and conflict/tombstone implementation;
 - live official recall ingestion and correction pipeline;

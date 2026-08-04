@@ -129,11 +129,13 @@ Rückrufe, verlangen eine bewusste MHD-/Risikobestätigung und berechnen Fehlmen
 geplantem Nutzungstag mit FEFO-Zuordnung. Migration `0013` ergänzt ein append-only,
 versioniertes Privacy-Choice-Ledger; `0014` ergänzt eine deutsche Volltextprojektion und
 eine ausschließlich unter AAL2 nutzbare Suche über bestätigte Haushaltsprodukte.
-Migration `0015` ergänzt einen physisch getrennten, generationierten öffentlichen
-Open-Food-Facts-Katalog: nur die feste validierte Allowlist wird gestaged, gehasht und
-atomar aktiviert; Client-Tabellenzugriff bleibt verboten. Der Katalog ist in diesem
-Repository noch **nicht** in eine Managed-Supabase-Instanz importiert. Betrieb, Quelle,
-Lizenz, Aktivierung und Recovery stehen in
+Die Migrationen `0015` und `0016` ergänzen einen physisch getrennten, generationierten
+öffentlichen Open-Food-Facts-Katalog: nur die feste validierte Allowlist wird gestaged,
+serverseitig über die tatsächlich persistierten Zeilen versiegelt und atomar aktiviert;
+Client-Tabellenzugriff bleibt verboten. Der Verifizierer prüft Zähler, GTINs, Hashes,
+Quellen-Traceability und repräsentative Metadaten, ohne Produktpayloads auszugeben. Der
+Katalog ist in diesem Repository noch **nicht** in eine Managed-Supabase-Instanz importiert.
+Betrieb, Quelle, Lizenz, Aktivierung und Recovery stehen in
 [`docs/PUBLIC_CATALOG_OPERATIONS.md`](docs/PUBLIC_CATALOG_OPERATIONS.md).
 `supabase/tests/` beweist AAL1-Verweigerung,
 zweiten Nutzer, Haushaltsisolation, Replay/Payload-Konflikt, Safety-Sperren und atomare

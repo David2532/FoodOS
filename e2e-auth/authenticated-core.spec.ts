@@ -118,6 +118,38 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
   await expect(privacyDialog.getByLabel(/Nutzungsanalyse/)).not.toBeChecked();
   await privacyDialog.getByRole("button", { name: "Datenschutz schließen" }).click();
 
+  // The authenticated inventory/outbox flow must be deterministic and must not disclose
+  // a test barcode to a third-party provider. The fixture mirrors the validated API
+  // contract; the real provider fallback is covered separately by unit/API contracts.
+  await page.route("**/api/products/3017624010701", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        globalCatalogStatus: "not-configured",
+        product: {
+          barcode: "3017624010701",
+          name: "Nutella E2E-Testprodukt",
+          brand: "FoodOS Testquelle",
+          quantity: "450 g",
+          categories: ["Süßaufstriche"],
+          countries: ["Deutschland"],
+          labels: [],
+          ingredientsText: "Zucker, Haselnüsse",
+          structuredIngredients: [],
+          allergens: ["Haselnüsse"],
+          traces: [],
+          additives: [],
+          nutrition: { kcal100g: 539, protein100g: 6.3, carbs100g: 57.5, fat100g: 30.9 },
+          assessments: [],
+          source: "open-food-facts",
+          sourceUrl: "https://world.openfoodfacts.org/product/3017624010701",
+          sourceLanguage: "de",
+          retrievedAt: "2026-08-04T10:00:00.000Z",
+          confidence: 0.82
+        }
+      })
+    });
+  });
   await page.getByRole("button", { name: "Scan", exact: true }).click();
   await page.getByPlaceholder("EAN / UPC / GS1 eingeben").fill("3017624010701");
   await page.getByRole("button", { name: "Prüfen" }).click();

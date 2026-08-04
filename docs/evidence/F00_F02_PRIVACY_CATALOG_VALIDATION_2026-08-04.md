@@ -1,5 +1,9 @@
 # F00/F02 local validation — 2026-08-04
 
+Status: **ARCHIVED / STALE local snapshot.** The 17-file/52-test, migration-`0014`
+figures below predate the staged public-catalog and integrity migrations (`0015`/`0016`).
+They must not be used as evidence for the current branch or Draft PR #5.
+
 Scope: the exact `agent/foodos-mvp` branch workspace before publication after the
 versioned privacy ledger and federated food-catalog slices. This is local engineering evidence, not a
 production, legal, native-device or real-user-usability claim.

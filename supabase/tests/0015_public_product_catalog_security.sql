@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(28);
+select plan(32);
 
 select has_table('public', 'product_catalog_import_runs', 'catalog import runs are persisted separately');
 select has_table('public', 'product_catalog_products', 'global catalog products are persisted separately');
@@ -115,6 +115,13 @@ select
   '{"source":"fixture"}'::jsonb, 'ODbL-1.0; DbCL-1.0', 'not-applicable'
 from valid_gtins;
 
+with representative_products as (
+  select id
+  from public.product_catalog_products
+  where import_run_id = :'complete_import_run_id'::uuid
+  order by gtin
+  limit 100
+)
 update public.product_catalog_products
 set
   serving_size = '100 g',
@@ -129,13 +136,47 @@ set
   nutrition_per_100g = '{"energy_kcal_100g":100}'::jsonb,
   nova_group = 2,
   source_language = 'de'
-where import_run_id = :'complete_import_run_id'::uuid
-  and gtin = '00000017';
+where id in (select id from representative_products);
+
+select is(
+  public.seal_product_catalog_import(:'complete_import_run_id'::uuid),
+  25000::bigint,
+  'the database seals every persisted catalog product before activation'
+);
 
 update public.product_catalog_import_runs
 set attempted_row_count = 25000,
     accepted_product_count = 25000,
-    rejected_row_count = 0
+    rejected_row_count = 0,
+    normalized_content_sha256 = (
+      select normalized_content_sha256
+      from public.inspect_product_catalog_import(:'complete_import_run_id'::uuid)
+    )
+where id = :'complete_import_run_id'::uuid;
+
+update public.product_catalog_products
+set normalized_content_sha256 = repeat('e', 64)
+where import_run_id = :'complete_import_run_id'::uuid
+  and gtin = '00000017';
+
+select throws_ok(
+  format('select public.activate_product_catalog_import(%L::uuid)', :'complete_import_run_id'),
+  '22023',
+  'Catalog import is incomplete',
+  'a staging run with a tampered product hash cannot activate'
+);
+
+select is(
+  public.seal_product_catalog_import(:'complete_import_run_id'::uuid),
+  25000::bigint,
+  'resealing restores authoritative product hashes after a rejected staging mutation'
+);
+
+update public.product_catalog_import_runs
+set normalized_content_sha256 = (
+  select normalized_content_sha256
+  from public.inspect_product_catalog_import(:'complete_import_run_id'::uuid)
+)
 where id = :'complete_import_run_id'::uuid;
 
 select ok(
@@ -239,6 +280,12 @@ select throws_ok(
   '42501',
   'permission denied for function activate_product_catalog_import',
   'an authenticated AAL2 user cannot activate an import generation'
+);
+select throws_ok(
+  format('select * from public.inspect_product_catalog_import(%L::uuid)', :'complete_import_run_id'),
+  '42501',
+  'permission denied for function inspect_product_catalog_import',
+  'an authenticated AAL2 user cannot inspect raw catalog integrity evidence'
 );
 
 reset role;

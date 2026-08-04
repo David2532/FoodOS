@@ -25,7 +25,64 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
     });
   });
 
-  test("finds a real Open Food Facts product and opens the existing intake flow", async ({ page }, testInfo) => {
+  test("uses a deterministic provider-shaped result and opens the existing intake flow", async ({ page }, testInfo) => {
+    await page.route("**/api/products/search?*", async (route) => {
+      const query = new URL(route.request().url()).searchParams.get("q");
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          query,
+          page: 1,
+          pageSize: 12,
+          providerCount: 1,
+          providerCountExact: true,
+          cachedCount: 0,
+          globalCatalogCount: 0,
+          globalCatalogStatus: "not-configured",
+          providerStatus: "live",
+          hasMore: false,
+          results: [{
+            barcode: "3017624010701",
+            name: "Deterministische Haferflocken",
+            brand: "FoodOS Testquelle",
+            quantity: "500 g",
+            nutriScore: "a",
+            source: "open-food-facts",
+            sourceUrl: "https://world.openfoodfacts.org/product/3017624010701",
+            confidence: 0.82
+          }]
+        })
+      });
+    });
+    await page.route("**/api/products/3017624010701", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          globalCatalogStatus: "not-configured",
+          product: {
+            barcode: "3017624010701",
+            name: "Deterministische Haferflocken",
+            brand: "FoodOS Testquelle",
+            quantity: "500 g",
+            categories: ["Getreide"],
+            countries: ["Deutschland"],
+            labels: [],
+            ingredientsText: "Haferflocken",
+            structuredIngredients: [],
+            allergens: ["Hafer"],
+            traces: [],
+            additives: [],
+            nutrition: { kcal100g: 370, protein100g: 13, carbs100g: 60, fat100g: 7 },
+            assessments: [],
+            source: "open-food-facts",
+            sourceUrl: "https://world.openfoodfacts.org/product/3017624010701",
+            sourceLanguage: "de",
+            retrievedAt: "2026-08-04T10:00:00.000Z",
+            confidence: 0.82
+          }
+        })
+      });
+    });
     await page.goto("/");
     await page.getByRole("button", { name: "Scan", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Produkt statt Barcode suchen" })).toBeVisible();

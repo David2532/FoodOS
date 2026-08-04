@@ -5,7 +5,8 @@ Status: **implementation and operating contract, not import evidence** · Last r
 
 FoodOS can maintain a shared, public product catalog in addition to a household's
 confirmed-product cache. This document describes the operational path for migration
-`0015_public_product_catalog.sql`. It does **not** claim that any managed Supabase
+`0015_public_product_catalog.sql` and
+`0016_public_catalog_import_integrity.sql`. It does **not** claim that any managed Supabase
 database has been migrated or populated: no managed catalog import has been executed or
 counted for this repository state.
 
@@ -34,9 +35,11 @@ The default bulk source is the Open Food Facts JSONL export:
 `https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz`
 
 The importer streams `.jsonl` or `.jsonl.gz`; it never loads the complete dump into
-memory. It accepts only Germany-tagged records with valid GTIN check digits, a name and
-allowlisted, bounded fields. It rejects malformed, non-Germany, invalid-GTIN and
-impossible-nutrition records. Missing facts remain absent. The normalized projection
+memory, limits each decompressed JSONL line, and times out before a remote response can
+stall the run. It accepts only Germany-tagged records with valid GTIN check digits, a
+name and allowlisted, bounded fields. It separately records malformed/invalid records,
+intentional country filters and duplicate GTIN source rows. Missing facts remain absent.
+The normalized projection
 retains provenance, source URL/language/revision/retrieval time, normalized content hash
 and applicable license fields; raw provider objects are not written.
 
@@ -63,19 +66,22 @@ browser build. The scheduled workflow and local importer need these server-only 
 |---|---|
 | `SUPABASE_URL` | Preferred server-only Supabase URL; the scripts also accept `NEXT_PUBLIC_SUPABASE_URL` only as a URL fallback. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service-role credential used solely by the importer and verification script. |
-| `OPEN_FOOD_FACTS_USER_AGENT` | Required identifiable value in the form `App/Version (contact@email)` for the bulk request. |
+| `OPEN_FOOD_FACTS_USER_AGENT` | Required identifiable value in the form `App/Version (contact@email)` for bulk and live fallback requests. An invalid or absent value fails closed to the visible manual fallback. |
 | `PUBLIC_CATALOG_DUMP_URL` | Optional, reviewed server-side source override. Without it, the importer uses the official full JSONL endpoint above. |
+| `PUBLIC_CATALOG_LOCAL_SOURCE_SHA256` | Required only for an explicit local JSONL test/replay source; its lower-case SHA-256 must match the streamed source bytes. Never use it to bypass source review in production. |
 | `CATALOG_SYNC_ENABLED=true` | GitHub repository variable that enables the daily schedule only after source/licence review and managed-environment approval. |
 
 Source precedence is `--source=<https-url-or-local-jsonl[.gz]>`, then
 `PUBLIC_CATALOG_DUMP_URL`, then the official full JSONL endpoint. Remote overrides are
 accepted only over HTTPS from the importer's approved Open Food Facts host allowlist and
-must end in `.jsonl` or `.jsonl.gz`; a local JSONL file is a controlled CLI-only option.
+must end in `.jsonl` or `.jsonl.gz`; a local JSONL file is a controlled CLI-only option
+only when its expected SHA-256 is supplied. The importer rejects a source smaller than
+1 GB, so a truncation that happens to contain 25,000 rows cannot activate a generation.
 The current scheduled workflow deliberately does not inject `PUBLIC_CATALOG_DUMP_URL`,
 so its manual and daily runs use the official default. The variable is an input selector,
 not an activation control and must never be exposed to a browser build.
 
-Before a first managed import, apply migration `0015`, configure the three secret values
+Before a first managed import, apply migrations `0015` and `0016`, configure the three secret values
 in the protected GitHub Environment or another server-only secret store, and complete the
 source/licence review. A controlled operator run is then:
 
@@ -84,7 +90,9 @@ npm run catalog:import
 npm run catalog:verify
 ```
 
-The default command requires at least 25,000 accepted products. The source can be pinned
+The default command requires at least 25,000 persisted products, a minimum 0.1% acceptance
+ratio and at least 100 retained examples each for nutrition, ingredients, allergens and
+field provenance. The source can be pinned
 for a controlled replay with `npm run catalog:import -- --source=<url-or-file>`; do not
 lower the production minimum merely to make a sample appear successful. `catalog:verify`
 returns exit code 2 when its server-only credentials are missing and exit code 1 when
@@ -97,12 +105,14 @@ review. The workflow is not a Vercel request and must run only in the protected
 
 ## Generation activation, failure and recovery
 
-Each import creates a `staging` generation, records accepted/rejected/attempted counts
-and a SHA-256 of the normalized content, then writes in bounded batches. Activation is
-possible only when the persisted count matches the recorded count, the normalized hash is
-present and at least 25,000 products were accepted. The service-only activation function
-atomically supersedes the prior active generation and marks the complete staging
-generation active. Reads join only the active generation.
+Each import creates a `staging` generation, records attempted/accepted/rejected/filtered/
+duplicate counts, then writes in bounded batches. Before activation the database seals a
+SHA-256 over the actual persisted allowlist projection (excluding import/runtime fields),
+checks each per-row hash, recomputes the generation hash in GTIN order, and checks the
+counter identity plus metadata evidence. Activation is possible only when these checks
+pass and at least 25,000 products were persisted. The service-only activation function
+atomically supersedes the prior active generation and marks the complete staging generation
+active. Reads join only the active generation.
 
 Credential validation happens before a remote dump download. A fetch, parse, validation,
 write, interruption or minimum-count failure marks the staging run `failed`; it must not
@@ -116,11 +126,13 @@ by atomic activation; database point-in-time restore follows the normal incident
 and requires an integrity check before any catalog is made active. A true one-command
 generation rollback remains `NOT_IMPLEMENTED` and is not release proof.
 
-After every activation, retain the run generation, source/schema/retrieval time, counts,
-hash and result of `npm run catalog:verify` in the protected release evidence. Alert on no
-active generation, a failed run, an integrity/count/hash mismatch, source/schema drift or
-an unexpectedly low accepted ratio. Never substitute zero, an old success or a provider
-outage for a current catalog status.
+After every activation, retain the run generation, source/schema/revision/retrieval time,
+all aggregate counters, database-sealed hash and result of `npm run catalog:verify` in the
+protected release evidence. The verifier checks exact count/counter identity, GTIN validity,
+per-row and generation hash integrity, source traceability and aggregate nutrition/
+ingredients/allergen/provenance evidence. Alert on no active generation, a failed run,
+integrity/count/hash mismatch, source/schema drift or an unexpectedly low accepted ratio.
+Never substitute zero, an old success or a provider outage for a current catalog status.
 
 ## Managed-data status and release boundary
 

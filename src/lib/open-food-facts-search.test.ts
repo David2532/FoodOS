@@ -41,7 +41,7 @@ describe("Open Food Facts catalog search", () => {
       hits: [], page: 1, page_size: 12, page_count: 0, count: 0, is_count_exact: true, timed_out: false
     }), { status: 200 }));
 
-    await searchOpenFoodFacts("Haferflocken", 1, 12, fetcher);
+    await searchOpenFoodFacts("Haferflocken", 1, 12, fetcher, "FoodOS/0.1 (ops@example.com)");
 
     expect(fetcher).toHaveBeenCalledOnce();
     const [url, init] = fetcher.mock.calls[0];
@@ -49,5 +49,6 @@ describe("Open Food Facts catalog search", () => {
     expect(init?.method).toBe("POST");
     expect(JSON.parse(String(init?.body))).toMatchObject({ q: "Haferflocken", page: 1, page_size: 12, langs: ["de", "en"] });
     expect(JSON.parse(String(init?.body)).fields).not.toContain("ingredients_text");
+    expect(init?.headers).toMatchObject({ "User-Agent": "FoodOS/0.1 (ops@example.com)" });
   });
 });

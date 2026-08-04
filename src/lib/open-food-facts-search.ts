@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { CatalogSearchItem } from "@/contracts/catalog";
 import { hasValidGtinCheckDigit } from "@/domain/gs1";
+import { requireOpenFoodFactsUserAgent } from "@/lib/open-food-facts-user-agent";
 
 const externalProductSchema = z.object({
   code: z.string().optional(),
@@ -79,7 +80,8 @@ export async function searchOpenFoodFacts(
   query: string,
   page: number,
   pageSize: number,
-  fetcher: typeof fetch = fetch
+  fetcher: typeof fetch = fetch,
+  userAgent = requireOpenFoodFactsUserAgent()
 ): Promise<OpenFoodFactsSearchResult> {
   const normalizedQuery = normalizeCatalogQuery(query);
   if (normalizedQuery.length < 2) throw new Error("Search query is too short");
@@ -89,7 +91,7 @@ export async function searchOpenFoodFacts(
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
-      "User-Agent": process.env.OPEN_FOOD_FACTS_USER_AGENT ?? "FoodOS/0.1 (food inventory catalog)"
+      "User-Agent": userAgent
     },
     body: JSON.stringify({
       q: normalizedQuery,

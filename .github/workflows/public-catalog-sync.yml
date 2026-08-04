@@ -1,0 +1,48 @@
+name: Public product catalog sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 03 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-catalog-production-sync
+  cancel-in-progress: false
+
+jobs:
+  import:
+    # An operator explicitly enables recurring production ingestion only after the
+    # source/license review and managed Supabase environment are ready. A manual run
+    # remains available for the first controlled import.
+    if: github.event_name == 'workflow_dispatch' || vars.CATALOG_SYNC_ENABLED == 'true'
+    name: Stage and atomically activate Open Food Facts catalog
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    environment: production
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      OPEN_FOOD_FACTS_USER_AGENT: ${{ secrets.OPEN_FOOD_FACTS_USER_AGENT }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Require server-only import configuration
+        shell: bash
+        run: |
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_SERVICE_ROLE_KEY"
+          test -n "$OPEN_FOOD_FACTS_USER_AGENT"
+      - name: Stream, stage and activate official catalog generation
+        run: npm run catalog:import
+      - name: Verify active catalog generation
+        run: npm run catalog:verify

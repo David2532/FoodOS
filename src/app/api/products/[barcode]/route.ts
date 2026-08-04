@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { normalizeOpenFoodFacts } from "@/lib/open-food-facts";
+import { requireOpenFoodFactsUserAgent } from "@/lib/open-food-facts-user-agent";
 import { productApiResponseSchema } from "@/contracts/product";
 import { normalizeCachedProduct } from "@/lib/product-cache";
 import { isSupabaseConfigured } from "@/lib/supabase";
@@ -81,7 +82,7 @@ function retryDelay(attempt: number) {
 
 async function fetchProduct(barcode: string) {
   if (Date.now() < providerOpenUntil) throw new Error("Product provider circuit is open");
-  const userAgent = process.env.OPEN_FOOD_FACTS_USER_AGENT ?? "FoodOS/0.1 (personal nutrition inventory app)";
+  const userAgent = requireOpenFoodFactsUserAgent();
   const endpoints = [
     `https://world.openfoodfacts.org/api/v3.6/product/${barcode}.json?fields=${fields}`,
     `https://world.openfoodfacts.org/api/v2/product/${barcode}.json?fields=${fields}`
