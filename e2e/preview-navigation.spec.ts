@@ -75,29 +75,29 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
           providerStatus: "live",
           hasMore: false,
           results: [{
-            barcode: "3017624010701",
+            barcode: "4255773600520",
             name: "Rühls Bestes Whey Protein",
             brand: "Rühls Bestes",
             quantity: "1 kg",
-            imageUrl: "https://images.openfoodfacts.org/images/products/301/762/401/0701/front_de.3.200.jpg",
+            imageUrl: "https://images.openfoodfacts.org/images/products/425/577/360/0520/front_en.18.400.jpg",
             source: "open-food-facts",
-            sourceUrl: "https://world.openfoodfacts.org/product/3017624010701",
+            sourceUrl: "https://world.openfoodfacts.org/product/4255773600520",
             confidence: 0.82
           }]
         })
       });
     });
-    await page.route("**/api/products/3017624010701?*", async (route) => {
+    await page.route("**/api/products/4255773600520?*", async (route) => {
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
           globalCatalogStatus: "not-configured",
           product: {
-            barcode: "3017624010701",
+            barcode: "4255773600520",
             name: "Rühls Bestes Whey Protein",
             brand: "Rühls Bestes",
             quantity: "1 kg",
-            imageUrl: "https://images.openfoodfacts.org/images/products/301/762/401/0701/front_de.3.200.jpg",
+            imageUrl: "https://images.openfoodfacts.org/images/products/425/577/360/0520/front_en.18.400.jpg",
             categories: ["Protein"],
             countries: ["Deutschland"],
             labels: [],
@@ -109,7 +109,7 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
             nutrition: { kcal100g: 371, protein100g: 74, carbs100g: 6.6, fat100g: 6.2 },
             assessments: [],
             source: "open-food-facts",
-            sourceUrl: "https://world.openfoodfacts.org/product/3017624010701",
+            sourceUrl: "https://world.openfoodfacts.org/product/4255773600520",
             sourceLanguage: "de",
             retrievedAt: "2026-08-04T10:00:00.000Z",
             confidence: 0.82
