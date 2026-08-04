@@ -161,27 +161,30 @@ export function SignInScreen({
           <p className="auth-flow-note">Meldest du dich nur mit Apple oder Google an, verwaltest du dein Passwort direkt bei diesem Anbieter.</p>
         </form>
       ) : <>
-        <fieldset className="oauth-stack" aria-busy={busy || undefined}>
-          <legend>Mit einem Konto anmelden</legend>
-          {showDemoEntry && (
-            <button className="oauth-button demo" type="button" onClick={() => router.push("/?demo=1")}>
-              <Play size={18} aria-hidden="true" /> FoodOS ausprobieren
-            </button>
-          )}
-          {appleEnabled && (
-            <button className="oauth-button apple" type="button" onClick={() => void signInWithProvider("apple")} disabled={busy}>
-              <ProviderMark provider="apple" />
-              {activeProvider === "apple" ? "Apple wird geöffnet …" : "Mit Apple fortfahren"}
-            </button>
-          )}
-          {googleEnabled && (
-            <button className="oauth-button google" type="button" onClick={() => void signInWithProvider("google")} disabled={busy}>
-              <ProviderMark provider="google" />
-              {activeProvider === "google" ? "Google wird geöffnet …" : "Mit Google fortfahren"}
-            </button>
-          )}
-          {activeProvider && <p className="sr-only" role="status">{activeProvider === "apple" ? "Apple" : "Google"} wird geöffnet.</p>}
-        </fieldset>
+        {hasSimpleEntry && (
+          <fieldset className="oauth-stack" aria-busy={busy || undefined}>
+            <legend>{socialLoginEnabled ? "Mit einem Konto anmelden" : "FoodOS ausprobieren"}</legend>
+            {showDemoEntry && (
+              <button className="oauth-button demo" type="button" onClick={() => router.push("/?demo=1")}>
+                <Play size={18} aria-hidden="true" /> FoodOS ausprobieren
+              </button>
+            )}
+            {appleEnabled && (
+              <button className="oauth-button apple" type="button" onClick={() => void signInWithProvider("apple")} disabled={busy}>
+                <ProviderMark provider="apple" />
+                {activeProvider === "apple" ? "Apple wird geöffnet …" : "Mit Apple fortfahren"}
+              </button>
+            )}
+            {googleEnabled && (
+              <button className="oauth-button google" type="button" onClick={() => void signInWithProvider("google")} disabled={busy}>
+                <ProviderMark provider="google" />
+                {activeProvider === "google" ? "Google wird geöffnet …" : "Mit Google fortfahren"}
+              </button>
+            )}
+            {activeProvider && <p className="sr-only" role="status">{activeProvider === "apple" ? "Apple" : "Google"} wird geöffnet.</p>}
+          </fieldset>
+        )}
+        {!socialLoginEnabled && <p className="auth-flow-note oauth-unavailable" role="status">Apple- und Google-Anmeldung stehen auf dieser FoodOS-Installation noch nicht zur Verfügung. Du kannst dich sicher mit E-Mail anmelden.</p>}
         {error && <p className="auth-message error auth-level-message" role="alert">{error}</p>}
         {notice && <p className="auth-message success auth-level-message" role="status">{notice}</p>}
         <details className="email-auth" open={!hasSimpleEntry}>
