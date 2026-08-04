@@ -316,17 +316,15 @@ async function main() {
         const normalized = normalizePublicCatalogProduct(record);
         if (normalized.kind === "filtered") {
           filtered += 1;
-          continue;
-        }
-        if (normalized.kind === "rejected") {
+        } else if (normalized.kind === "rejected") {
           rejected += 1;
-          continue;
-        }
-        batch.push(normalized.product);
-        candidates += 1;
-        if (batch.length >= BATCH_SIZE) {
-          await insertBatch(supabase, runId, batch);
-          batch = [];
+        } else {
+          batch.push(normalized.product);
+          candidates += 1;
+          if (batch.length >= BATCH_SIZE) {
+            await insertBatch(supabase, runId, batch);
+            batch = [];
+          }
         }
         if (attempted % PROGRESS_INTERVAL === 0) {
           await updateRun(supabase, runId, {
