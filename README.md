@@ -14,7 +14,8 @@ personalisierte Werbung außerhalb sensibler Flows zeigen.
 
 - Next.js 16 + TypeScript
 - Supabase Postgres/Auth/Storage mit Row Level Security
-- föderierte Open-Food-Facts-Volltextsuche mit AAL2-geschütztem Haushaltscache
+- gestufte Produktsuche: AAL2-Haushaltscache, optionaler öffentlicher Katalog und
+  rate-limitierter Open-Food-Facts-Fallback
 - ZXing Browser für EAN/UPC/GS1-Scans
 - Vitest für deterministische Fachlogik
 - Next.js Standalone-Output für Vercel oder Docker
@@ -55,6 +56,12 @@ for pull requests and `main`. `test:db` requires the local Supabase Docker stack
 `test:e2e` builds the app and checks Pixel-7/Desktop-Chrome profiles with Playwright and
 axe. A passing local subset is not production, native-device, usability, restore, load,
 store-sandbox or legal evidence.
+
+`npm run catalog:verify` prüft ausschließlich eine bereits aktivierte, serverseitig
+erreichbare öffentliche Kataloggeneration. Ohne die nötigen server-only Credentials
+meldet der Befehl `BLOCKED`; er importiert keine Daten. Import, tägliche Aktualisierung,
+Lizenzgrenzen und Recovery sind unter
+[`docs/PUBLIC_CATALOG_OPERATIONS.md`](docs/PUBLIC_CATALOG_OPERATIONS.md) dokumentiert.
 
 Für den echten lokalen Auth-Flow zuerst die von `npm exec supabase status` ausgegebenen
 `API_URL`/`PUBLISHABLE_KEY` als `NEXT_PUBLIC_SUPABASE_URL`/
@@ -105,6 +112,7 @@ approvals, deployments or legal conclusions.
 - [`design-ceo.md`](design-ceo.md): Desktop-Designsystem der internen CEO-/Ops-Zentrale
 - [`docs/REPOSITORY_MAP.md`](docs/REPOSITORY_MAP.md): Codex-Lesereihenfolge, Ist-/Zielstand und Dokument-Priorität
 - [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md): Evidence-basierte Go/Limited-Beta/No-Go-Vorlage
+- [`docs/PUBLIC_CATALOG_OPERATIONS.md`](docs/PUBLIC_CATALOG_OPERATIONS.md): Open-Food-Facts-Import, Lizenz, Generationen, Sync und Recovery
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): Branch-, Clean-Code-, Test- und PR-Workflow
 - [`SECURITY.md`](SECURITY.md): privater Schwachstellen-Meldeweg und Security-Baseline
 
@@ -120,9 +128,13 @@ Mutation-IDs an einen Payload-Hash, sperren überschrittene Verbrauchsdaten und 
 Rückrufe, verlangen eine bewusste MHD-/Risikobestätigung und berechnen Fehlmengen per
 geplantem Nutzungstag mit FEFO-Zuordnung. Migration `0013` ergänzt ein append-only,
 versioniertes Privacy-Choice-Ledger; `0014` ergänzt eine deutsche Volltextprojektion und
-eine ausschließlich unter AAL2 nutzbare Suche über bestätigte Haushaltsprodukte. Der
-große öffentliche Katalog wird nicht als unkontrollierte Rohkopie importiert: FoodOS
-speichert nur die validierte Allowlist tatsächlich verwendeter Produkte mit Provenienz.
+eine ausschließlich unter AAL2 nutzbare Suche über bestätigte Haushaltsprodukte.
+Migration `0015` ergänzt einen physisch getrennten, generationierten öffentlichen
+Open-Food-Facts-Katalog: nur die feste validierte Allowlist wird gestaged, gehasht und
+atomar aktiviert; Client-Tabellenzugriff bleibt verboten. Der Katalog ist in diesem
+Repository noch **nicht** in eine Managed-Supabase-Instanz importiert. Betrieb, Quelle,
+Lizenz, Aktivierung und Recovery stehen in
+[`docs/PUBLIC_CATALOG_OPERATIONS.md`](docs/PUBLIC_CATALOG_OPERATIONS.md).
 `supabase/tests/` beweist AAL1-Verweigerung,
 zweiten Nutzer, Haushaltsisolation, Replay/Payload-Konflikt, Safety-Sperren und atomare
 Mengen-/Logwirkung.
@@ -134,6 +146,12 @@ Mengen-/Logwirkung.
    den Legacy-Anon-Key), `OPEN_FOOD_FACTS_USER_AGENT` sowie die server-only Recall-
    Variablen aus `.env.example` setzen.
 3. Production-Deployment ausführen.
+
+Der Bulk-Katalogimport läuft nicht in Vercel. Er benötigt für den getrennten GitHub-
+Workflow einen server-only `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` und einen
+identifizierenden `OPEN_FOOD_FACTS_USER_AGENT` im Format `App/Version (contact@email)`.
+Der tägliche Lauf bleibt bis zur Quellen-/Lizenzfreigabe durch die Repository-Variable
+`CATALOG_SYNC_ENABLED=true` deaktiviert; Details stehen im Katalog-Betriebsdokument.
 
 ### Apple und Google OAuth 2.0 / OpenID Connect
 
@@ -187,7 +205,8 @@ Lebensmittel-Claims, Werbung, Barrierefreiheit und das konkrete Land freigegeben
 ## Aktueller Reifegrad
 
 Der Web-MVP besitzt Auth-/AAL2-Gates, transaktionales Onboarding, Cache-first-Produktlookup,
-absendebasierte reale Katalogsuche mit responsiven Produktkarten, EAN/UPC/GS1-Erfassung,
+absendebasierte reale Katalogsuche mit responsiven Produktkarten, einen implementierten
+aber nicht verwalteten generationierten öffentlichen Katalogimport, EAN/UPC/GS1-Erfassung,
 manuellen unbekannten Produkt-/MHD-Fallback, chargenbezogenen
 Vorrat, atomaren Verzehr, Tageswerte sowie persistente Wochenplan-/Einkaufsflows. Lokale
 Unit-/Property-, Coverage-, pgTAP/RLS- und Playwright/axe-Suiten sind vorhanden; der

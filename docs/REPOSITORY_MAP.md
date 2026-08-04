@@ -13,7 +13,8 @@ binding for a change.
 - Next.js/TypeScript consumer prototype;
 - collapsed email plus Apple/Google PKCE entry points, SSR sessions and mandatory TOTP/AAL2 gates;
 - transactional household/product/batch/inventory/nutrition/planning schema, RLS and pgTAP coverage;
-- Open Food Facts barcode lookup, full-text catalog search, purpose-limited normalization and AAL2 household cache;
+- Open Food Facts barcode lookup, full-text catalog search, purpose-limited normalization,
+  AAL2 household cache and generationierten öffentlichen Katalog-Importcode;
 - append-only versioned privacy-choice ledger with necessary-only defaults and in-app withdrawal;
 - adaptive FoodOS consumer UI with compact bottom navigation and desktop rail;
 - deterministic domain/provider/API tests plus Pixel-7/Desktop Playwright and axe coverage;
@@ -24,6 +25,7 @@ binding for a change.
 ### Planned but not yet proven
 
 - production Supabase/Vercel environment and verified public URL;
+- applied managed migration `0015` plus a verified active public catalog generation;
 - native Expo iOS/Android applications and store releases;
 - durable offline private read projection, canonical revisions and conflict/tombstone implementation;
 - live official recall ingestion and correction pipeline;
@@ -56,6 +58,7 @@ production state separately.
 | product scope/tier/ads | `COMMERCIAL_PRODUCT_PLAN.md`, `MASTER_PLAN.md` | README, flow, legal/data register, tests |
 | auth/2FA/households | `AUTH_AND_SELF_HOSTING.md`, F01, security plan | migration/RLS, env/setup, C0 tests |
 | barcode/GS1/OCR/product | F02, architecture, food-safety and AI plans | schema/provider contract, fixtures, tests, UI states |
+| public product catalog | `docs/PUBLIC_CATALOG_OPERATIONS.md`, F02, architecture, compliance matrix | import generation, source/license evidence, RLS/RPC tests, activation/recovery evidence |
 | MHD/use-by/recall | F02/F07, food-safety plan, compliance matrix | domain rules, UI copy, source/freshness, C0 tests |
 | ingredient relevance | F03, commercial/legal boundaries | ruleset/version, explanations, unknown state, tests |
 | inventory/consumption | F04, offline/data-integrity plan | transaction/RPC, ledger reconciliation, tests |

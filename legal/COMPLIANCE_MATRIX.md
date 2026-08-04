@@ -73,6 +73,9 @@ and product images under CC BY-SA, while completeness/accuracy is not guaranteed
 therefore:
 
 - stores OFF-derived catalog/cache records in a clearly identifiable open-data boundary;
+- stages each bulk import as a separate public generation with source/schema/retrieval
+  provenance, aggregate integrity hash and no household foreign key; no managed bulk
+  import has been claimed as of 2026-08-04;
 - stores proprietary household, event, profile, rule, ad, and subscription data outside
   that catalog and joins by normalized GTIN/reference at runtime;
 - keeps source URL/id, license, retrieval time, language, confidence, and user override;
@@ -81,6 +84,9 @@ therefore:
   separate explicit flow after confirming rights and license consequences;
 - obtains specialist ODbL review before publishing bulk catalog data or combined
   databases and documents the resulting share-alike approach.
+
+The precise bulk source, opt-in scheduler, activation, failure handling and recovery
+contract is maintained in [`docs/PUBLIC_CATALOG_OPERATIONS.md`](../docs/PUBLIC_CATALOG_OPERATIONS.md).
 
 ## Country pack template
 
