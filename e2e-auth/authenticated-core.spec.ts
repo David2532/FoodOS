@@ -98,7 +98,8 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
 
   await expect(page.getByRole("heading", { name: "2FA aktivieren" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Deinen Haushalt anlegen" })).not.toBeVisible();
-  await page.getByRole("button", { name: "QR-Code erzeugen" }).click();
+  await page.getByRole("button", { name: /QR-Code für Google Authenticator erzeugen/ }).click();
+  await page.getByText("Setup-Schlüssel manuell verwenden", { exact: true }).click();
   const secret = (await page.locator(".mfa-secret code").textContent())?.trim();
   expect(secret).toBeTruthy();
   await page.getByLabel("Sechsstelliger Code").fill(currentTotp(secret ?? ""));
