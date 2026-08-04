@@ -136,7 +136,10 @@ export function normalizePublicCatalogProduct(value) {
   const sourceUpdatedAt = sourceTimestamp(raw.last_modified_datetime) ?? sourceTimestamp(raw.last_modified_t);
   const sourceRevision = identifier(raw.last_modified_t, 40) ?? text(raw.last_modified_datetime, 80) ?? text(raw._id, 80) ?? gtin;
   const retrievedAt = new Date().toISOString();
-  const imageUrl = text(raw.image_front_url, 2_000) ?? text(raw.image_front_small_url, 2_000);
+  const imageUrl = text(raw.image_front_url, 2_000)
+    ?? text(raw.image_url, 2_000)
+    ?? text(raw.image_front_small_url, 2_000)
+    ?? text(raw.image_small_url, 2_000);
   if (imageUrl && !/^https:\/\//i.test(imageUrl)) return { kind: "rejected", reason: "invalid-image-url" };
 
   const product = {
@@ -179,7 +182,7 @@ export function normalizePublicCatalogProduct(value) {
       source: "open-food-facts-jsonl",
       source_fields: [
         "code", "product_name_de", "product_name", "generic_name_de", "generic_name", "brands", "quantity", "serving_size",
-        "image_front_url", "image_front_small_url", "ingredients_text_de", "ingredients_text", "ingredients", "allergens_tags",
+        "image_front_url", "image_url", "image_front_small_url", "image_small_url", "ingredients_text_de", "ingredients_text", "ingredients", "allergens_tags",
         "traces_tags", "additives_tags", "categories_tags", "labels_tags", "countries_tags", "packaging_tags", "stores_tags",
         "origins_tags", "origins", "nutriments", "nutriscore_grade", "nova_group", "ecoscore_grade", "completeness", "lang", "last_modified_datetime", "last_modified_t"
       ]

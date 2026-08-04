@@ -3,6 +3,7 @@ import { z } from "zod";
 import { normalizeOpenFoodFacts } from "@/lib/open-food-facts";
 import { requireOpenFoodFactsUserAgent } from "@/lib/open-food-facts-user-agent";
 import { productApiResponseSchema } from "@/contracts/product";
+import { isPublicCatalogPreviewRequest } from "@/lib/catalog-preview";
 import { normalizeCachedProduct } from "@/lib/product-cache";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -216,7 +217,7 @@ async function loadFoodRiskPreferences(supabase: SupabaseClient | null): Promise
   }));
 }
 
-export async function GET(_request: Request, context: { params: Promise<{ barcode: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ barcode: string }> }) {
   const { barcode: rawBarcode } = await context.params;
   const parsed = barcodeSchema.safeParse(rawBarcode);
   if (!parsed.success) {
@@ -224,6 +225,21 @@ export async function GET(_request: Request, context: { params: Promise<{ barcod
   }
 
   try {
+    if (isPublicCatalogPreviewRequest(request.url)) {
+      if (!allowLookup("public-preview")) {
+        return NextResponse.json({ error: "Zu viele Produktabfragen. Versuche es in einer Minute erneut." }, {
+          status: 429,
+          headers: { "Retry-After": "60", "Cache-Control": "no-store" }
+        });
+      }
+      const raw = await fetchProduct(parsed.data);
+      if (!raw) return NextResponse.json({ error: "Produkt nicht gefunden.", barcode: parsed.data }, { status: 404 });
+      const product = personalizeProductAssessments(normalizeOpenFoodFacts(raw, parsed.data), []);
+      return NextResponse.json(productApiResponseSchema.parse({ product, globalCatalogStatus: "not-configured" }), {
+        headers: { "Cache-Control": "no-store", "X-FoodOS-Product-Source": "public-preview" }
+      });
+    }
+
     const supabase = isSupabaseConfigured() ? await createSupabaseServerClient() : null;
     const userResult = supabase ? await supabase.auth.getUser() : null;
     if (supabase && (userResult?.error || !userResult?.data.user)) {

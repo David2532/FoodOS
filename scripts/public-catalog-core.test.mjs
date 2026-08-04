@@ -43,6 +43,19 @@ describe("public catalog dump normalizer", () => {
     expect(normalized.product).not.toHaveProperty("ingredients_text");
   });
 
+  it("retains the documented bulk-image field without inventing an image", () => {
+    const normalized = normalizePublicCatalogProduct({
+      ...germanyProduct,
+      image_url: "https://images.openfoodfacts.org/images/products/400/638/133/3931/front_de.3.400.jpg"
+    });
+    expect(normalized).toMatchObject({ kind: "accepted" });
+    if (normalized.kind !== "accepted") return;
+    expect(normalized.product).toMatchObject({
+      image_url: "https://images.openfoodfacts.org/images/products/400/638/133/3931/front_de.3.400.jpg",
+      image_license: "CC-BY-SA-4.0 (verify image-specific rights before reuse)"
+    });
+  });
+
   it("filters non-Germany records and rejects invalid GTINs and impossible nutrition", () => {
     expect(normalizePublicCatalogProduct({ ...germanyProduct, countries_tags: ["en:france"] })).toMatchObject({ kind: "filtered" });
     expect(normalizePublicCatalogProduct({ ...germanyProduct, code: "4006381333932" })).toMatchObject({ kind: "rejected", reason: "invalid-gtin" });

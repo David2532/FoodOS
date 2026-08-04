@@ -123,4 +123,20 @@ describe("Q-CATALOG-LAYERED-API-004 product catalog search", () => {
     testState.aal = "aal1";
     expect((await GET(new Request("http://localhost/api/products/search?q=Haferflocken&page=1"))).status).toBe(403);
   });
+
+  it("offers preview users an isolated public-provider search without household or global-catalog reads", async () => {
+    testState.user = null;
+    const response = await GET(new Request("http://localhost/api/products/search?q=R%C3%BChls%20Bestes&page=1&preview=1"));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-FoodOS-Catalog-Source")).toBe("public-preview");
+    const body = await response.json();
+    expect(body).toMatchObject({
+      cachedCount: 0,
+      globalCatalogCount: 0,
+      globalCatalogStatus: "not-configured",
+      providerStatus: "live"
+    });
+    expect(body.results).toEqual(expect.arrayContaining([expect.objectContaining({ source: "open-food-facts" })]));
+  });
 });

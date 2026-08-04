@@ -1,26 +1,29 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowRight, Database, LoaderCircle, PackageSearch, Search, ShieldCheck, WifiOff } from "lucide-react";
 import { catalogSearchResponseSchema, type CatalogSearchItem, type CatalogSearchResponse } from "@/contracts/catalog";
 
-const suggestions = ["Haferflocken", "Naturjoghurt", "Vollkornbrot"];
+const suggestions = ["Haferflocken", "Naturjoghurt", "Vollkornbrot", "Rühls Bestes Whey"];
 
-export function ProductCatalogSearch({ onSelect, selectingBarcode }: {
+export function ProductCatalogSearch({ initialQuery, onSelect, preview = false, selectingBarcode }: {
+  initialQuery?: string;
   onSelect: (barcode: string) => void;
+  preview?: boolean;
   selectingBarcode?: string;
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery ?? "");
   const [response, setResponse] = useState<CatalogSearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const autoSearchedQueryRef = useRef<string | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  async function searchCatalog(searchQuery: string, page: number, append: boolean) {
+  const searchCatalog = useCallback(async (searchQuery: string, page: number, append: boolean) => {
     const normalized = searchQuery.trim();
     if (normalized.length < 2) {
       setError("Gib mindestens zwei Zeichen ein.");
@@ -34,7 +37,8 @@ export function ProductCatalogSearch({ onSelect, selectingBarcode }: {
     else setLoading(true);
     setError(null);
     try {
-      const result = await fetch(`/api/products/search?q=${encodeURIComponent(normalized)}&page=${page}`, {
+      const previewParameter = preview ? "&preview=1" : "";
+      const result = await fetch(`/api/products/search?q=${encodeURIComponent(normalized)}&page=${page}${previewParameter}`, {
         signal: controller.signal,
         headers: { Accept: "application/json" }
       });
@@ -60,7 +64,15 @@ export function ProductCatalogSearch({ onSelect, selectingBarcode }: {
         setLoadingMore(false);
       }
     }
-  }
+  }, [preview]);
+
+  useEffect(() => {
+    const normalized = initialQuery?.trim();
+    if (!normalized || autoSearchedQueryRef.current === normalized) return;
+    autoSearchedQueryRef.current = normalized;
+    setQuery(normalized);
+    void searchCatalog(normalized, 1, false);
+  }, [initialQuery, searchCatalog]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -85,7 +97,7 @@ export function ProductCatalogSearch({ onSelect, selectingBarcode }: {
         <div>
           <p>REALER LEBENSMITTELKATALOG</p>
           <h2 id="catalog-title">Produkt statt Barcode suchen</h2>
-          <span>Dein Cache, der FoodOS-Katalog und danach Open Food Facts.</span>
+          <span>{preview ? "Live-Daten von Open Food Facts – ohne Haushaltsdaten." : "Dein Cache, der FoodOS-Katalog und danach Open Food Facts."}</span>
         </div>
         <em aria-live="polite"><span className="status-pulse" /> {catalogState}</em>
       </div>
@@ -112,7 +124,9 @@ export function ProductCatalogSearch({ onSelect, selectingBarcode }: {
         {suggestions.map((suggestion) => <button key={suggestion} onClick={() => selectSuggestion(suggestion)}>{suggestion}</button>)}
       </div>}
 
-      <p className="catalog-privacy"><ShieldCheck size={14} /> Erst beim Absenden prüft FoodOS deinen Cache und den gemeinsamen Katalog. Nur wenn nötig geht der Suchbegriff an Open Food Facts – nie an Werbung oder Analytics.</p>
+      <p className="catalog-privacy"><ShieldCheck size={14} /> {preview
+        ? "Preview: Die Suche fragt ausschließlich den öffentlichen Open-Food-Facts-Katalog ab. Keine Haushaltsdaten werden gelesen oder gespeichert."
+        : "Erst beim Absenden prüft FoodOS deinen Cache und den gemeinsamen Katalog. Nur wenn nötig geht der Suchbegriff an Open Food Facts – nie an Werbung oder Analytics."}</p>
 
       {error && <div className="error-banner" role="alert"><WifiOff size={17} /><span>{error}</span></div>}
       {loading && <div className="catalog-skeletons" aria-label="Lebensmittel werden gesucht" aria-busy="true">

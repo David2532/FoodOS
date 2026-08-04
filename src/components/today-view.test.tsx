@@ -16,4 +16,13 @@ describe("TodayView catalog entry", () => {
     fireEvent.click(screen.getByRole("button", { name: "Lebensmittelkatalog öffnen" }));
     expect(onNavigate).toHaveBeenCalledWith("scan");
   });
+
+  it("opens a source-backed protein shake search instead of presenting a fake product", () => {
+    const onOpenCatalog = vi.fn();
+    render(<TodayView onNavigate={vi.fn()} onOpenCatalog={onOpenCatalog} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /proteinshake auswählen/i }));
+
+    expect(onOpenCatalog).toHaveBeenCalledWith("Rühls Bestes Whey");
+  });
 });

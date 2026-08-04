@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { catalogSearchQuerySchema, catalogSearchResponseSchema, type CatalogSearchItem } from "@/contracts/catalog";
+import { isPublicCatalogPreviewRequest } from "@/lib/catalog-preview";
 import { searchOpenFoodFacts } from "@/lib/open-food-facts-search";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -114,6 +115,36 @@ export async function GET(request: Request) {
       status: 400,
       headers: { "Cache-Control": "no-store" }
     });
+  }
+
+  if (isPublicCatalogPreviewRequest(request.url)) {
+    if (!allowSearch("public-preview")) {
+      return NextResponse.json({ error: "Zu viele Katalogsuchen. Warte bitte eine Minute." }, {
+        status: 429,
+        headers: { "Retry-After": "60", "Cache-Control": "no-store" }
+      });
+    }
+    try {
+      const provider = await searchOpenFoodFacts(parsed.data.query, parsed.data.page, PAGE_SIZE);
+      return NextResponse.json(catalogSearchResponseSchema.parse({
+        query: parsed.data.query,
+        page: parsed.data.page,
+        pageSize: PAGE_SIZE,
+        providerCount: provider.count,
+        providerCountExact: provider.countExact,
+        cachedCount: 0,
+        globalCatalogCount: 0,
+        globalCatalogStatus: "not-configured",
+        providerStatus: "live",
+        hasMore: provider.hasMore,
+        results: provider.items
+      }), { headers: { "Cache-Control": "no-store", "X-FoodOS-Catalog-Source": "public-preview" } });
+    } catch {
+      return NextResponse.json({ error: "Der öffentliche Lebensmittelkatalog ist gerade nicht erreichbar. Versuche es erneut oder nutze den Barcode." }, {
+        status: 503,
+        headers: { "Cache-Control": "no-store" }
+      });
+    }
   }
 
   const supabase = isSupabaseConfigured() ? await createSupabaseServerClient() : null;

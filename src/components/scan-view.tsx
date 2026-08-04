@@ -19,7 +19,7 @@ const riskLabels: Record<RiskLevel, { label: string; icon: typeof Check }> = {
   unknown: { label: "Daten unbekannt", icon: Info }
 };
 
-export function ScanView({ householdId, onSaved }: { householdId?: string; onSaved?: () => void }) {
+export function ScanView({ householdId, initialCatalogQuery, onSaved, preview = false }: { householdId?: string; initialCatalogQuery?: string; onSaved?: () => void; preview?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
   const lookupInFlightRef = useRef(false);
@@ -59,7 +59,7 @@ export function ScanView({ householdId, onSaved }: { householdId?: string; onSav
     controlsRef.current?.stop();
     setCameraActive(false);
     try {
-      const response = await fetch(`/api/products/${gtin}`);
+      const response = await fetch(`/api/products/${gtin}${preview ? "?preview=1" : ""}`);
       const body: unknown = await response.json();
       if (response.status === 404 || response.status === 429 || response.status >= 500) {
         setManualEntry({ barcode: gtin, reason: response.status === 404 ? "not-found" : "unavailable" });
@@ -137,6 +137,8 @@ export function ScanView({ householdId, onSaved }: { householdId?: string; onSav
       {error && <div className="error-banner" role="alert"><AlertTriangle size={17} /><span>{error}</span></div>}
 
       <ProductCatalogSearch
+        initialQuery={initialCatalogQuery}
+        preview={preview}
         selectingBarcode={loading ? barcode : undefined}
         onSelect={(selectedBarcode) => {
           setBarcode(selectedBarcode);

@@ -124,4 +124,42 @@ describe("Q-CATALOG-LAYERED-LOOKUP-005 global GTIN lookup", () => {
       else process.env.OPEN_FOOD_FACTS_USER_AGENT = originalUserAgent;
     }
   });
+
+  it("keeps preview lookup public-source-only and away from AAL2 catalog projections", async () => {
+    const originalUserAgent = process.env.OPEN_FOOD_FACTS_USER_AGENT;
+    process.env.OPEN_FOOD_FACTS_USER_AGENT = "FoodOS/0.1 (ops@example.com)";
+    state.user = null;
+    state.providerNormalizer.mockReturnValue({
+      barcode: "3017624010701",
+      name: "Öffentliches Preview-Produkt",
+      categories: [],
+      countries: [],
+      labels: [],
+      structuredIngredients: [],
+      allergens: [],
+      traces: [],
+      additives: [],
+      nutrition: {},
+      assessments: [],
+      source: "open-food-facts",
+      retrievedAt: "2026-08-04T10:00:00.000Z",
+      confidence: 0.8
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ product: {} }), { status: 200 })));
+
+    try {
+      const response = await GET(new Request("http://localhost/api/products/3017624010701?preview=1"), {
+        params: Promise.resolve({ barcode: "3017624010701" })
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("X-FoodOS-Product-Source")).toBe("public-preview");
+      await expect(response.json()).resolves.toMatchObject({
+        globalCatalogStatus: "not-configured",
+        product: { source: "open-food-facts", name: "Öffentliches Preview-Produkt" }
+      });
+    } finally {
+      if (originalUserAgent === undefined) delete process.env.OPEN_FOOD_FACTS_USER_AGENT;
+      else process.env.OPEN_FOOD_FACTS_USER_AGENT = originalUserAgent;
+    }
+  });
 });

@@ -1,7 +1,7 @@
-import { ArrowRight, Beef, Clock3, Database, Flame, PackageCheck, Plus, ShieldAlert, Wheat } from "lucide-react";
+import { ArrowRight, Beef, Clock3, Database, Flame, PackageCheck, PackageSearch, Plus, ShieldAlert, Wheat } from "lucide-react";
 import type { AppSnapshot, AppView } from "@/lib/types";
 
-export function TodayView({ onNavigate, snapshot }: { onNavigate: (view: AppView) => void; snapshot?: AppSnapshot }) {
+export function TodayView({ onNavigate, onOpenCatalog, snapshot }: { onNavigate: (view: AppView) => void; onOpenCatalog?: (query?: string) => void; snapshot?: AppSnapshot }) {
   if (snapshot) {
     const urgent = snapshot.inventory.find((item) => ["past_use_by", "today", "soon", "past_best_before"].includes(item.expiryState));
     const target = snapshot.today.calorieTarget;
@@ -54,7 +54,7 @@ export function TodayView({ onNavigate, snapshot }: { onNavigate: (view: AppView
       <section>
         <div className="section-heading">
           <div><p>HEUTE GEPLANT</p><h2>Noch zwei Mahlzeiten</h2></div>
-          <button className="small-action"><Plus size={16} /> Hinzufügen</button>
+          <button className="small-action" onClick={() => onOpenCatalog?.()}><Plus size={16} /> Hinzufügen</button>
         </div>
         <div className="meal-list">
           <article className="meal-card">
@@ -62,11 +62,11 @@ export function TodayView({ onNavigate, snapshot }: { onNavigate: (view: AppView
             <div className="meal-copy"><p>MITTAGESSEN · 13:00</p><h3>Reis & Hähnchen</h3><span>620 kcal · 54 g Protein</span></div>
             <button className="check-button" aria-label="Als gegessen markieren"><PackageCheck size={18} /></button>
           </article>
-          <article className="meal-card">
-            <div className="meal-art shake"><span>🥛</span></div>
-            <div className="meal-copy"><p>SNACK · 17:30</p><h3>Flexpresso Shake</h3><span>280 kcal · 31 g Protein</span></div>
-            <button className="check-button" aria-label="Als gegessen markieren"><PackageCheck size={18} /></button>
-          </article>
+          <button type="button" className="meal-card meal-card-button" onClick={() => onOpenCatalog?.("Rühls Bestes Whey")}>
+            <span className="meal-art shake"><PackageSearch size={25} /></span>
+            <span className="meal-copy"><p>SNACK · AUS KATALOG</p><h3>Proteinshake auswählen</h3><span>z. B. Rühls Bestes Whey · mit Quellenbild, falls verfügbar</span></span>
+            <ArrowRight size={18} aria-hidden="true" />
+          </button>
         </div>
       </section>
 

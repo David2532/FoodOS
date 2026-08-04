@@ -41,7 +41,10 @@ name and allowlisted, bounded fields. It separately records malformed/invalid re
 intentional country filters and duplicate GTIN source rows. Missing facts remain absent.
 The normalized projection
 retains provenance, source URL/language/revision/retrieval time, normalized content hash
-and applicable license fields; raw provider objects are not written.
+and applicable license fields; raw provider objects are not written. The allowlisted
+image reference accepts the documented bulk `image_url` / `image_front_url` and small-image
+variants over HTTPS; when none is supplied, the product UI must show its neutral no-image
+state rather than a made-up package photo.
 
 Open Food Facts asks high-volume consumers to use exports instead of many API requests,
 requires an identifiable User-Agent for API use, and documents current v3.6 as the

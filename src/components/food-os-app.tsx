@@ -49,6 +49,11 @@ export function FoodOsApp({
 }) {
   const router = useRouter();
   const [view, setView] = useState<AppView>("today");
+  const [scanCatalogQuery, setScanCatalogQuery] = useState<string | undefined>();
+  const openCatalog = (query?: string) => {
+    setScanCatalogQuery(query);
+    setView("scan");
+  };
   const current = useMemo(() => {
     if (!initialSnapshot) return titles[view];
     if (view === "today") return { eyebrow: initialSnapshot.household.name, title: "Heute" };
@@ -85,9 +90,9 @@ export function FoodOsApp({
             </aside>
           )}
           {authenticated && <OutboxStatus />}
-          {view === "today" && <TodayView onNavigate={setView} snapshot={initialSnapshot} />}
+          {view === "today" && <TodayView onNavigate={setView} onOpenCatalog={openCatalog} snapshot={initialSnapshot} />}
           {view === "inventory" && <InventoryView householdId={initialSnapshot?.household.id} onScan={() => setView("scan")} onConsumed={initialSnapshot ? () => router.refresh() : undefined} items={initialSnapshot?.inventory} />}
-          {view === "scan" && <ScanView householdId={initialSnapshot?.household.id} onSaved={() => { setView("inventory"); router.refresh(); }} />}
+          {view === "scan" && <ScanView householdId={initialSnapshot?.household.id} initialCatalogQuery={scanCatalogQuery} onSaved={() => { setView("inventory"); router.refresh(); }} preview={preview} />}
           {view === "plan" && <PlanView snapshot={initialSnapshot} onChanged={initialSnapshot ? () => router.refresh() : undefined} />}
           {view === "shopping" && <ShoppingView snapshot={initialSnapshot} onChanged={initialSnapshot ? () => router.refresh() : undefined} />}
           {view === "settings" && authenticated && <AccountSettingsView accountEmail={accountEmail} initialPrivacyChoices={initialPrivacyChoices} onClose={() => setView("today")} />}
@@ -101,7 +106,10 @@ export function FoodOsApp({
               <button
                 key={item.id}
                 className={`nav-item ${active ? "active" : ""} ${item.id === "scan" ? "scan-nav" : ""}`}
-                onClick={() => setView(item.id)}
+                onClick={() => {
+                  if (item.id === "scan") setScanCatalogQuery(undefined);
+                  setView(item.id);
+                }}
                 aria-current={active ? "page" : undefined}
               >
                 <span className="nav-icon"><Icon size={21} strokeWidth={active ? 2.5 : 2} /></span>
