@@ -64,11 +64,16 @@ browser build. The scheduled workflow and local importer need these server-only 
 | `SUPABASE_URL` | Preferred server-only Supabase URL; the scripts also accept `NEXT_PUBLIC_SUPABASE_URL` only as a URL fallback. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service-role credential used solely by the importer and verification script. |
 | `OPEN_FOOD_FACTS_USER_AGENT` | Required identifiable value in the form `App/Version (contact@email)` for the bulk request. |
+| `PUBLIC_CATALOG_DUMP_URL` | Optional, reviewed server-side source override. Without it, the importer uses the official full JSONL endpoint above. |
 | `CATALOG_SYNC_ENABLED=true` | GitHub repository variable that enables the daily schedule only after source/licence review and managed-environment approval. |
 
-`PUBLIC_CATALOG_DUMP_URL` is **not** read by the current importer. Select an approved
-source explicitly with `--source=<https-url-or-local-jsonl[.gz]>`; do not treat an
-undocumented environment variable as an activation control.
+Source precedence is `--source=<https-url-or-local-jsonl[.gz]>`, then
+`PUBLIC_CATALOG_DUMP_URL`, then the official full JSONL endpoint. Remote overrides are
+accepted only over HTTPS from the importer's approved Open Food Facts host allowlist and
+must end in `.jsonl` or `.jsonl.gz`; a local JSONL file is a controlled CLI-only option.
+The current scheduled workflow deliberately does not inject `PUBLIC_CATALOG_DUMP_URL`,
+so its manual and daily runs use the official default. The variable is an input selector,
+not an activation control and must never be exposed to a browser build.
 
 Before a first managed import, apply migration `0015`, configure the three secret values
 in the protected GitHub Environment or another server-only secret store, and complete the
