@@ -28,6 +28,8 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
+      - name: Audit high-severity dependency vulnerabilities
+        run: npm audit --audit-level=high
       - name: Verify repository
         run: npm run verify
       - name: Enforce coverage thresholds
