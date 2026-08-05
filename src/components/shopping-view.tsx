@@ -1,38 +1,61 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
-import { AlertTriangle, Check, ListChecks, LoaderCircle, Plus, RefreshCw, ShoppingCart } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ListChecks, LoaderCircle, Plus, RefreshCw, ShoppingCart } from "lucide-react";
 import { z } from "zod";
-import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { shoppingGenerationResultSchema } from "@/contracts/planning-shopping";
 import { submitDurableRpc } from "@/infrastructure/offline-outbox";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 import type { AppSnapshot, ShoppingItem } from "@/lib/types";
 
 function amountLabel(item: ShoppingItem) {
   if (item.requiredAmount == null) return "Menge offen";
   const unit = item.unit === "piece" ? "Stück" : item.unit ?? "";
-  return `${item.requiredAmount.toLocaleString("de-DE", { maximumFractionDigits: 2 })} ${unit}`.trim();
+  return `${item.requiredAmount.toLocaleString("de-DE", { maximumFractionDigits: 3 })} ${unit}`.trim();
+}
+
+function generationError(message: string): string {
+  if (/revision conflict/i.test(message)) return "Plan oder Einkaufsliste wurden inzwischen geändert. Lade den aktuellen Stand und berechne danach erneut.";
+  if (/week start/i.test(message)) return "Die Einkaufswoche muss an einem Montag beginnen.";
+  if (/access denied|aal2 required/i.test(message)) return "Deine Berechtigung oder Zwei-Faktor-Sitzung ist nicht mehr aktuell.";
+  return "Die Einkaufsliste konnte nicht berechnet werden. Bestehende Posten bleiben unverändert.";
 }
 
 export function ShoppingView({ snapshot, onChanged }: { snapshot?: AppSnapshot; onChanged?: () => void }) {
   const [formOpen, setFormOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const mutationId = useRef("");
+  const [status, setStatus] = useState<string | null>(null);
+  const manualMutationId = useRef("");
+  const generationMutationId = useRef("");
 
   async function generate() {
     if (!snapshot || !onChanged) return;
+    if (!generationMutationId.current) generationMutationId.current = crypto.randomUUID();
     setBusy(true);
     setError(null);
-    const { data, error: rpcError } = await getSupabaseBrowserClient().rpc("generate_shopping_from_plan", {
+    setStatus(null);
+    try {
+      const { data, error: rpcError } = await getSupabaseBrowserClient().rpc("generate_shopping_from_plan_v2", {
       target_household: snapshot.household.id,
-      target_week_start: snapshot.weekStart
+      target_week_start: snapshot.weekStart,
+      base_calculation_revision: snapshot.shoppingCalculationRevision ?? 0,
+      mutation_id: generationMutationId.current
     });
-    setBusy(false);
-    if (rpcError || !z.uuid().safeParse(data).success) {
-      setError("Die Einkaufsliste konnte nicht aus dem Plan berechnet werden.");
+    const parsed = shoppingGenerationResultSchema.safeParse(data);
+    if (rpcError || !parsed.success) {
+      setError(generationError(rpcError?.message ?? "unexpected_result"));
+      if (rpcError && !/failed to fetch|network|timeout/i.test(rpcError.message)) generationMutationId.current = "";
       return;
     }
+    generationMutationId.current = "";
+    setStatus(`Einkaufsliste mit Berechnung ${parsed.data.calculation_revision} aktualisiert. Manuelle Posten und Häkchen wurden beibehalten.`);
     onChanged();
+    } catch {
+      setError("Die Einkaufsliste konnte ohne Serververbindung nicht berechnet werden. Bestehende Posten bleiben unverändert.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function addManual(event: FormEvent<HTMLFormElement>) {
@@ -42,37 +65,43 @@ export function ShoppingView({ snapshot, onChanged }: { snapshot?: AppSnapshot; 
     const rawAmount = String(form.get("amount") ?? "").trim();
     setBusy(true);
     setError(null);
+    setStatus(null);
     try {
       const result = await submitDurableRpc<unknown>({
         kind: "shopping.add_manual",
         rpc: "add_manual_shopping_item",
         householdId: snapshot.household.id,
-        operationId: mutationId.current,
+        operationId: manualMutationId.current,
         args: {
           target_household: snapshot.household.id,
           target_week_start: snapshot.weekStart,
           item_label: String(form.get("label")),
           item_amount: rawAmount ? Number(rawAmount) : null,
           item_unit: rawAmount ? String(form.get("unit")) : null,
-          mutation_id: mutationId.current
+          mutation_id: manualMutationId.current
         }
       });
-      setBusy(false);
       if (result.status === "rejected" || (result.status === "acked" && !z.uuid().safeParse(result.data).success)) {
         setError(result.status === "rejected" ? result.message : "Der Server hat ein unerwartetes Ergebnis geliefert.");
         return;
       }
       setFormOpen(false);
-      if (result.status === "acked") onChanged();
+      if (result.status === "queued") setStatus("Der manuelle Posten ist auf diesem Gerät gespeichert und wartet auf Synchronisierung.");
+      if (result.status === "acked") {
+        setStatus("Manueller Posten gespeichert.");
+        onChanged();
+      }
     } catch {
-      setBusy(false);
       setError("Der Posten konnte weder lokal sicher gespeichert noch vom Server bestätigt werden.");
+    } finally {
+      setBusy(false);
     }
   }
 
   async function toggle(item: ShoppingItem) {
     if (!onChanged) return;
     setError(null);
+    setStatus(null);
     const { error: rpcError } = await getSupabaseBrowserClient().rpc("set_shopping_item_checked", {
       target_item: item.id,
       checked: !item.checked
@@ -88,16 +117,17 @@ export function ShoppingView({ snapshot, onChanged }: { snapshot?: AppSnapshot; 
 
   const checkedCount = snapshot.shoppingItems.filter((item) => item.checked).length;
   return <div className="stack-lg page-enter">
-    <section className="shopping-hero"><div><p>AKTUELLE WOCHE</p><strong>{snapshot.shoppingItems.length}</strong><span>gespeicherte Posten</span></div><div><ListChecks size={20} /><strong>{checkedCount} / {snapshot.shoppingItems.length}</strong><span>erledigt</span></div></section>
-    <div className="shopping-actions"><button className="outline-button" onClick={() => void generate()} disabled={busy}>{busy ? <LoaderCircle className="spin" size={17} /> : <RefreshCw size={17} />} Plan minus Vorrat berechnen</button><button className="small-action" onClick={() => { setFormOpen(true); mutationId.current = crypto.randomUUID(); }}><Plus size={16} /> Manuell</button></div>
+    <section className="shopping-hero"><div><p>AKTUELLE WOCHE</p><strong>{snapshot.shoppingItems.length}</strong><span>gespeicherte Posten</span></div><div><ListChecks size={20} /><strong>{checkedCount} / {snapshot.shoppingItems.length}</strong><span>erledigt · Berechnung {snapshot.shoppingCalculationRevision ?? 0}</span></div></section>
+    <div className="shopping-actions"><button className="outline-button" onClick={() => void generate()} disabled={busy}>{busy ? <LoaderCircle className="spin" size={17} /> : <RefreshCw size={17} />} Plan minus nutzbaren Vorrat berechnen</button><button className="small-action" onClick={() => { setFormOpen(true); manualMutationId.current = crypto.randomUUID(); setError(null); setStatus(null); }}><Plus size={16} /> Manuell</button></div>
+    {status && <div className="success-banner" role="status"><CheckCircle2 size={17} /><span>{status}</span></div>}
     {error && <div className="error-banner" role="alert"><AlertTriangle size={17} /><span>{error}</span></div>}
     {formOpen && <form className="batch-form" onSubmit={addManual}>
       <label className="field-label"><span>Bezeichnung</span><input name="label" minLength={1} maxLength={160} autoFocus required /></label>
-      <div className="batch-grid"><label className="field-label"><span>Menge · optional</span><input name="amount" type="number" min="0.001" step="0.001" /></label><label className="field-label"><span>Einheit</span><select name="unit"><option value="piece">Stück</option><option value="g">g</option><option value="ml">ml</option></select></label></div>
+      <div className="batch-grid"><label className="field-label"><span>Menge · optional</span><input name="amount" type="number" inputMode="decimal" min="0.001" step="0.001" /></label><label className="field-label"><span>Einheit</span><select name="unit"><option value="piece">Stück</option><option value="g">g</option><option value="ml">ml</option></select></label></div>
       <button className="primary-button wide" disabled={busy}>{busy ? <LoaderCircle className="spin" size={18} /> : <Plus size={18} />} Posten speichern</button>
     </form>}
     <section className="shopping-list">
-      {snapshot.shoppingItems.length ? snapshot.shoppingItems.map((item) => <button key={item.id} className={`shopping-row ${item.checked ? "checked" : ""}`} onClick={() => void toggle(item)}><span className="shop-check">{item.checked && <Check size={14} />}</span><i>{item.source === "plan" ? "P" : "+"}</i><div><strong>{item.label}</strong><small>{amountLabel(item)} · {item.source === "plan" ? "aus Wochenplan" : "manuell"}</small></div></button>) : <div className="empty-state"><ShoppingCart size={24} /><h2>Liste ist leer</h2><p>Berechne Fehlmengen aus deinem Wochenplan oder füge einen Posten manuell hinzu.</p></div>}
+      {snapshot.shoppingItems.length ? snapshot.shoppingItems.map((item) => <button key={item.id} className={`shopping-row ${item.checked ? "checked" : ""}`} aria-pressed={item.checked} onClick={() => void toggle(item)}><span className="shop-check">{item.checked && <Check size={14} />}</span><i>{item.source === "plan" ? "P" : "+"}</i><div><strong>{item.label}</strong><small>{amountLabel(item)} · {item.source === "plan" ? "aus Haushaltsplan" : "manuell"}</small></div></button>) : <div className="empty-state"><ShoppingCart size={24} /><h2>Liste ist leer</h2><p>Berechne Fehlmengen aus dem Haushaltsplan oder füge einen Posten manuell hinzu.</p></div>}
     </section>
   </div>;
 }

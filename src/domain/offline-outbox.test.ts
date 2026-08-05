@@ -5,6 +5,8 @@ describe("offline outbox policy", () => {
   it("allows only the RPC bound to a declared operation kind", () => {
     expect(isAllowedOfflineRpc("inventory.add_batch", "add_inventory_batch")).toBe(true);
     expect(isAllowedOfflineRpc("inventory.add_batch", "consume_inventory_batch_v2")).toBe(false);
+    expect(isAllowedOfflineRpc("plan.add_product_v2", "plan_product_v2")).toBe(true);
+    expect(isAllowedOfflineRpc("plan.add_product_v2", "plan_product")).toBe(false);
     expect(isAllowedOfflineRpc("shopping.add_manual", "set_shopping_item_checked")).toBe(false);
   });
 

@@ -873,34 +873,36 @@ select throws_ok(
   'permission denied for table inventory_events',
   'the inventory audit trail is append-only for clients'
 );
-select public.plan_product(
+select (public.plan_product_v2(
   :'owner_household'::uuid,
   (select id from public.products limit 1),
   current_date,
   'dinner',
   2,
+  'piece',
   'cccccccc-cccc-4ccc-8ccc-cccccccccccc'::uuid
-)::text as planned_id \gset
+) ->> 'id') as planned_id \gset
 select results_eq(
   $$ select count(*)::bigint from public.meal_plan_slots $$,
   $$ values (1::bigint) $$,
   'a product can be persisted in the weekly plan'
 );
 select is(
-  public.plan_product(
+  public.plan_product_v2(
     :'owner_household'::uuid,
     (select id from public.products limit 1),
     current_date,
     'dinner',
     2,
+    'piece',
     'cccccccc-cccc-4ccc-8ccc-cccccccccccc'::uuid
-  )::text,
+  ) ->> 'id',
   :'planned_id',
   'weekly planning is idempotent'
 );
 select throws_ok(
   format(
-    'select public.plan_product(%L::uuid, %L::uuid, current_date, ''dinner'', 3, %L::uuid)',
+    'select public.plan_product_v2(%L::uuid, %L::uuid, current_date, ''dinner'', 3, ''piece'', %L::uuid)',
     :'owner_household', (select id::text from public.products order by created_at limit 1),
     'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
   ),
@@ -908,7 +910,12 @@ select throws_ok(
   'Mutation ID payload conflict',
   'weekly planning rejects a reused mutation ID with a different payload'
 );
-select public.generate_shopping_from_plan(:'owner_household'::uuid, current_date) as shopping_list_id \gset
+select (public.generate_shopping_from_plan_v2(
+  :'owner_household'::uuid,
+  current_date - (extract(isodow from current_date)::integer - 1),
+  0,
+  'ecececec-ecec-4ece-8ece-ecececececec'::uuid
+) ->> 'list_id') as shopping_list_id \gset
 select results_eq(
   $$ select count(*)::bigint from public.shopping_items where source = 'plan' $$,
   $$ values (1::bigint) $$,
@@ -979,16 +986,18 @@ select set_config(
   true
 );
 set local role authenticated;
-select public.plan_product(
+select public.plan_product_v2(
   :'owner_household'::uuid,
   :'allocation_product'::uuid,
   current_date - (extract(isodow from current_date)::integer - 1) + 3,
-  'dinner', 1,
+  'dinner', 100, 'g',
   '77777777-7777-4777-8777-777777777773'::uuid
 );
-select public.generate_shopping_from_plan(
+select public.generate_shopping_from_plan_v2(
   :'owner_household'::uuid,
-  current_date - (extract(isodow from current_date)::integer - 1)
+  current_date - (extract(isodow from current_date)::integer - 1),
+  (select calculation_revision from public.shopping_lists where id = :'shopping_list_id'::uuid),
+  '77777777-7777-4777-8777-777777777775'::uuid
 );
 select results_eq(
   format(
@@ -1009,9 +1018,11 @@ select public.add_inventory_batch(
   ),
   '77777777-7777-4777-8777-777777777774'::uuid
 );
-select public.generate_shopping_from_plan(
+select public.generate_shopping_from_plan_v2(
   :'owner_household'::uuid,
-  current_date - (extract(isodow from current_date)::integer - 1)
+  current_date - (extract(isodow from current_date)::integer - 1),
+  (select calculation_revision from public.shopping_lists where id = :'shopping_list_id'::uuid),
+  '77777777-7777-4777-8777-777777777776'::uuid
 );
 select results_eq(
   format(

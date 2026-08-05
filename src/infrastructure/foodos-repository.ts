@@ -41,13 +41,20 @@ const profileSchema = z.object({
 
 const mealPlanRowSchema = z.object({
   id: z.uuid(),
+  product_id: z.uuid(),
   planned_for: z.string(),
   meal_type: z.enum(["breakfast", "lunch", "dinner", "snack"]),
   servings: z.coerce.number(),
+  planned_amount: z.coerce.number().positive(),
+  planned_unit: z.enum(["g", "ml", "piece"]),
+  revision: z.coerce.number().int().positive(),
   products: z.object({ name: z.string() })
 });
 
-const shoppingListSchema = z.object({ id: z.uuid() });
+const shoppingListSchema = z.object({
+  id: z.uuid(),
+  calculation_revision: z.coerce.number().int().nonnegative()
+});
 const shoppingItemSchema = z.object({
   id: z.uuid(),
   label: z.string(),
@@ -195,15 +202,14 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
     supabase.from("profiles").select("calorie_target, protein_target_g").maybeSingle(),
     supabase
       .from("meal_plan_slots")
-      .select("id, planned_for, meal_type, servings, products!inner(name)")
+      .select("id, product_id, planned_for, meal_type, servings, planned_amount, planned_unit, revision, products!inner(name)")
       .eq("household_id", membership.data.household_id)
-      .eq("user_id", userResult.data.user.id)
       .gte("planned_for", weekStart)
       .lte("planned_for", plusDays(weekStart, 6))
       .order("planned_for", { ascending: true }),
     supabase
       .from("shopping_lists")
-      .select("id")
+      .select("id, calculation_revision")
       .eq("household_id", membership.data.household_id)
       .eq("week_start", weekStart)
       .maybeSingle(),
@@ -325,9 +331,13 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
       weekStart,
       mealPlan: parsedMealPlan.data.map((entry) => ({
         id: entry.id,
+        productId: entry.product_id,
         plannedFor: entry.planned_for,
         mealType: entry.meal_type,
         servings: entry.servings,
+        plannedAmount: entry.planned_amount,
+        plannedUnit: entry.planned_unit,
+        revision: entry.revision,
         productName: entry.products.name
       })),
       shoppingItems: parsedShoppingItems.map((entry) => ({
@@ -338,6 +348,7 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
         checked: entry.checked_at !== null,
         source: entry.source
       })),
+      shoppingCalculationRevision: parsedShoppingList.data?.calculation_revision ?? 0,
       recallSource
     }
   };

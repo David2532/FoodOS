@@ -181,6 +181,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .error-banner { display: flex; gap: 9px; align-items: flex-start; border: 1px solid rgba(255,148,122,.2); background: rgba(255,148,122,.08); color: #ffc0b0; border-radius: 14px; padding: 12px; font-size: 11px; line-height: 1.45; }
+.success-banner { display: flex; gap: 9px; align-items: flex-start; border: 1px solid rgba(183,243,106,.2); background: rgba(183,243,106,.08); color: var(--lime); border-radius: 14px; padding: 12px; font-size: 11px; line-height: 1.45; }
 .risk-confirmation { display: flex; gap: 11px; align-items: flex-start; border: 1px solid rgba(255,148,122,.35); background: rgba(255,148,122,.09); border-radius: 14px; padding: 13px; color: #ffe0d8; cursor: pointer; }
 .risk-confirmation input { width: 20px; height: 20px; flex: 0 0 auto; accent-color: var(--lime); }
 .risk-confirmation span { display: grid; gap: 4px; }
@@ -349,6 +350,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .timeline-row small { color: var(--muted); font-size: 8px; letter-spacing: .1em; }
 .timeline-row strong { font-size: 12px; margin: 3px 0; }
 .timeline-row em { color: var(--muted); font-size: 9px; font-style: normal; }
+.plan-timeline-row { grid-template-columns: 38px 13px minmax(0, 1fr) auto; }
+.plan-row-actions { display: flex; gap: 4px; }
+.plan-row-actions button { width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--muted-2); display: grid; place-items: center; cursor: pointer; }
+.plan-row-actions button:hover, .plan-row-actions button:focus-visible { color: var(--lime); border-color: rgba(183,243,106,.35); }
+.form-actions { display: grid; grid-template-columns: minmax(0, .7fr) minmax(0, 1.3fr); gap: 8px; }
+.destructive-button { min-height: 45px; border: 1px solid var(--danger-border); border-radius: 14px; padding: 0 16px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--danger-text); background: var(--danger-background); cursor: pointer; font-size: 11px; font-weight: 750; }
+.inline-confirmation { display: grid; gap: 14px; border: 1px solid var(--danger-border); border-radius: 18px; padding: 15px; background: var(--danger-background); }
+.inline-confirmation strong { display: block; font-size: 13px; }
+.inline-confirmation p { margin: 5px 0 0; color: var(--muted-2); font-size: 11px; line-height: 1.45; }
+.inline-confirmation > div:last-child { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .outline-button { width: 100%; min-height: 45px; border: 1px dashed rgba(183,243,106,.25); border-radius: 14px; background: rgba(183,243,106,.04); color: var(--lime); display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 11px; cursor: pointer; }
 
 .shopping-hero { border: 1px solid rgba(183,243,106,.14); background: linear-gradient(145deg, #193120, #0d1d14); border-radius: 22px; padding: 18px; display: grid; grid-template-columns: 1fr auto; align-items: end; }

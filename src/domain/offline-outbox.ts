@@ -2,6 +2,7 @@ export const OFFLINE_OPERATION_KINDS = [
   "inventory.add_batch",
   "inventory.consume_batch",
   "plan.add_product",
+  "plan.add_product_v2",
   "shopping.add_manual"
 ] as const;
 
@@ -14,6 +15,7 @@ const allowedRpcByKind: Record<OfflineOperationKind, string> = {
   "inventory.add_batch": "add_inventory_batch",
   "inventory.consume_batch": "consume_inventory_batch_v2",
   "plan.add_product": "plan_product",
+  "plan.add_product_v2": "plan_product_v2",
   "shopping.add_manual": "add_manual_shopping_item"
 };
 

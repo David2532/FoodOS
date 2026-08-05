@@ -83,9 +83,13 @@ export interface InventoryItem {
 
 export interface MealPlanItem {
   id: string;
+  productId: string;
   plannedFor: string;
   mealType: "breakfast" | "lunch" | "dinner" | "snack";
   servings: number;
+  plannedAmount: number;
+  plannedUnit: "g" | "ml" | "piece";
+  revision: number;
   productName: string;
 }
 
@@ -109,6 +113,7 @@ export interface AppSnapshot {
   weekStart: string;
   mealPlan: MealPlanItem[];
   shoppingItems: ShoppingItem[];
+  shoppingCalculationRevision?: number;
   recallSource: {
     status: "unavailable" | "fresh" | "stale";
     lastSuccessAt?: string;
