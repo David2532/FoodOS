@@ -81,6 +81,7 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
             imageUrl: "https://images.openfoodfacts.org/images/products/425/577/360/0520/front_en.18.400.jpg",
             source: "open-food-facts",
             sourceUrl: "https://world.openfoodfacts.org/product/4255773600520",
+            nutrition: { kcal100g: 371, protein100g: 74, carbs100g: 6.6, fat100g: 6.2 },
             confidence: 0.82
           }]
         })
@@ -123,6 +124,8 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
     const firstResult = page.locator(".catalog-result").first();
     await expect(firstResult).toBeVisible({ timeout: 15_000 });
     await expect(firstResult).toContainText("Open Food Facts");
+    await expect(firstResult).toContainText("371");
+    await expect(firstResult).toContainText("74 g");
     await expect(firstResult.locator("img")).toHaveAttribute("src", /images\.openfoodfacts\.org/);
     await page.addScriptTag({ content: axe.source });
     const catalogAccessibility = await page.evaluate(async () => {

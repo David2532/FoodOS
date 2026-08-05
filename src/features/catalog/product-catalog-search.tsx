@@ -207,13 +207,15 @@ function CatalogNutrition({ item }: { item: CatalogSearchItem }) {
     return <span className="catalog-nutrition-empty">Nährwerte nicht angegeben</span>;
   }
 
-  return <dl className="catalog-nutrition" aria-label="Nährwerte pro 100 Gramm oder Milliliter">
-    {available.map(([label, value]) => <div key={label}>
-      <dt>{label}</dt>
-      <dd>{formatNutrient(value)}{label === "kcal" ? "" : " g"}</dd>
-    </div>)}
-    <span>pro 100 g/ml</span>
-  </dl>;
+  return <div className="catalog-nutrition-wrap">
+    <dl className="catalog-nutrition" aria-label="Nährwerte pro 100 Gramm oder Milliliter">
+      {available.map(([label, value]) => <div key={label}>
+        <dt>{label}</dt>
+        <dd>{formatNutrient(value)}{label === "kcal" ? "" : " g"}</dd>
+      </div>)}
+    </dl>
+    <span className="catalog-nutrition-basis">pro 100 g/ml</span>
+  </div>;
 }
 
 function formatNutrient(value: number | undefined): string {
