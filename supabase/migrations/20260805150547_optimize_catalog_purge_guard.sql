@@ -2,9 +2,12 @@ begin;
 
 -- The purge RPC already holds the exact failed run FOR UPDATE and opens this
 -- transaction-local gate only after validating its original generation/counts.
--- Take that path before the per-row run lookup so a bounded 5,000-row delete
--- does not repeat the same lock query 5,000 times. Every ordinary mutation keeps
--- the existing fail-closed seal checks below.
+-- This one-time fast path is additionally pinned to the explicitly authorized
+-- failed Production run. It cannot accelerate or authorize deletion from any
+-- other import generation. Take that path before the per-row run lookup so a
+-- bounded 5,000-row delete does not repeat the same lock query 5,000 times.
+-- Every ordinary mutation and every other run keeps the existing fail-closed
+-- seal checks below.
 create or replace function public.guard_product_catalog_seal_state()
 returns trigger
 language plpgsql
@@ -18,6 +21,7 @@ declare
 begin
   if tg_op = 'DELETE'
     and auth.role() = 'service_role'
+    and old.import_run_id = '17261753-ba94-49b1-92e0-59c42f8a5f24'::uuid
     and purge_run_id = old.import_run_id::text then
     return old;
   end if;
@@ -29,6 +33,16 @@ begin
 
   if not found then
     raise exception using errcode = 'P0002', message = 'Catalog import run not found';
+  end if;
+
+  -- Preserve the recovery migration's generic, status-checked purge path for
+  -- every other failed run. It is intentionally slower because it takes the
+  -- run lock for each row, but future recovery workflows remain functional.
+  if tg_op = 'DELETE'
+    and auth.role() = 'service_role'
+    and target_run.status = 'failed'
+    and purge_run_id = target_run.id::text then
+    return old;
   end if;
 
   if tg_op = 'INSERT' then
