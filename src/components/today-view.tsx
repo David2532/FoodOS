@@ -1,23 +1,70 @@
 import { ArrowRight, Beef, Clock3, Database, Flame, PackageCheck, PackageSearch, Plus, ShieldAlert, Wheat } from "lucide-react";
+import type { NutritionMetricSummary, NutritionTotals } from "@/domain/nutrition-summary";
 import type { AppSnapshot, AppView } from "@/lib/types";
+
+function nutritionNumber(metric: NutritionMetricSummary, maximumFractionDigits = 1): string {
+  if (metric.value === null) return "—";
+  return new Intl.NumberFormat("de-DE", { maximumFractionDigits }).format(metric.value);
+}
+
+function nutritionCoverage(metric: NutritionMetricSummary): string | null {
+  if (metric.status === "empty") return "Noch keine Buchung";
+  if (metric.status === "unknown") return `${metric.totalEntries} ${metric.totalEntries === 1 ? "Buchung" : "Buchungen"} ohne Angabe`;
+  if (metric.status === "partial") {
+    const missing = metric.totalEntries - metric.knownEntries;
+    return `${missing} von ${metric.totalEntries} Buchungen ohne Angabe`;
+  }
+  return null;
+}
+
+function NutritionMacros({ totals, period }: { totals: NutritionTotals; period: "heute" | "diese Woche" }) {
+  const metrics = [
+    { label: "Protein", metric: totals.proteinG, icon: <Beef size={16} /> },
+    { label: "Carbs", metric: totals.carbsG, icon: <Wheat size={16} /> },
+    { label: "Fett", metric: totals.fatG, icon: <Flame size={16} /> }
+  ];
+  return <div className="macro-grid">
+    {metrics.map(({ label, metric, icon }) => {
+      const coverage = nutritionCoverage(metric);
+      return <div key={label}>
+        {icon}<span>{label}</span>
+        <strong aria-label={`${label} ${period}: ${metric.value === null ? "Unbekannt" : `${nutritionNumber(metric)} Gramm`}`}>
+          {nutritionNumber(metric)} <small>{metric.value === null ? "unbekannt" : "g"}</small>
+        </strong>
+        {coverage && <small>{coverage}</small>}
+      </div>;
+    })}
+  </div>;
+}
 
 export function TodayView({ onNavigate, onOpenCatalog, snapshot }: { onNavigate: (view: AppView) => void; onOpenCatalog?: (query?: string) => void; snapshot?: AppSnapshot }) {
   if (snapshot) {
     const urgent = snapshot.inventory.find((item) => ["past_use_by", "today", "soon", "past_best_before"].includes(item.expiryState));
     const target = snapshot.today.calorieTarget;
-    const targetProgress = target ? Math.min(100, snapshot.today.kcal / target * 100) : 0;
+    const targetProgress = target && snapshot.today.kcal.value !== null ? Math.min(100, snapshot.today.kcal.value / target * 100) : 0;
+    const todayCoverage = nutritionCoverage(snapshot.today.kcal);
+    const weekCoverage = nutritionCoverage(snapshot.nutritionWeek.totals.kcal);
     return (
       <div className="stack-lg page-enter">
-        <section className="hero-card">
-          <div className="hero-topline"><div><span className="status-pulse" />Dauerhaft verbunden</div></div>
-          <div className="hero-number"><strong>{Math.round(snapshot.today.kcal).toLocaleString("de-DE")}</strong><span>{target ? `/ ${target.toLocaleString("de-DE")} kcal` : "kcal heute"}</span></div>
-          {target && <div className="progress-track"><span style={{ width: `${targetProgress}%` }} /></div>}
-          <div className="macro-grid">
-            <div><Beef size={16} /><span>Protein</span><strong>{Math.round(snapshot.today.proteinG)} <small>{snapshot.today.proteinTargetG ? `/ ${Math.round(snapshot.today.proteinTargetG)} g` : "g"}</small></strong></div>
-            <div><Wheat size={16} /><span>Carbs</span><strong>{Math.round(snapshot.today.carbsG)} <small>g</small></strong></div>
-            <div><Flame size={16} /><span>Fett</span><strong>{Math.round(snapshot.today.fatG)} <small>g</small></strong></div>
+        <section className="hero-card" aria-labelledby="nutrition-today-title">
+          <div className="hero-topline"><div id="nutrition-today-title"><span className="status-pulse" />Heute · {snapshot.today.entryCount} {snapshot.today.entryCount === 1 ? "Buchung" : "Buchungen"}</div></div>
+          <div className="hero-number">
+            <strong aria-label={`Kalorien heute: ${snapshot.today.kcal.value === null ? "Unbekannt" : `${nutritionNumber(snapshot.today.kcal, 0)} Kilokalorien`}`}>{nutritionNumber(snapshot.today.kcal, 0)}</strong>
+            <span>{snapshot.today.kcal.value === null ? "kcal unbekannt" : target ? `/ ${target.toLocaleString("de-DE")} kcal` : "kcal heute"}</span>
           </div>
+          {todayCoverage && <p role="status">{todayCoverage}</p>}
+          {target && snapshot.today.kcal.value !== null && <div className="progress-track" aria-label={`${Math.round(targetProgress)} Prozent des Tagesziels`}><span style={{ width: `${targetProgress}%` }} /></div>}
+          <NutritionMacros totals={snapshot.today} period="heute" />
           <button className="primary-button" onClick={() => onNavigate("inventory")}><PackageCheck size={18} /> Verzehr aus Vorrat buchen</button>
+        </section>
+        <section className="hero-card" aria-labelledby="nutrition-week-title">
+          <div className="hero-topline"><div id="nutrition-week-title"><span className="status-pulse" />Diese Woche · {snapshot.nutritionWeek.totals.entryCount} {snapshot.nutritionWeek.totals.entryCount === 1 ? "Buchung" : "Buchungen"}</div></div>
+          <div className="hero-number">
+            <strong aria-label={`Kalorien diese Woche: ${snapshot.nutritionWeek.totals.kcal.value === null ? "Unbekannt" : `${nutritionNumber(snapshot.nutritionWeek.totals.kcal, 0)} Kilokalorien`}`}>{nutritionNumber(snapshot.nutritionWeek.totals.kcal, 0)}</strong>
+            <span>{snapshot.nutritionWeek.totals.kcal.value === null ? "kcal unbekannt" : "kcal gesamt"}</span>
+          </div>
+          {weekCoverage && <p>{weekCoverage}</p>}
+          <NutritionMacros totals={snapshot.nutritionWeek.totals} period="diese Woche" />
         </section>
         <CatalogShortcut onNavigate={onNavigate} />
         {snapshot.recallSource.status !== "fresh" && <section className="recall-source-warning" role="status"><ShieldAlert size={21} /><div><strong>{snapshot.recallSource.status === "stale" ? "Rückrufquelle ist veraltet" : "Rückrufprüfung nicht verfügbar"}</strong><p>Es ist keine aktuelle Aussage zur Betroffenheit oder Sicherheit möglich. Prüfe im Zweifel die amtliche Quelle lebensmittelwarnung.de.</p></div></section>}

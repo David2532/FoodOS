@@ -1,3 +1,5 @@
+import type { NutritionDaySummary, NutritionWeekSummary } from "@/domain/nutrition-summary";
+
 export type AppView = "today" | "inventory" | "scan" | "plan" | "shopping" | "settings";
 
 export type RiskLevel = "avoid" | "watch" | "info" | "ok" | "unknown";
@@ -99,14 +101,11 @@ export interface ShoppingItem {
 export interface AppSnapshot {
   household: { id: string; name: string };
   inventory: InventoryItem[];
-  today: {
-    kcal: number;
-    proteinG: number;
-    carbsG: number;
-    fatG: number;
+  today: NutritionDaySummary & {
     calorieTarget?: number;
     proteinTargetG?: number;
   };
+  nutritionWeek: NutritionWeekSummary;
   weekStart: string;
   mealPlan: MealPlanItem[];
   shoppingItems: ShoppingItem[];

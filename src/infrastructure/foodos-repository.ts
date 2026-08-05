@@ -2,8 +2,10 @@ import "server-only";
 
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { nutritionSummaryRowsSchema } from "@/contracts/nutrition-summary";
 import { classifyExpiry } from "@/domain/expiry";
 import { criticalFoodRiskMatches, type FoodRiskPreference } from "@/domain/ingredient-relevance";
+import { buildNutritionSummary } from "@/domain/nutrition-summary";
 import { assessRecall, type RecallAssessment, type RecallNotice } from "@/domain/recall";
 import type { AppSnapshot, InventoryItem } from "@/lib/types";
 
@@ -30,11 +32,6 @@ const nutritionRowSchema = z.object({
   protein_g: z.coerce.number().nullable(),
   carbohydrates_g: z.coerce.number().nullable(),
   fat_g: z.coerce.number().nullable()
-});
-
-const foodLogSchema = z.object({
-  eaten_at: z.string(),
-  nutrition_snapshot: z.record(z.string(), z.unknown())
 });
 
 const profileSchema = z.object({
@@ -108,13 +105,6 @@ function plusDays(dateValue: string, days: number): string {
   const date = new Date(`${dateValue}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
-}
-
-function snapshotNumber(snapshot: Record<string, unknown>, key: string): number {
-  const value = snapshot[key];
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
-  return 0;
 }
 
 function formatAmount(amount: number, unit: string): string {
@@ -200,13 +190,8 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
   if (userResult.error || !userResult.data.user) return { kind: "error", message: "Deine Sitzung konnte nicht bestätigt werden." };
   const today = berlinDate();
   const weekStart = mondayOf(today);
-  const recentBoundary = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString();
-  const [foodLogResult, profileResult, mealPlanResult, shoppingListResult, recallSourceResult, foodRiskResult, metadataResult, recallEventsResult] = await Promise.all([
-    supabase
-      .from("food_log_entries")
-      .select("eaten_at, nutrition_snapshot")
-      .eq("user_id", userResult.data.user.id)
-      .gte("eaten_at", recentBoundary),
+  const [nutritionSummaryResult, profileResult, mealPlanResult, shoppingListResult, recallSourceResult, foodRiskResult, metadataResult, recallEventsResult] = await Promise.all([
+    supabase.rpc("get_my_nutrition_summary", { target_week_start: weekStart }),
     supabase.from("profiles").select("calorie_target, protein_target_g").maybeSingle(),
     supabase
       .from("meal_plan_slots")
@@ -241,8 +226,8 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
       .order("published_at", { ascending: false })
       .limit(500)
   ]);
-  if (foodLogResult.error || profileResult.error || mealPlanResult.error || shoppingListResult.error || recallSourceResult.error || foodRiskResult.error || metadataResult.error || recallEventsResult.error) return { kind: "error", message: "Tages-, Plan-, Einkaufs-, Risiko- oder Rückrufdaten konnten nicht geladen werden." };
-  const parsedLogs = z.array(foodLogSchema).safeParse(foodLogResult.data);
+  if (nutritionSummaryResult.error || profileResult.error || mealPlanResult.error || shoppingListResult.error || recallSourceResult.error || foodRiskResult.error || metadataResult.error || recallEventsResult.error) return { kind: "error", message: "Tages-, Wochen-, Plan-, Einkaufs-, Risiko- oder Rückrufdaten konnten nicht geladen werden." };
+  const parsedNutritionSummary = nutritionSummaryRowsSchema.safeParse(nutritionSummaryResult.data);
   const parsedProfile = profileSchema.nullable().safeParse(profileResult.data);
   const parsedMealPlan = z.array(mealPlanRowSchema).safeParse(mealPlanResult.data);
   const parsedShoppingList = shoppingListSchema.nullable().safeParse(shoppingListResult.data);
@@ -250,7 +235,14 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
   const parsedFoodRisks = z.array(foodRiskRowSchema).safeParse(foodRiskResult.data);
   const parsedMetadata = z.array(productMetadataRowSchema).safeParse(metadataResult.data);
   const parsedRecallEvents = z.array(recallEventRowSchema).safeParse(recallEventsResult.data);
-  if (!parsedLogs.success || !parsedProfile.success || !parsedMealPlan.success || !parsedShoppingList.success || !parsedRecallSource.success || !parsedFoodRisks.success || !parsedMetadata.success || !parsedRecallEvents.success) return { kind: "error", message: "Tages-, Plan-, Einkaufs-, Risiko- oder Rückrufdaten haben ein unerwartetes Format." };
+  if (!parsedNutritionSummary.success || !parsedProfile.success || !parsedMealPlan.success || !parsedShoppingList.success || !parsedRecallSource.success || !parsedFoodRisks.success || !parsedMetadata.success || !parsedRecallEvents.success) return { kind: "error", message: "Tages-, Wochen-, Plan-, Einkaufs-, Risiko- oder Rückrufdaten haben ein unerwartetes Format." };
+
+  let nutritionSummary: ReturnType<typeof buildNutritionSummary>;
+  try {
+    nutritionSummary = buildNutritionSummary(parsedNutritionSummary.data, today);
+  } catch {
+    return { kind: "error", message: "Die Nährwert-Zusammenfassung ist unvollständig oder widersprüchlich." };
+  }
 
   const recallSource = parsedRecallSource.data?.last_success_at ? {
     status: (Date.now() - new Date(parsedRecallSource.data.last_success_at).getTime() <= 48 * 60 * 60 * 1000 ? "fresh" : "stale") as "fresh" | "stale",
@@ -319,24 +311,17 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
     };
   });
 
-  const todayLogs = parsedLogs.data.filter((entry) => berlinDate(new Date(entry.eaten_at)) === today);
-  const dailyTotals = todayLogs.reduce((totals, entry) => ({
-    kcal: totals.kcal + snapshotNumber(entry.nutrition_snapshot, "kcal"),
-    proteinG: totals.proteinG + snapshotNumber(entry.nutrition_snapshot, "protein_g"),
-    carbsG: totals.carbsG + snapshotNumber(entry.nutrition_snapshot, "carbohydrates_g"),
-    fatG: totals.fatG + snapshotNumber(entry.nutrition_snapshot, "fat_g")
-  }), { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 });
-
   return {
     kind: "ready",
     snapshot: {
       household: { id: membership.data.households.id, name: membership.data.households.name },
       inventory,
       today: {
-        ...dailyTotals,
+        ...nutritionSummary.today,
         calorieTarget: parsedProfile.data?.calorie_target ?? undefined,
         proteinTargetG: parsedProfile.data?.protein_target_g ?? undefined
       },
+      nutritionWeek: nutritionSummary.week,
       weekStart,
       mealPlan: parsedMealPlan.data.map((entry) => ({
         id: entry.id,
