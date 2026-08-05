@@ -12,12 +12,18 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:unit:changed": "vitest related --run",
     "test:coverage": "vitest run --coverage",
     "test:db": "supabase test db",
     "test:e2e": "npm run build && playwright test",
     "test:e2e:auth": "npm run build && playwright test --config=playwright.auth.config.ts",
     "catalog:import": "node scripts/import-public-catalog.mjs",
     "catalog:verify": "node scripts/verify-public-catalog.mjs",
+    "agent:context": "node scripts/agent/agent-context.mjs",
+    "migration:new": "node scripts/agent/migration-new.mjs",
+    "verify:changed": "node scripts/agent/verify-changed.mjs",
+    "verify:full": "npm run verify",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {

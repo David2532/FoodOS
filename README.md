@@ -44,7 +44,8 @@ zeigt Quelle, fehlende Angaben sowie Provider-Ausfälle ausdrücklich an.
 ## Verifizieren
 
 ```bash
-npm run verify
+npm run verify:changed
+npm run verify:full
 npm run test:coverage
 npm run test:db
 npm run test:e2e
@@ -70,19 +71,27 @@ Für den echten lokalen Auth-Flow zuerst die von `npm exec supabase status` ausg
 und verifiziert TOTP und legt den Haushalt an; anschließend die lokale Testdatenbank mit
 `npm exec supabase db reset -- --local --no-seed` bereinigen.
 
-## Mit Codex weiterarbeiten
+## Schneller Codex-/Entwicklerstart
 
-Codex or another implementation agent should read, in order:
+```bash
+git status --short --branch
+npm run agent:context -- --list
+npm run agent:context -- <scope>
+# nur die ausgegebenen Dateien lesen und gezielt ändern
+npm run verify:changed
+npm run verify:full # nur vor zentralen oder risikoreichen Übergaben
+```
 
-1. [`AGENTS.md`](AGENTS.md) for non-negotiable repository rules;
-2. [`docs/REPOSITORY_MAP.md`](docs/REPOSITORY_MAP.md) for current versus planned state,
-   document precedence and the vertical-slice workflow;
-3. [`plans/MASTER_PLAN.md`](plans/MASTER_PLAN.md) and the current validation/delivery gate;
-4. the exact user flow, specialist plan and quality/test contracts for the selected slice.
+[`AGENTS.md`](AGENTS.md) enthält die kurzen repositoryweiten Invarianten.
+[`docs/REPOSITORY_MAP.md`](docs/REPOSITORY_MAP.md) trennt Implementierung, lokale und
+Production-Evidence. Die typisierte Scope-Map unter `scripts/agent/scopes.mjs` routet zu
+den jeweils notwendigen Fachplänen, Codepfaden und Tests. Unbekannte Scopes brechen mit
+einer klaren Fehlermeldung ab.
 
-[`CODEX_PROMPT.md`](CODEX_PROMPT.md) is the comprehensive build brief. It does not turn
-unimplemented stages into a safe one-commit task or authorize fabricated users, metrics,
-approvals, deployments or legal conclusions.
+`npm run verify:changed -- --base=<ref>` dokumentiert seinen Vergleichspunkt und wählt
+risikobasiert Markdown-, Unit-, Typ-, Lint-, Build-, DB-/RLS- und E2E-Prüfungen. Ein
+fehlender lokaler Dienst bleibt `BLOCKED`. [`CODEX_PROMPT.md`](CODEX_PROMPT.md) ist nur
+für einen ausdrücklich angeforderten vollständigen Multi-Stage-Build bestimmt.
 
 ## Produkt-, Design- und Umsetzungsunterlagen
 

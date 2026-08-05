@@ -1,5 +1,12 @@
 # FoodOS – One-Shot Codex-Auftrag
 
+> **Nur für einen ausdrücklich angeforderten vollständigen Multi-Stage-Build.** Dieses
+> Dokument ist kein Standard-Startpunkt für einzelne Aufgaben. Bei begrenzten Tasks
+> zuerst `AGENTS.md` lesen und `npm run agent:context -- <scope>` ausführen. Nur die dort
+> genannten Unterlagen lesen. Bereits nachweislich grüne, unveränderte Bereiche werden
+> weder erneut vollständig analysiert noch pauschal getestet. Der komplette folgende
+> Auftrag wird nur ausgeführt, wenn der Nutzer ihn ausdrücklich als Gesamtauftrag nennt.
+
 Arbeite als verantwortlicher Senior Full-Stack- und Product-Engineer direkt in diesem
 Repository. Entwickle FoodOS zu einem kommerziell veröffentlichbaren Produkt mit
 Next.js-Weboberfläche, nativen iOS-/Android-Apps und portabler Supabase-Datenbank weiter.
@@ -22,22 +29,23 @@ kontextuell und nie mit Lebensmittel-, Gesundheits- oder Profildaten personalisi
 
 ## Vorgehen
 
-1. Lies vollständig `AGENTS.md`, `README.md`, `docs/REPOSITORY_MAP.md`, `design.md`,
-   `design-ceo.md`, `mockups/README.md` sowie alle Dokumente unter `plans/`, `legal/`
-   und `docs/decisions/`. Inspiziere anschließend mindestens `package.json`,
-   `.env.example`, `vercel.json`, `src/`, `public/` und
-   `supabase/migrations/`. Falls der Ordner bereits ein Git-Repository ist, prüfe auch
-   `git status`, damit keine fremden Änderungen verloren gehen. Falls nicht, arbeite
-   normal weiter und initialisiere Git erst im Rahmen der vereinbarten Veröffentlichung.
-2. Führe vor der Änderung `npm install` und `npm run verify` als Baseline aus. Wenn die
-   Baseline fehlschlägt, dokumentiere den bereits vorhandenen Fehler und behebe ihn,
-   sofern er zum Auftrag gehört.
+1. Lies `AGENTS.md`, prüfe `git status` und zerlege den ausdrücklich angeforderten
+   Gesamtauftrag in die vorhandenen Scopes. Führe vor jeder Etappe
+   `npm run agent:context -- <scope>` aus und lies nur die dort genannten Fachunterlagen
+   und tatsächlich betroffenen Dateien. Lies insbesondere nicht pauschal alle Dateien
+   unter `plans/`, `legal/`, `mockups/`, `docs/decisions/` oder `docs/evidence/` im Voraus.
+2. Installiere für einen echten Gesamtauftrag die gesperrten Abhängigkeiten einmalig.
+   Nutze `npm run verify:changed` etappenweise. Eine vollständige Baseline ist nur nötig,
+   wenn der Ausgangszustand für mehrere zentrale Bereiche unbekannt ist; bereits grüne
+   und unveränderte Bereiche werden nicht erneut als Forschungsaufgabe behandelt.
 3. Erstelle einen kurzen, priorisierten Implementierungsplan und arbeite ihn danach
    selbstständig in funktionierenden vertikalen Schnitten ab. Stelle nur dann eine
    Rückfrage, wenn Zugangsdaten, eine irreversible Entscheidung oder eine echte
    externe Berechtigung fehlen. Triff für normale Produktdetails vernünftige Annahmen.
-4. Prüfe nach jeder größeren Etappe Typen und Tests. Beende den Auftrag erst nach dem
-   vollständigen Verifikations- und Deployment-Check.
+4. Prüfe nach jeder größeren Etappe die vom Scope und Diff ausgewählten Typen und Tests.
+   Nutze `npm run verify:full` vor dem risikoreichen Gesamt-Handoff, nicht als reflexiven
+   Ersatz für gezielte Checks. Beende den Gesamtauftrag erst nach den tatsächlich
+   erforderlichen Verifikations- und Deployment-Checks.
 
 ## Verbindlicher Clean-Code-Workflow
 
