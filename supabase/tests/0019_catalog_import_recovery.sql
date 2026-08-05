@@ -62,6 +62,12 @@ insert into auth.users (
   'authenticated', 'authenticated', 'catalog-recovery@example.test', '',
   '{}'::jsonb, '{}'::jsonb, now(), now()
 );
+insert into auth.sessions (id, user_id, created_at, updated_at, aal, not_after)
+values (
+  'aaaaaaaa-9191-4191-8191-222222222222',
+  '91919191-9191-4191-8191-919191919191',
+  now(), now(), 'aal2', now() + interval '1 day'
+);
 
 select set_config('request.jwt.claims', '{"role":"service_role"}', true);
 set local role service_role;
@@ -172,7 +178,7 @@ select throws_ok(
 reset role;
 select set_config(
   'request.jwt.claims',
-  '{"sub":"91919191-9191-4191-8191-919191919191","role":"authenticated","aal":"aal2"}',
+  '{"sub":"91919191-9191-4191-8191-919191919191","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-9191-4191-8191-222222222222"}',
   true
 );
 set local role authenticated;

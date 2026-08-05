@@ -53,6 +53,12 @@ insert into auth.users (
     'authenticated', 'authenticated', 'nutrition-removed@example.test', '',
     '{}'::jsonb, '{}'::jsonb, now(), now()
   );
+insert into auth.sessions (id, user_id, created_at, updated_at, aal, not_after)
+values
+  ('aa220000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-000000000001', now(), now(), 'aal1', now() + interval '1 day'),
+  ('aa220000-0000-4000-8000-000000000002', 'a1000000-0000-4000-8000-000000000001', now(), now(), 'aal2', now() + interval '1 day'),
+  ('aa220000-0000-4000-8000-000000000003', 'a1000000-0000-4000-8000-000000000002', now(), now(), 'aal2', now() + interval '1 day'),
+  ('aa220000-0000-4000-8000-000000000004', 'a1000000-0000-4000-8000-000000000003', now(), now(), 'aal2', now() + interval '1 day');
 
 insert into public.profiles (user_id, display_name, timezone)
 values
@@ -131,7 +137,7 @@ select (current_date - (extract(isodow from current_date)::integer - 1))::text a
 
 select set_config(
   'request.jwt.claims',
-  '{"sub":"a1000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}',
+  '{"sub":"a1000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1","session_id":"aa220000-0000-4000-8000-000000000001"}',
   true
 );
 set local role authenticated;
@@ -145,7 +151,7 @@ select throws_ok(
 reset role;
 select set_config(
   'request.jwt.claims',
-  '{"sub":"a1000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}',
+  '{"sub":"a1000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2","session_id":"aa220000-0000-4000-8000-000000000002"}',
   true
 );
 set local role authenticated;
@@ -185,7 +191,7 @@ select results_eq(
 reset role;
 select set_config(
   'request.jwt.claims',
-  '{"sub":"a1000000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal2"}',
+  '{"sub":"a1000000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal2","session_id":"aa220000-0000-4000-8000-000000000003"}',
   true
 );
 set local role authenticated;
@@ -198,7 +204,7 @@ select results_eq(
 reset role;
 select set_config(
   'request.jwt.claims',
-  '{"sub":"a1000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
+  '{"sub":"a1000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2","session_id":"aa220000-0000-4000-8000-000000000004"}',
   true
 );
 set local role authenticated;
@@ -219,7 +225,7 @@ set timezone = 'Not/A-Timezone'
 where user_id = 'a1000000-0000-4000-8000-000000000001';
 select set_config(
   'request.jwt.claims',
-  '{"sub":"a1000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}',
+  '{"sub":"a1000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2","session_id":"aa220000-0000-4000-8000-000000000002"}',
   true
 );
 set local role authenticated;

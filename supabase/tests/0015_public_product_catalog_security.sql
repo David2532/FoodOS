@@ -219,9 +219,22 @@ select results_eq(
 );
 
 reset role;
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values (
+  '33333333-3333-4333-8333-333333333333',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'catalog-user@example.test', '',
+  '{}'::jsonb, '{}'::jsonb, now(), now()
+);
+insert into auth.sessions (id, user_id, created_at, updated_at, aal, not_after)
+values
+  ('aaaaaaaa-3333-4333-8333-111111111111', '33333333-3333-4333-8333-333333333333', now(), now(), 'aal1', now() + interval '1 day'),
+  ('aaaaaaaa-3333-4333-8333-222222222222', '33333333-3333-4333-8333-333333333333', now(), now(), 'aal2', now() + interval '1 day');
 select set_config(
   'request.jwt.claims',
-  '{"sub":"33333333-3333-4333-8333-333333333333","role":"authenticated","aal":"aal1"}',
+  '{"sub":"33333333-3333-4333-8333-333333333333","role":"authenticated","aal":"aal1","session_id":"aaaaaaaa-3333-4333-8333-111111111111"}',
   true
 );
 set local role authenticated;
@@ -254,7 +267,7 @@ select throws_ok(
 reset role;
 select set_config(
   'request.jwt.claims',
-  '{"sub":"33333333-3333-4333-8333-333333333333","role":"authenticated","aal":"aal2"}',
+  '{"sub":"33333333-3333-4333-8333-333333333333","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-3333-4333-8333-222222222222"}',
   true
 );
 set local role authenticated;

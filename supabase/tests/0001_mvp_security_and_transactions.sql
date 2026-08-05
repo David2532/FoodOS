@@ -150,9 +150,15 @@ insert into auth.users (
     '{}'::jsonb, '{}'::jsonb, now(), now()
   );
 
+insert into auth.sessions (id, user_id, created_at, updated_at, aal, not_after)
+values
+  ('aaaaaaaa-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', now(), now(), 'aal1', now() + interval '1 day'),
+  ('aaaaaaaa-1111-4111-8111-222222222222', '11111111-1111-4111-8111-111111111111', now(), now(), 'aal2', now() + interval '1 day'),
+  ('aaaaaaaa-2222-4222-8222-222222222222', '22222222-2222-4222-8222-222222222222', now(), now(), 'aal2', now() + interval '1 day');
+
 select set_config(
   'request.jwt.claims',
-  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal1"}',
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal1","session_id":"aaaaaaaa-1111-4111-8111-111111111111"}',
   true
 );
 set local role authenticated;
@@ -189,7 +195,7 @@ select throws_ok(
 reset role;
 select set_config(
   'request.jwt.claims',
-  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal2"}',
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-1111-4111-8111-222222222222"}',
   true
 );
 set local role authenticated;
@@ -308,7 +314,7 @@ select results_eq(
 reset role;
 select set_config(
   'request.jwt.claims',
-  '{"sub":"22222222-2222-4222-8222-222222222222","role":"authenticated","aal":"aal2"}',
+  '{"sub":"22222222-2222-4222-8222-222222222222","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-2222-4222-8222-222222222222"}',
   true
 );
 set local role authenticated;
@@ -339,7 +345,7 @@ select throws_ok(
 reset role;
 select set_config(
   'request.jwt.claims',
-  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal2"}',
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-1111-4111-8111-222222222222"}',
   true
 );
 set local role authenticated;
@@ -685,7 +691,7 @@ select id::text as owner_batch from public.inventory_batches limit 1 \gset
 reset role;
 select set_config(
   'request.jwt.claims',
-  '{"sub":"22222222-2222-4222-8222-222222222222","role":"authenticated","aal":"aal2"}',
+  '{"sub":"22222222-2222-4222-8222-222222222222","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-2222-4222-8222-222222222222"}',
   true
 );
 set local role authenticated;
@@ -703,7 +709,7 @@ select throws_ok(
 reset role;
 select set_config(
   'request.jwt.claims',
-  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal2"}',
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-1111-4111-8111-222222222222"}',
   true
 );
 set local role authenticated;
@@ -823,7 +829,7 @@ insert into public.recall_events (
 );
 select set_config(
   'request.jwt.claims',
-  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal2"}',
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-1111-4111-8111-222222222222"}',
   true
 );
 set local role authenticated;
@@ -982,7 +988,7 @@ set package_amount = 100, package_unit = 'g'
 where id = :'allocation_product'::uuid;
 select set_config(
   'request.jwt.claims',
-  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal2"}',
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-1111-4111-8111-222222222222"}',
   true
 );
 set local role authenticated;
@@ -1083,7 +1089,7 @@ select lives_ok(
 reset role;
 select set_config(
   'request.jwt.claims',
-  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal1"}',
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal1","session_id":"aaaaaaaa-1111-4111-8111-111111111111"}',
   true
 );
 set local role authenticated;

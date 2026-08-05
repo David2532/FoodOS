@@ -65,10 +65,15 @@ insert into auth.users (
     'authenticated', 'authenticated', 'payment-user@example.test', '',
     '{}'::jsonb, '{}'::jsonb, now(), now()
   );
+insert into auth.sessions (id, user_id, created_at, updated_at, aal, not_after)
+values
+  ('aaaaaaaa-4444-4444-8444-111111111111', '44444444-4444-4444-8444-444444444444', now(), now(), 'aal1', now() + interval '1 day'),
+  ('aaaaaaaa-4444-4444-8444-222222222222', '44444444-4444-4444-8444-444444444444', now(), now(), 'aal2', now() + interval '1 day'),
+  ('aaaaaaaa-5555-4555-8555-222222222222', '55555555-5555-4555-8555-555555555555', now(), now(), 'aal2', now() + interval '1 day');
 insert into public.ops_members (user_id, role)
 values ('44444444-4444-4444-8444-444444444444', 'ceo');
 
-select set_config('request.jwt.claims', '{"sub":"44444444-4444-4444-8444-444444444444","role":"authenticated","aal":"aal1"}', true);
+select set_config('request.jwt.claims', '{"sub":"44444444-4444-4444-8444-444444444444","role":"authenticated","aal":"aal1","session_id":"aaaaaaaa-4444-4444-8444-111111111111"}', true);
 set local role authenticated;
 select results_eq(
   $$ select count(*)::bigint from public.ops_finance_payment_evidence $$,
@@ -88,7 +93,7 @@ select throws_ok(
 );
 
 reset role;
-select set_config('request.jwt.claims', '{"sub":"55555555-5555-4555-8555-555555555555","role":"authenticated","aal":"aal2"}', true);
+select set_config('request.jwt.claims', '{"sub":"55555555-5555-4555-8555-555555555555","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-5555-4555-8555-222222222222"}', true);
 set local role authenticated;
 select results_eq(
   $$ select count(*)::bigint from public.ops_finance_payment_evidence $$,
@@ -181,7 +186,7 @@ select results_eq(
   'the 25 USD Supabase invoice remains OPEN without payment evidence'
 );
 
-select set_config('request.jwt.claims', '{"sub":"44444444-4444-4444-8444-444444444444","role":"authenticated","aal":"aal2"}', true);
+select set_config('request.jwt.claims', '{"sub":"44444444-4444-4444-8444-444444444444","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-4444-4444-8444-222222222222"}', true);
 set local role authenticated;
 select results_eq(
   $$ select count(*)::bigint from public.ops_finance_journals $$,

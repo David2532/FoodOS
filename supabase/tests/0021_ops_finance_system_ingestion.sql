@@ -61,12 +61,18 @@ insert into auth.users (
   'authenticated', 'authenticated', 'system-ingestion-ceo@example.test', '',
   '{}'::jsonb, '{}'::jsonb, now(), now()
 );
+insert into auth.sessions (id, user_id, created_at, updated_at, aal, not_after)
+values (
+  'aaaaaaaa-9999-4999-8999-222222222222',
+  '99999999-9999-4999-8999-999999999999',
+  now(), now(), 'aal2', now() + interval '1 day'
+);
 insert into public.ops_members (user_id, role)
 values ('99999999-9999-4999-8999-999999999999', 'ceo');
 
 select set_config(
   'request.jwt.claims',
-  '{"sub":"99999999-9999-4999-8999-999999999999","role":"authenticated","aal":"aal2"}',
+  '{"sub":"99999999-9999-4999-8999-999999999999","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-9999-4999-8999-222222222222"}',
   true
 );
 set local role authenticated;

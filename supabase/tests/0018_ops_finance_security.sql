@@ -44,14 +44,26 @@ select ok(
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
   raw_app_meta_data, raw_user_meta_data, created_at, updated_at
-) values (
+) values
+(
   '44444444-4444-4444-8444-444444444444',
   '00000000-0000-0000-0000-000000000000',
   'authenticated', 'authenticated', 'ceo@example.test', '',
   '{}'::jsonb, '{}'::jsonb, now(), now()
+),
+(
+  '55555555-5555-4555-8555-555555555555',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'ops-outsider@example.test', '',
+  '{}'::jsonb, '{}'::jsonb, now(), now()
 );
+insert into auth.sessions (id, user_id, created_at, updated_at, aal, not_after)
+values
+  ('aaaaaaaa-4444-4444-8444-111111111111', '44444444-4444-4444-8444-444444444444', now(), now(), 'aal1', now() + interval '1 day'),
+  ('aaaaaaaa-4444-4444-8444-222222222222', '44444444-4444-4444-8444-444444444444', now(), now(), 'aal2', now() + interval '1 day'),
+  ('aaaaaaaa-5555-4555-8555-222222222222', '55555555-5555-4555-8555-555555555555', now(), now(), 'aal2', now() + interval '1 day');
 insert into public.ops_members (user_id, role) values ('44444444-4444-4444-8444-444444444444', 'ceo');
-select set_config('request.jwt.claims', '{"sub":"44444444-4444-4444-8444-444444444444","role":"authenticated","aal":"aal1"}', true);
+select set_config('request.jwt.claims', '{"sub":"44444444-4444-4444-8444-444444444444","role":"authenticated","aal":"aal1","session_id":"aaaaaaaa-4444-4444-8444-111111111111"}', true);
 set local role authenticated;
 
 select results_eq(
@@ -72,7 +84,7 @@ select throws_ok(
 );
 
 reset role;
-select set_config('request.jwt.claims', '{"sub":"44444444-4444-4444-8444-444444444444","role":"authenticated","aal":"aal2"}', true);
+select set_config('request.jwt.claims', '{"sub":"44444444-4444-4444-8444-444444444444","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-4444-4444-8444-222222222222"}', true);
 set local role authenticated;
 
 select ok(private.has_ops_role('ceo'), 'the assigned AAL2 CEO has the explicit Ops role');
@@ -261,7 +273,7 @@ select throws_ok(
   'ledger line currency must match the journal currency'
 );
 
-select set_config('request.jwt.claims', '{"sub":"55555555-5555-4555-8555-555555555555","role":"authenticated","aal":"aal2"}', true);
+select set_config('request.jwt.claims', '{"sub":"55555555-5555-4555-8555-555555555555","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-5555-4555-8555-222222222222"}', true);
 set local role authenticated;
 select throws_ok(
   $$ select public.record_ops_supplier_invoice('supabase', 'test-no-role', 'Supabase', 'Database', 2500, 'USD', '2026-08-05', '2026-08-05', repeat('d', 64)) $$,
