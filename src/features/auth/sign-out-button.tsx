@@ -17,6 +17,7 @@ const cleanupPendingMessage = "Die Löschung lokaler Offline-Daten ist noch nich
 const cleanupUnconfirmedMessage = "Die sichere Entfernung lokaler Offline-Daten konnte nicht bestätigt werden. Du bleibst angemeldet. Prüfe den Browser-Speicher und versuche die Abmeldung erneut.";
 const summaryFailureMessage = "Die lokale Offline-Warteschlange konnte nicht sicher gelesen werden. Du bleibst angemeldet. Prüfe den Browser-Speicher und versuche es erneut.";
 const signOutFailureMessage = "Die lokale Löschung wurde bestätigt, aber FoodOS konnte die Abmeldung nicht bestätigen. Versuche es erneut, bevor du dieses Gerät unbeaufsichtigt lässt.";
+const householdSelectionCleanupFailureMessage = "Die lokale Löschung wurde bestätigt, aber die Haushaltsauswahl konnte nicht sicher entfernt werden. Du bleibst angemeldet und kannst die Abmeldung erneut versuchen.";
 
 export function SignOutButton({ variant = "icon" }: { variant?: "icon" | "settings" }) {
   const router = useRouter();
@@ -60,6 +61,22 @@ export function SignOutButton({ variant = "icon" }: { variant?: "icon" | "settin
       }
       if (cleanup.status === "unconfirmed") {
         setError(cleanupUnconfirmedMessage);
+        return;
+      }
+
+      try {
+        const selectionCleanup = await fetch("/api/households/select", {
+          method: "DELETE",
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: { Accept: "application/json" }
+        });
+        if (!selectionCleanup.ok) {
+          setError(householdSelectionCleanupFailureMessage);
+          return;
+        }
+      } catch {
+        setError(householdSelectionCleanupFailureMessage);
         return;
       }
 

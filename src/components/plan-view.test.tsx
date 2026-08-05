@@ -56,7 +56,11 @@ function planItem(overrides: Partial<MealPlanItem> = {}): MealPlanItem {
 
 function snapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
   return {
+    currentUserId: "00000000-0000-4000-8000-000000000009",
     household: { id: householdId, name: "Testhaushalt" },
+    households: [{ household_id: householdId, household_name: "Testhaushalt", member_role: "owner", membership_revision: 1, member_count: 1, member_limit: 1 }],
+    householdMembers: [],
+    pendingHouseholdInvitations: [],
     inventory: [inventory()],
     today: { date: "2026-08-05", entryCount: 0, kcal: metric, proteinG: metric, carbsG: metric, fatG: metric },
     nutritionWeek: {

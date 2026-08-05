@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, CloudOff, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -8,6 +8,7 @@ import {
   flushQueuedOperations,
   getOfflineDataStorageState,
   getOutboxSummary,
+  reconcileOfflineHouseholdAccess,
   subscribeToOfflineDataStorageState,
   subscribeToOutbox,
   type OfflineDataStorageState,
@@ -16,12 +17,18 @@ import {
 
 const empty: OutboxSummary = { queued: 0, sending: 0, rejected: 0 };
 
-export function OutboxStatus() {
+export function OutboxStatus({ activeHouseholdIds }: { activeHouseholdIds?: string[] }) {
   const router = useRouter();
+  const routerRef = useRef(router);
+  const activeHouseholdKey = activeHouseholdIds?.join(",");
   const [summary, setSummary] = useState(empty);
   const [storageState, setStorageState] = useState<OfflineDataStorageState>(() => getOfflineDataStorageState());
   const [storageReadable, setStorageReadable] = useState(true);
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
+
+  useEffect(() => {
+    routerRef.current = router;
+  }, [router]);
 
   const refresh = useCallback(async () => {
     const lifecycle = getOfflineDataStorageState();
@@ -55,8 +62,11 @@ export function OutboxStatus() {
         return;
       }
       try {
+        if (activeHouseholdKey !== undefined) {
+          await reconcileOfflineHouseholdAccess(activeHouseholdKey ? activeHouseholdKey.split(",") : []);
+        }
         await flushQueuedOperations();
-        router.refresh();
+        routerRef.current.refresh();
       } catch {
         // refresh below exposes a readable failure state instead of treating it as empty.
       } finally {
@@ -73,7 +83,7 @@ export function OutboxStatus() {
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("online", handleOnline);
     };
-  }, [refresh, router]);
+  }, [activeHouseholdKey, refresh]);
 
   if (storageState === "cleanup-pending") {
     return <div className="outbox-status rejected" role="alert"><AlertTriangle size={16} /><span><strong>Lokale Offline-Daten werden noch entfernt</strong>Die Löschung ist noch nicht bestätigt. Schließe weitere FoodOS-Tabs; neue Offline-Speicherungen bleiben blockiert, bis der Vorgang abgeschlossen ist.</span></div>;

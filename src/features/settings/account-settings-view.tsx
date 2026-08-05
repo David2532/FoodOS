@@ -8,11 +8,16 @@ import { DataExportButton } from "@/features/privacy/data-export-button";
 import { PrivacyCenterButton } from "@/features/privacy/privacy-center-button";
 import { PasswordChangeForm } from "./password-change-form";
 import { ThemeOptions } from "./theme-options";
+import { HouseholdManagement } from "@/features/households/household-management";
+import { HouseholdInvitationAcceptance } from "@/features/households/household-invitation-acceptance";
+import type { AppSnapshot } from "@/lib/types";
 
-export function AccountSettingsView({ accountEmail, billingLabAvailable = false, initialPrivacyChoices, onClose }: {
+export function AccountSettingsView({ accountEmail, billingLabAvailable = false, initialPrivacyChoices, snapshot, onDataChanged, onClose }: {
   accountEmail?: string;
   billingLabAvailable?: boolean;
   initialPrivacyChoices?: PrivacyChoices;
+  snapshot: AppSnapshot;
+  onDataChanged: () => void;
   onClose: () => void;
 }) {
   return (
@@ -26,6 +31,19 @@ export function AccountSettingsView({ accountEmail, billingLabAvailable = false,
         <CircleUserRound size={28} aria-hidden="true" />
         <div><span id="account-summary-title">Angemeldet als</span><strong>{accountEmail ?? "FoodOS-Konto"}</strong><small>Private Haushaltsdaten bleiben nur nach deiner 2FA-Verifizierung zugänglich.</small></div>
       </section>
+
+      <HouseholdManagement
+        currentUserId={snapshot.currentUserId}
+        currentHouseholdId={snapshot.household.id}
+        households={snapshot.households}
+        members={snapshot.householdMembers}
+        pendingInvitations={snapshot.pendingHouseholdInvitations}
+        onChanged={onDataChanged}
+      />
+
+      <div className="settings-card">
+        <HouseholdInvitationAcceptance onAccepted={onDataChanged} />
+      </div>
 
       <section className="settings-card" aria-labelledby="appearance-title">
         <div className="settings-section-heading"><span>Darstellung</span><h3 id="appearance-title">So soll FoodOS aussehen</h3></div>

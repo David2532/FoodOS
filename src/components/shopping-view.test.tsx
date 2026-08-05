@@ -20,7 +20,11 @@ import { ShoppingView } from "./shopping-view";
 
 const metric = { value: null, knownEntries: 0, totalEntries: 0, status: "empty" as const };
 const snapshot: AppSnapshot = {
+  currentUserId: "00000000-0000-4000-8000-000000000009",
   household: { id: "00000000-0000-4000-8000-000000000001", name: "Testhaushalt" },
+  households: [{ household_id: "00000000-0000-4000-8000-000000000001", household_name: "Testhaushalt", member_role: "owner", membership_revision: 1, member_count: 1, member_limit: 1 }],
+  householdMembers: [],
+  pendingHouseholdInvitations: [],
   inventory: [],
   today: { date: "2026-08-05", entryCount: 0, kcal: metric, proteinG: metric, carbsG: metric, fatG: metric },
   nutritionWeek: {

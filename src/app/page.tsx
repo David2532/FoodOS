@@ -11,6 +11,8 @@ import { loadCurrentPrivacyChoices } from "@/infrastructure/privacy-repository";
 import { redirect } from "next/navigation";
 import { isBillingLabEnvironment } from "@/domain/entitlements";
 import { configuredApplicationOrigin } from "@/domain/request-origin";
+import { HOUSEHOLD_SELECTION_COOKIE } from "@/domain/household-selection";
+import { cookies } from "next/headers";
 
 // Authentication depends on request cookies and runtime deployment configuration.
 export const dynamic = "force-dynamic";
@@ -49,7 +51,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ a
   if (privacy.kind === "required") return <PrivacyRecordGate />;
   if (privacy.kind === "error") return <AuthFrame showSignOut eyebrow="Datenschutz" title="Auswahl nicht verfügbar" description={privacy.message}><p className="auth-message error" role="alert">Lade die Seite neu. Private Haushaltsdaten bleiben bis zur erfolgreichen Prüfung geschlossen.</p></AuthFrame>;
 
-  const app = await loadFoodOsSnapshot(supabase);
+  const selectedHouseholdId = (await cookies()).get(HOUSEHOLD_SELECTION_COOKIE)?.value;
+  const app = await loadFoodOsSnapshot(supabase, selectedHouseholdId);
   if (app.kind === "onboarding") return <OnboardingScreen />;
   if (app.kind === "error") {
     return <AuthFrame showSignOut eyebrow="Datenzugriff" title="FoodOS konnte nicht geladen werden" description={app.message}><p className="auth-message error" role="alert">Versuche es erneut. Bleibt der Fehler bestehen, nutze die sichere Referenz FOS-LOAD-PRIVATE.</p></AuthFrame>;

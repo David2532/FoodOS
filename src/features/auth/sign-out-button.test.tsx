@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
   clearOfflineData: vi.fn(),
   getOfflineDataStorageState: vi.fn(),
   getOutboxSummary: vi.fn(),
+  deleteSelection: vi.fn(),
   refresh: vi.fn(),
   signOut: vi.fn(),
   waitForOfflineDataCleanupCompletion: vi.fn()
@@ -46,10 +47,13 @@ describe("SignOutButton", () => {
     state.getOfflineDataStorageState.mockReturnValue("available");
     state.getOutboxSummary.mockResolvedValue({ queued: 0, sending: 0, rejected: 0 });
     state.signOut.mockResolvedValue({ error: null });
+    state.deleteSelection.mockResolvedValue(new Response(JSON.stringify({ cleared: true }), { status: 200 }));
+    vi.stubGlobal("fetch", state.deleteSelection);
   });
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
@@ -70,6 +74,8 @@ describe("SignOutButton", () => {
     completion.resolve({ status: "cleared" });
 
     await waitFor(() => expect(state.signOut).toHaveBeenCalledWith({ scope: "local" }));
+    expect(state.deleteSelection).toHaveBeenCalledWith("/api/households/select", expect.objectContaining({ method: "DELETE", cache: "no-store" }));
+    expect(state.deleteSelection.mock.invocationCallOrder[0]).toBeLessThan(state.signOut.mock.invocationCallOrder[0]);
     expect(state.clearStagedPrivacyChoice).toHaveBeenCalledOnce();
     expect(state.refresh).toHaveBeenCalledOnce();
   });
@@ -85,5 +91,18 @@ describe("SignOutButton", () => {
     expect(alert.textContent).toContain("konnte nicht bestätigt werden");
     expect(state.signOut).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: /Sicher abmelden/ }).getAttribute("disabled")).toBeNull();
+  });
+
+  it("keeps the authenticated session when the HttpOnly selection cookie cannot be cleared", async () => {
+    state.clearOfflineData.mockResolvedValue({ status: "cleared" });
+    state.deleteSelection.mockResolvedValue(new Response(null, { status: 503 }));
+    render(<SignOutButton variant="settings" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Sicher abmelden/ }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Haushaltsauswahl konnte nicht sicher entfernt werden");
+    expect(state.signOut).not.toHaveBeenCalled();
+    expect(state.refresh).not.toHaveBeenCalled();
   });
 });

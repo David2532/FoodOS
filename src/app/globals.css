@@ -760,14 +760,50 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .auth-complete.incomplete > svg { color: var(--warm); }
 .auth-complete .settings-form-actions { width: 100%; }
 
+.household-management { display: grid; gap: 14px; }
+.household-management .settings-section-heading { margin-bottom: 0; }
+.household-selector { display: grid; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 760; }
+.household-selector select { width: 100%; min-height: 46px; border: 1px solid var(--line); border-radius: 14px; padding: 0 42px 0 13px; color: var(--ink); background: var(--field-background); font: inherit; font-size: 12px; }
+.household-current { min-height: 58px; border: 1px solid var(--line); border-radius: 15px; padding: 11px 12px; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; align-items: center; background: var(--settings-action-background); }
+.household-current > svg { color: var(--lime); }
+.household-current > span, .household-member-copy > span, .household-pending-list li > span { min-width: 0; display: grid; gap: 3px; }
+.household-current strong, .household-member-copy strong, .household-pending-list strong { overflow-wrap: anywhere; font-size: 12px; }
+.household-current small, .household-member-copy small, .household-pending-list small, .household-invite-heading small { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.household-member-list, .household-pending-list { margin: 0; padding: 0; display: grid; gap: 8px; list-style: none; }
+.household-member-list > li, .household-pending-list > li { min-width: 0; border: 1px solid var(--line); border-radius: 15px; padding: 11px 12px; display: grid; gap: 10px; background: var(--settings-action-background); }
+.household-member-copy { min-width: 0; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 9px; align-items: center; }
+.household-member-copy > svg { color: var(--lime); }
+.household-member-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.household-member-actions button, .household-pending-list button { min-height: 44px; border: 1px solid var(--line); border-radius: 12px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--ink); background: var(--surface-2); cursor: pointer; font-size: 10px; font-weight: 760; }
+.household-member-actions button.danger { color: var(--danger-text); }
+.household-member-actions button:disabled, .household-pending-list button:disabled { cursor: wait; opacity: .62; }
+.household-invitations { min-width: 0; border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 11px; }
+.household-invite-heading { display: grid; gap: 10px; }
+.household-invite-heading > div { min-width: 0; display: grid; gap: 3px; }
+.household-invite-heading strong { font-size: 13px; }
+.household-invite-secret { min-width: 0; border: 1px solid color-mix(in srgb, var(--lime) 48%, var(--line)); border-radius: 16px; padding: 12px; display: grid; gap: 10px; background: var(--success-background); }
+.household-invite-secret p { margin: 0; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 5px 12px; }
+.household-invite-secret p strong { font-size: 11px; }
+.household-invite-secret p span { color: var(--muted); font-size: 10px; }
+.household-invite-secret code { min-width: 0; border-radius: 11px; padding: 11px; color: var(--ink); background: var(--field-background); overflow-wrap: anywhere; user-select: all; font-size: 12px; line-height: 1.45; }
+.household-invite-secret button { min-height: 44px; border: 0; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; color: #071009; background: var(--lime); cursor: pointer; font-size: 11px; font-weight: 800; }
+.household-pending-list > li { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.household-entry-divider { min-height: 28px; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 9px; font-weight: 780; letter-spacing: .12em; text-transform: uppercase; }
+.household-entry-divider::before, .household-entry-divider::after { height: 1px; flex: 1; content: ""; background: var(--line); }
+.household-invite-accept { display: grid; gap: 12px; }
+
 @media (min-width: 600px) {
   .settings-view { padding-block: 4px 18px; }
   .settings-form-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .household-member-list > li { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .household-invite-heading { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
 }
 
 @media (max-width: 380px) {
   .theme-menu-popup { right: -6px; width: min(300px, calc(100vw - 20px)); }
   .settings-card { padding: 14px; }
+  .household-member-actions { grid-template-columns: 1fr; }
+  .household-pending-list > li { grid-template-columns: 1fr; }
 }
 
 /* The CEO workspace intentionally uses the same calm FoodOS tokens, but stays

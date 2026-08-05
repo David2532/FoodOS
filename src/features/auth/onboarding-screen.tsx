@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Home, LoaderCircle, Target, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { AuthFrame } from "./auth-frame";
+import { HouseholdInvitationAcceptance } from "@/features/households/household-invitation-acceptance";
+import { reconcileOfflineHouseholdAccess } from "@/infrastructure/offline-outbox";
 
 const onboardingSchema = z.object({
   householdName: z.string().trim().min(1, "Gib deinem Haushalt einen Namen.").max(80),
@@ -18,6 +20,16 @@ export function OnboardingScreen() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void reconcileOfflineHouseholdAccess([]).then((cleanup) => {
+      if (cleanup.unreadable > 0) {
+        setError("Alte beschädigte Browserdaten konnten nicht sicher einem Haushalt zugeordnet werden und werden nicht synchronisiert.");
+      }
+    }).catch(() => {
+      setError("Die lokale Haushaltsbereinigung konnte auf diesem Gerät noch nicht bestätigt werden.");
+    });
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -65,6 +77,8 @@ export function OnboardingScreen() {
         {error && <p className="auth-message error" role="alert">{error}</p>}
         <button className="primary-button wide" disabled={busy}>{busy && <LoaderCircle className="spin" size={17} />}{busy ? "Haushalt wird angelegt …" : "Haushalt sicher anlegen"}</button>
       </form>
+      <div className="household-entry-divider" aria-hidden="true"><span>oder</span></div>
+      <HouseholdInvitationAcceptance />
     </AuthFrame>
   );
 }

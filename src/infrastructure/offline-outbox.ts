@@ -9,6 +9,7 @@ import {
   type OfflineOperationKind,
   type OfflineOperationState
 } from "@/domain/offline-outbox";
+import { isHouseholdAccessDenied } from "@/domain/household-membership";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 const DB_NAME = "foodos-device-v1";
@@ -64,6 +65,14 @@ export interface OutboxSummary {
   sending: number;
   rejected: number;
 }
+
+export interface HouseholdScopedOfflinePurgeResult {
+  purged: number;
+  preserved: number;
+  unreadable: number;
+}
+
+export type HouseholdAccessDenialAction = "purge-household" | "reject-resource" | "revalidation-failed";
 
 export type DurableMutationResult<T> =
   | { status: "acked"; data: T }
@@ -275,6 +284,80 @@ async function removeOperation(db: IDBDatabase, id: string): Promise<void> {
   emitChange();
 }
 
+async function removeOperations(db: IDBDatabase, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const transaction = db.transaction(OPERATIONS, "readwrite");
+  const store = transaction.objectStore(OPERATIONS);
+  ids.forEach((id) => store.delete(id));
+  await transactionDone(transaction);
+  emitChange();
+}
+
+/**
+ * Applies a household-scoped deletion at the storage boundary. Callers provide
+ * the encrypted-record reader so this algorithm remains independently testable:
+ * readable operations from another household are always preserved, while an
+ * unreadable record is reported rather than guessed to belong to the target.
+ */
+export async function purgeStoredOperationsWhere<T extends { id: string }>(input: {
+  operations: T[];
+  householdIdFor: (operation: T) => Promise<string>;
+  shouldPurge: (householdId: string) => boolean;
+  deleteByIds: (ids: string[]) => Promise<void>;
+}): Promise<HouseholdScopedOfflinePurgeResult> {
+  const purgeIds: string[] = [];
+  let preserved = 0;
+  let unreadable = 0;
+  for (const operation of input.operations) {
+    try {
+      const householdId = await input.householdIdFor(operation);
+      if (input.shouldPurge(householdId)) purgeIds.push(operation.id);
+      else preserved += 1;
+    } catch {
+      unreadable += 1;
+    }
+  }
+  await input.deleteByIds(purgeIds);
+  return { purged: purgeIds.length, preserved, unreadable };
+}
+
+async function purgeOperationsInDatabase(
+  db: IDBDatabase,
+  shouldPurge: (householdId: string) => boolean
+): Promise<HouseholdScopedOfflinePurgeResult> {
+  return purgeStoredOperationsWhere({
+    operations: await allOperations(db),
+    householdIdFor: async (operation) => (await decrypt(db, operation)).householdId,
+    shouldPurge,
+    deleteByIds: (ids) => removeOperations(db, ids)
+  });
+}
+
+export async function classifyHouseholdAccessDenial(input: {
+  providerMessage: string | undefined;
+  targetHouseholdId: string;
+  loadAuthorizedHouseholdIds: () => Promise<string[]>;
+}): Promise<HouseholdAccessDenialAction | null> {
+  if (!isHouseholdAccessDenied(input.providerMessage)) return null;
+  try {
+    const authorized = await input.loadAuthorizedHouseholdIds();
+    return authorized.includes(input.targetHouseholdId) ? "reject-resource" : "purge-household";
+  } catch {
+    return "revalidation-failed";
+  }
+}
+
+async function loadAuthorizedHouseholdIds(client: SupabaseClient): Promise<string[]> {
+  const result = await client.rpc("get_my_households");
+  if (result.error || !Array.isArray(result.data)) throw new Error("Household access revalidation failed");
+  return result.data.map((row) => {
+    if (!row || typeof row !== "object" || typeof (row as { household_id?: unknown }).household_id !== "string") {
+      throw new Error("Household access revalidation returned an invalid shape");
+    }
+    return assertHouseholdId((row as { household_id: string }).household_id);
+  });
+}
+
 async function authenticatedActor(client: SupabaseClient): Promise<string> {
   const assurance = await client.auth.mfa.getAuthenticatorAssuranceLevel();
   if (assurance.error || assurance.data.currentLevel !== "aal2") throw new Error("AAL2 session required");
@@ -304,6 +387,40 @@ async function sendOperation<T>(db: IDBDatabase, operation: StoredOperation, cli
   if (!error) {
     await removeOperation(db, operation.id);
     const result = { status: "acked", data: data as T } as const;
+    emitOperationOutcome({ operationId: operation.id, ...result });
+    return result;
+  }
+  const accessDenialAction = await classifyHouseholdAccessDenial({
+    providerMessage: error.message,
+    targetHouseholdId: secret.householdId,
+    loadAuthorizedHouseholdIds: () => loadAuthorizedHouseholdIds(client)
+  });
+  if (accessDenialAction === "purge-household") {
+    const cleanup = await purgeOperationsInDatabase(db, (householdId) => householdId === secret.householdId);
+    const result = {
+      status: "rejected",
+      message: cleanup.unreadable === 0
+        ? "Dein Zugriff auf diesen Haushalt wurde beendet. Seine lokalen Offline-Änderungen wurden entfernt."
+        : "Dein Zugriff auf diesen Haushalt wurde beendet. Lesbare lokale Offline-Änderungen wurden entfernt; beschädigte Browserdaten konnten nicht sicher zugeordnet werden.",
+      reason: "server_rejected"
+    } as const;
+    emitOperationOutcome({ operationId: operation.id, ...result });
+    return result;
+  }
+  if (accessDenialAction) {
+    await putOperation(db, {
+      ...sending,
+      state: "REJECTED",
+      nextAttemptAt: 0,
+      safeError: accessDenialAction === "reject-resource" ? "resource_access_denied" : "membership_revalidation_failed"
+    });
+    const result = {
+      status: "rejected",
+      message: accessDenialAction === "reject-resource"
+        ? "Diese lokale Änderung verweist auf einen nicht mehr verfügbaren Datensatz. Andere Änderungen des Haushalts bleiben erhalten."
+        : "Der Haushaltszugriff konnte nicht sicher neu bestätigt werden. Die einzelne Änderung bleibt angehalten; andere Haushaltsdaten wurden nicht gelöscht.",
+      reason: "server_rejected"
+    } as const;
     emitOperationOutcome({ operationId: operation.id, ...result });
     return result;
   }
@@ -403,7 +520,13 @@ export async function flushQueuedOperations(): Promise<OutboxSummary> {
     for (const operation of operations) {
       if (!navigator.onLine) break;
       try {
-        await sendOperation(db, operation, client);
+        // A prior household denial may have atomically removed this operation
+        // together with every sibling operation for the same household.
+        const current = await requestValue(
+          db.transaction(OPERATIONS, "readonly").objectStore(OPERATIONS).get(operation.id)
+        ) as StoredOperation | undefined;
+        if (!current) continue;
+        await sendOperation(db, current, client);
       } catch {
         await putOperation(db, { ...operation, state: "REJECTED", safeError: "session_revalidation_failed" });
         emitOperationOutcome({
@@ -415,6 +538,44 @@ export async function flushQueuedOperations(): Promise<OutboxSummary> {
       }
     }
     return summarizeOperations(await allOperations(db));
+  } finally {
+    db.close();
+  }
+}
+
+function assertHouseholdId(value: string): string {
+  const householdId = value.trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(householdId)) {
+    throw new Error("Valid household id required for offline cleanup");
+  }
+  return householdId;
+}
+
+/**
+ * Deletes only private queued operations belonging to one household. Device
+ * identity and encryption metadata are shared across households and are kept.
+ */
+export async function purgeOfflineHouseholdData(householdId: string): Promise<HouseholdScopedOfflinePurgeResult> {
+  const target = assertHouseholdId(householdId);
+  const db = await openDatabase();
+  try {
+    return await purgeOperationsInDatabase(db, (candidate) => candidate === target);
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Reconciles encrypted offline operations with a freshly server-authorized set
+ * of households. It never deletes queues for an active household.
+ */
+export async function reconcileOfflineHouseholdAccess(
+  activeHouseholdIds: string[]
+): Promise<HouseholdScopedOfflinePurgeResult> {
+  const active = new Set(activeHouseholdIds.map(assertHouseholdId));
+  const db = await openDatabase();
+  try {
+    return await purgeOperationsInDatabase(db, (candidate) => !active.has(candidate));
   } finally {
     db.close();
   }

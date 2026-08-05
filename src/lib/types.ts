@@ -1,4 +1,9 @@
 import type { NutritionDaySummary, NutritionWeekSummary } from "@/domain/nutrition-summary";
+import type {
+  HouseholdMemberRow,
+  HouseholdSummaryRow,
+  PendingHouseholdInvitationRow
+} from "@/contracts/household-membership";
 
 export type AppView = "today" | "inventory" | "scan" | "plan" | "shopping" | "settings";
 
@@ -103,7 +108,11 @@ export interface ShoppingItem {
 }
 
 export interface AppSnapshot {
+  currentUserId: string;
   household: { id: string; name: string };
+  households: HouseholdSummaryRow[];
+  householdMembers: HouseholdMemberRow[];
+  pendingHouseholdInvitations: PendingHouseholdInvitationRow[];
   inventory: InventoryItem[];
   today: NutritionDaySummary & {
     calorieTarget?: number;

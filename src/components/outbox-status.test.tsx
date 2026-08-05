@@ -10,6 +10,7 @@ const outbox = vi.hoisted(() => {
     flushQueuedOperations: vi.fn(async () => ({ queued: 0, sending: 0, rejected: 0 })),
     getOfflineDataStorageState: vi.fn(() => "available"),
     getOutboxSummary: vi.fn(async () => ({ queued: 0, sending: 0, rejected: 0 })),
+    reconcileOfflineHouseholdAccess: vi.fn(async () => ({ purged: 0, preserved: 0, unreadable: 0 })),
     subscribeToOutbox: vi.fn(() => () => undefined),
     subscribeToOfflineDataStorageState: vi.fn((listener: (state: string) => void) => {
       lifecycleListener = listener;
@@ -55,5 +56,19 @@ describe("OutboxStatus", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Lokale Offline-Daten werden noch entfernt");
     expect(alert.textContent).toContain("Löschung ist noch nicht bestätigt");
+  });
+
+  it("reconciles the server-authorized household set before flushing", async () => {
+    const activeHouseholdIds = ["11111111-1111-4111-8111-111111111111"];
+    const view = render(<OutboxStatus activeHouseholdIds={activeHouseholdIds} />);
+
+    await waitFor(() => expect(outbox.reconcileOfflineHouseholdAccess).toHaveBeenCalledWith(activeHouseholdIds));
+    expect(outbox.reconcileOfflineHouseholdAccess.mock.invocationCallOrder[0]).toBeLessThan(
+      outbox.flushQueuedOperations.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER
+    );
+
+    view.rerender(<OutboxStatus activeHouseholdIds={[...activeHouseholdIds]} />);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(outbox.reconcileOfflineHouseholdAccess).toHaveBeenCalledOnce();
   });
 });

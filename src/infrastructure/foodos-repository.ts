@@ -3,16 +3,16 @@ import "server-only";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { nutritionSummaryRowsSchema } from "@/contracts/nutrition-summary";
+import {
+  householdMemberRowSchema,
+  householdSummaryRowSchema,
+  pendingHouseholdInvitationRowSchema
+} from "@/contracts/household-membership";
 import { classifyExpiry } from "@/domain/expiry";
 import { criticalFoodRiskMatches, type FoodRiskPreference } from "@/domain/ingredient-relevance";
 import { buildNutritionSummary } from "@/domain/nutrition-summary";
 import { assessRecall, type RecallAssessment, type RecallNotice } from "@/domain/recall";
 import type { AppSnapshot, InventoryItem } from "@/lib/types";
-
-const membershipSchema = z.object({
-  household_id: z.uuid(),
-  households: z.object({ id: z.uuid(), name: z.string() })
-});
 
 const inventoryRowSchema = z.object({
   id: z.uuid(),
@@ -158,21 +158,19 @@ export type AppLoadResult =
   | { kind: "ready"; snapshot: AppSnapshot }
   | { kind: "error"; message: string };
 
-export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppLoadResult> {
-  const membershipResult = await supabase
-    .from("household_members")
-    .select("household_id, households!inner(id, name)")
-    .limit(1)
-    .maybeSingle();
-  if (membershipResult.error) return { kind: "error", message: "Dein Haushalt konnte nicht geladen werden." };
-  if (!membershipResult.data) return { kind: "onboarding" };
-  const membership = membershipSchema.safeParse(membershipResult.data);
-  if (!membership.success) return { kind: "error", message: "Der Haushaltsdatensatz hat ein unerwartetes Format." };
+export async function loadFoodOsSnapshot(supabase: SupabaseClient, selectedHouseholdId?: string): Promise<AppLoadResult> {
+  const membershipsResult = await supabase.rpc("get_my_households");
+  if (membershipsResult.error) return { kind: "error", message: "Deine sichere Haushaltssitzung konnte nicht bestätigt werden." };
+  const memberships = z.array(householdSummaryRowSchema).safeParse(membershipsResult.data);
+  if (!memberships.success) return { kind: "error", message: "Die Haushaltsübersicht hat ein unerwartetes Format." };
+  const membership = memberships.data.find((candidate) => candidate.household_id === selectedHouseholdId)
+    ?? memberships.data[0];
+  if (!membership) return { kind: "onboarding" };
 
   const inventoryResult = await supabase
     .from("inventory_batches")
     .select("id, product_id, remaining_amount, unit, location, best_before_date, use_by_date, lot_number, products!inner(gtin, name, brand, image_url)")
-    .eq("household_id", membership.data.household_id)
+    .eq("household_id", membership.household_id)
     .gt("remaining_amount", 0)
     .order("use_by_date", { ascending: true, nullsFirst: false })
     .order("best_before_date", { ascending: true, nullsFirst: false });
@@ -197,20 +195,20 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
   if (userResult.error || !userResult.data.user) return { kind: "error", message: "Deine Sitzung konnte nicht bestätigt werden." };
   const today = berlinDate();
   const weekStart = mondayOf(today);
-  const [nutritionSummaryResult, profileResult, mealPlanResult, shoppingListResult, recallSourceResult, foodRiskResult, metadataResult, recallEventsResult] = await Promise.all([
+  const [nutritionSummaryResult, profileResult, mealPlanResult, shoppingListResult, recallSourceResult, foodRiskResult, metadataResult, recallEventsResult, householdMembersResult, pendingInvitationsResult] = await Promise.all([
     supabase.rpc("get_my_nutrition_summary", { target_week_start: weekStart }),
     supabase.from("profiles").select("calorie_target, protein_target_g").maybeSingle(),
     supabase
       .from("meal_plan_slots")
       .select("id, product_id, planned_for, meal_type, servings, planned_amount, planned_unit, revision, products!inner(name)")
-      .eq("household_id", membership.data.household_id)
+      .eq("household_id", membership.household_id)
       .gte("planned_for", weekStart)
       .lte("planned_for", plusDays(weekStart, 6))
       .order("planned_for", { ascending: true }),
     supabase
       .from("shopping_lists")
       .select("id, calculation_revision")
-      .eq("household_id", membership.data.household_id)
+      .eq("household_id", membership.household_id)
       .eq("week_start", weekStart)
       .maybeSingle(),
     supabase
@@ -230,9 +228,13 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
       .eq("recall_sources.approved", true)
       .is("superseded_by", null)
       .order("published_at", { ascending: false })
-      .limit(500)
+      .limit(500),
+    supabase.rpc("get_household_members", { target_household: membership.household_id }),
+    membership.member_role === "owner"
+      ? supabase.rpc("list_household_invitations", { target_household: membership.household_id })
+      : Promise.resolve({ data: [], error: null })
   ]);
-  if (nutritionSummaryResult.error || profileResult.error || mealPlanResult.error || shoppingListResult.error || recallSourceResult.error || foodRiskResult.error || metadataResult.error || recallEventsResult.error) return { kind: "error", message: "Tages-, Wochen-, Plan-, Einkaufs-, Risiko- oder Rückrufdaten konnten nicht geladen werden." };
+  if (nutritionSummaryResult.error || profileResult.error || mealPlanResult.error || shoppingListResult.error || recallSourceResult.error || foodRiskResult.error || metadataResult.error || recallEventsResult.error || householdMembersResult.error || pendingInvitationsResult.error) return { kind: "error", message: "Tages-, Wochen-, Plan-, Einkaufs-, Risiko-, Rückruf- oder Haushaltsdaten konnten nicht geladen werden." };
   const parsedNutritionSummary = nutritionSummaryRowsSchema.safeParse(nutritionSummaryResult.data);
   const parsedProfile = profileSchema.nullable().safeParse(profileResult.data);
   const parsedMealPlan = z.array(mealPlanRowSchema).safeParse(mealPlanResult.data);
@@ -241,7 +243,9 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
   const parsedFoodRisks = z.array(foodRiskRowSchema).safeParse(foodRiskResult.data);
   const parsedMetadata = z.array(productMetadataRowSchema).safeParse(metadataResult.data);
   const parsedRecallEvents = z.array(recallEventRowSchema).safeParse(recallEventsResult.data);
-  if (!parsedNutritionSummary.success || !parsedProfile.success || !parsedMealPlan.success || !parsedShoppingList.success || !parsedRecallSource.success || !parsedFoodRisks.success || !parsedMetadata.success || !parsedRecallEvents.success) return { kind: "error", message: "Tages-, Wochen-, Plan-, Einkaufs-, Risiko- oder Rückrufdaten haben ein unerwartetes Format." };
+  const parsedHouseholdMembers = z.array(householdMemberRowSchema).safeParse(householdMembersResult.data);
+  const parsedPendingInvitations = z.array(pendingHouseholdInvitationRowSchema).safeParse(pendingInvitationsResult.data);
+  if (!parsedNutritionSummary.success || !parsedProfile.success || !parsedMealPlan.success || !parsedShoppingList.success || !parsedRecallSource.success || !parsedFoodRisks.success || !parsedMetadata.success || !parsedRecallEvents.success || !parsedHouseholdMembers.success || !parsedPendingInvitations.success) return { kind: "error", message: "Tages-, Wochen-, Plan-, Einkaufs-, Risiko-, Rückruf- oder Haushaltsdaten haben ein unerwartetes Format." };
 
   let nutritionSummary: ReturnType<typeof buildNutritionSummary>;
   try {
@@ -320,7 +324,11 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient): Promise<AppL
   return {
     kind: "ready",
     snapshot: {
-      household: { id: membership.data.households.id, name: membership.data.households.name },
+      currentUserId: userResult.data.user.id,
+      household: { id: membership.household_id, name: membership.household_name },
+      households: memberships.data,
+      householdMembers: parsedHouseholdMembers.data,
+      pendingHouseholdInvitations: parsedPendingInvitations.data,
       inventory,
       today: {
         ...nutritionSummary.today,

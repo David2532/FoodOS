@@ -52,6 +52,10 @@ export function FoodOsApp({
   const router = useRouter();
   const [view, setView] = useState<AppView>("today");
   const [scanCatalogQuery, setScanCatalogQuery] = useState<string | undefined>();
+  const activeHouseholdIds = useMemo(
+    () => initialSnapshot?.households.map((household) => household.household_id) ?? [],
+    [initialSnapshot?.households]
+  );
   const openCatalog = (query?: string) => {
     setScanCatalogQuery(query);
     setView("scan");
@@ -91,13 +95,13 @@ export function FoodOsApp({
               {authEntryAvailable && <Link className="preview-account-link" href="/">Konto erstellen oder anmelden</Link>}
             </aside>
           )}
-          {authenticated && <OutboxStatus />}
+          {authenticated && <OutboxStatus activeHouseholdIds={activeHouseholdIds} />}
           {view === "today" && <TodayView onNavigate={setView} onOpenCatalog={openCatalog} snapshot={initialSnapshot} />}
           {view === "inventory" && <InventoryView householdId={initialSnapshot?.household.id} onScan={() => setView("scan")} onConsumed={initialSnapshot ? () => router.refresh() : undefined} items={initialSnapshot?.inventory} />}
           {view === "scan" && <ScanView householdId={initialSnapshot?.household.id} initialCatalogQuery={scanCatalogQuery} onSaved={() => router.refresh()} onOpenInventory={() => setView("inventory")} preview={preview} />}
           {view === "plan" && <PlanView snapshot={initialSnapshot} onChanged={initialSnapshot ? () => router.refresh() : undefined} />}
           {view === "shopping" && <ShoppingView snapshot={initialSnapshot} onChanged={initialSnapshot ? () => router.refresh() : undefined} />}
-          {view === "settings" && authenticated && <AccountSettingsView accountEmail={accountEmail} billingLabAvailable={billingLabAvailable} initialPrivacyChoices={initialPrivacyChoices} onClose={() => setView("today")} />}
+          {view === "settings" && authenticated && initialSnapshot && <AccountSettingsView accountEmail={accountEmail} billingLabAvailable={billingLabAvailable} initialPrivacyChoices={initialPrivacyChoices} snapshot={initialSnapshot} onDataChanged={() => router.refresh()} onClose={() => setView("today")} />}
         </div>
 
         <nav className="bottom-nav" aria-label="Hauptnavigation">
