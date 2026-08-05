@@ -2,12 +2,14 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(32);
+select plan(35);
 
 select has_table('public', 'product_catalog_import_runs', 'catalog import runs are persisted separately');
 select has_table('public', 'product_catalog_products', 'global catalog products are persisted separately');
+select has_table('public', 'product_catalog_import_chunks', 'bounded catalog seal manifests are persisted separately');
 select has_function('public', 'is_valid_catalog_gtin', array['text'], 'catalog GTIN validation exists at the database boundary');
 select has_function('public', 'activate_product_catalog_import', array['uuid'], 'catalog activation RPC exists');
+select has_function('public', 'seal_product_catalog_import_batch', array['uuid'], 'bounded catalog seal RPC exists');
 select has_function('public', 'search_global_catalog_products', array['text', 'integer'], 'global catalog search RPC exists');
 select has_function('public', 'lookup_global_catalog_product', array['text'], 'global catalog GTIN lookup RPC exists');
 select ok(
@@ -15,26 +17,29 @@ select ok(
     select 1
     from pg_policies
     where schemaname = 'public'
-      and tablename in ('product_catalog_import_runs', 'product_catalog_products')
+      and tablename in ('product_catalog_import_runs', 'product_catalog_products', 'product_catalog_import_chunks')
   )
   and (
     select count(*)
     from pg_class
     where oid in ('public.product_catalog_import_runs'::regclass, 'public.product_catalog_products'::regclass)
       and relrowsecurity
-  ) = 2,
+  ) = 3,
   'raw catalog tables have RLS enabled and no client policy'
 );
 select ok(
   not has_table_privilege('anon', 'public.product_catalog_import_runs', 'select')
   and not has_table_privilege('authenticated', 'public.product_catalog_import_runs', 'select')
   and not has_table_privilege('anon', 'public.product_catalog_products', 'select')
-  and not has_table_privilege('authenticated', 'public.product_catalog_products', 'select'),
+  and not has_table_privilege('authenticated', 'public.product_catalog_products', 'select')
+  and not has_table_privilege('anon', 'public.product_catalog_import_chunks', 'select')
+  and not has_table_privilege('authenticated', 'public.product_catalog_import_chunks', 'select'),
   'anon and authenticated roles cannot read raw catalog tables'
 );
 select ok(
   has_table_privilege('service_role', 'public.product_catalog_import_runs', 'insert')
-  and has_table_privilege('service_role', 'public.product_catalog_products', 'insert'),
+  and has_table_privilege('service_role', 'public.product_catalog_products', 'insert')
+  and has_table_privilege('service_role', 'public.product_catalog_import_chunks', 'insert'),
   'the server-only service role can import catalog generations'
 );
 select ok(
@@ -44,11 +49,12 @@ select ok(
     where oid in (
       'public.activate_product_catalog_import(uuid)'::regprocedure,
       'public.search_global_catalog_products(text,integer)'::regprocedure,
-      'public.lookup_global_catalog_product(text)'::regprocedure
+      'public.lookup_global_catalog_product(text)'::regprocedure,
+      'public.seal_product_catalog_import_batch(uuid)'::regprocedure
     )
       and prosecdef
       and coalesce(array_to_string(proconfig, ','), '') like '%search_path=public, pg_temp%'
-  ) = 3,
+  ) = 4,
   'catalog RPCs use SECURITY DEFINER with a fixed search path'
 );
 select ok(public.is_valid_catalog_gtin('4006381333931'), 'a valid GTIN passes the database boundary');
@@ -139,9 +145,12 @@ set
 where id in (select id from representative_products);
 
 select is(
-  public.seal_product_catalog_import(:'complete_import_run_id'::uuid),
+  (
+    select sum(public.seal_product_catalog_import(:'complete_import_run_id'::uuid))
+    from generate_series(1, 25)
+  ),
   25000::bigint,
-  'the database seals every persisted catalog product before activation'
+  'the database seals every persisted catalog product in bounded batches before activation'
 );
 
 update public.product_catalog_import_runs
@@ -154,22 +163,24 @@ set attempted_row_count = 25000,
     )
 where id = :'complete_import_run_id'::uuid;
 
-update public.product_catalog_products
-set normalized_content_sha256 = repeat('e', 64)
-where import_run_id = :'complete_import_run_id'::uuid
-  and gtin = '00000017';
+select throws_ok(
+  format($$update public.product_catalog_products set normalized_content_sha256 = repeat('e', 64) where import_run_id = %L::uuid and gtin = '00000017'$$, :'complete_import_run_id'),
+  '22023',
+  'Catalog product is sealed',
+  'a staging run cannot tamper with a sealed product hash'
+);
 
 select throws_ok(
-  format('select public.activate_product_catalog_import(%L::uuid)', :'complete_import_run_id'),
+  format($$delete from public.product_catalog_products where import_run_id = %L::uuid and gtin = '00000017'$$, :'complete_import_run_id'),
   '22023',
-  'Catalog import is incomplete',
-  'a staging run with a tampered product hash cannot activate'
+  'Catalog import run is sealed',
+  'a staging run cannot delete a manifest-bound product'
 );
 
 select is(
   public.seal_product_catalog_import(:'complete_import_run_id'::uuid),
-  25000::bigint,
-  'resealing restores authoritative product hashes after a rejected staging mutation'
+  0::bigint,
+  'a completed bounded seal performs no further product mutation'
 );
 
 update public.product_catalog_import_runs

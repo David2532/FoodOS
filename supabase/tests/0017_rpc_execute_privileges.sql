@@ -29,6 +29,7 @@ select ok(
 select ok(
   not has_function_privilege('authenticated', 'public.create_household(text)'::regprocedure, 'execute')
   and not has_function_privilege('authenticated', 'public.activate_product_catalog_import(uuid)'::regprocedure, 'execute')
+  and not has_function_privilege('authenticated', 'public.seal_product_catalog_import_batch(uuid)'::regprocedure, 'execute')
   and not has_function_privilege('authenticated', 'public.inspect_product_catalog_import(uuid)'::regprocedure, 'execute'),
   'Q-SEC-RPC-DB-003: legacy and catalog-administration RPCs are not client-callable'
 );

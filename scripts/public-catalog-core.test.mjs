@@ -4,6 +4,7 @@ import { canonicalJson, normalizePublicCatalogProduct, sha256 } from "./public-c
 import {
   activateProductCatalogImport,
   assertIntegrity,
+  parseSealBatchResult,
   readLines,
   sourceDescriptor,
   sourceStream
@@ -103,6 +104,15 @@ describe("public catalog dump normalizer", () => {
     expect(rpc).toHaveBeenCalledWith("activate_product_catalog_import", {
       target_import_run_id: "00000000-0000-4000-8000-000000000001"
     });
+  });
+
+  it("accepts only a bounded catalog seal RPC result", () => {
+    expect(parseSealBatchResult({ sealed_product_count: 1_000, is_complete: false }))
+      .toEqual({ sealed_product_count: 1_000, is_complete: false });
+    expect(() => parseSealBatchResult({ sealed_product_count: -1, is_complete: false }))
+      .toThrow("catalog-import-seal-invalid");
+    expect(() => parseSealBatchResult({ sealed_product_count: 1_000, is_complete: "yes" }))
+      .toThrow("catalog-import-seal-invalid");
   });
 
   it("allows only reviewed source hosts and follows an allowed redirect once", async () => {

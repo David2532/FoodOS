@@ -1,14 +1,15 @@
 # Public product catalog operations
 
-Status: **implementation and operating contract, not import evidence** · Last reviewed:
-2026-08-04.
+Status: **implementation and operating contract, not active-catalog evidence** · Last reviewed:
+2026-08-05.
 
 FoodOS can maintain a shared, public product catalog in addition to a household's
 confirmed-product cache. This document describes the operational path for migration
 `0015_public_product_catalog.sql` and
-`0016_public_catalog_import_integrity.sql`. It does **not** claim that any managed Supabase
-database has been migrated or populated: no managed catalog import has been executed or
-counted for this repository state.
+`0016_public_catalog_import_integrity.sql` and the bounded-seal follow-up migrations
+`20260805074723_bounded_catalog_import_seal.sql` and
+`20260805075456_fix_catalog_seal_guard_generated_columns.sql`. It does **not** claim
+that a managed database has an active or verified catalog generation.
 
 ## Data boundary and source order
 
@@ -84,7 +85,8 @@ The current scheduled workflow deliberately does not inject `PUBLIC_CATALOG_DUMP
 so its manual and daily runs use the official default. The variable is an input selector,
 not an activation control and must never be exposed to a browser build.
 
-Before a first managed import, apply migrations `0015` and `0016`, configure the three secret values
+Before a first managed import, apply migrations `0015`, `0016` and both bounded-seal
+follow-up migrations, configure the three secret values
 in the protected GitHub Environment or another server-only secret store, and complete the
 source/licence review. A controlled operator run is then:
 
@@ -109,13 +111,17 @@ review. The workflow is not a Vercel request and must run only in the protected
 ## Generation activation, failure and recovery
 
 Each import creates a `staging` generation, records attempted/accepted/rejected/filtered/
-duplicate counts, then writes in bounded batches. Before activation the database seals a
-SHA-256 over the actual persisted allowlist projection (excluding import/runtime fields),
-checks each per-row hash, recomputes the generation hash in GTIN order, and checks the
-counter identity plus metadata evidence. Activation is possible only when these checks
-pass and at least 25,000 products were persisted. The service-only activation function
-atomically supersedes the prior active generation and marks the complete staging generation
-active. Reads join only the active generation.
+duplicate counts, then writes in bounded batches. After source writes finish, the database
+seals at most 1,000 GTIN-ordered rows per service-only transaction. Every seal writes the
+canonical per-product hash and an immutable manifest chunk containing its ordered hash and
+metadata-evidence counters. Once sealing starts, product facts cannot be inserted, deleted
+or changed; only the exact authoritative hash write for the next chunk is allowed. The
+generation root is the SHA-256 over ordered immutable chunk hashes, so verification and
+activation aggregate a small manifest rather than retrying a multi-million-row update.
+Activation is possible only when the manifest is complete, counter identity and metadata
+evidence pass, the root matches the run and at least 25,000 products were persisted. The
+service-only activation function atomically supersedes the prior active generation and
+marks the complete staging generation active. Reads join only the active generation.
 
 Credential validation happens before a remote dump download. A fetch, parse, validation,
 write, interruption or minimum-count failure marks the staging run `failed`; it must not
@@ -130,18 +136,18 @@ and requires an integrity check before any catalog is made active. A true one-co
 generation rollback remains `NOT_IMPLEMENTED` and is not release proof.
 
 After every activation, retain the run generation, source/schema/revision/retrieval time,
-all aggregate counters, database-sealed hash and result of `npm run catalog:verify` in the
-protected release evidence. The verifier checks exact count/counter identity, GTIN validity,
-per-row and generation hash integrity, source traceability and aggregate nutrition/
-ingredients/allergen/provenance evidence. Alert on no active generation, a failed run,
-integrity/count/hash mismatch, source/schema drift or an unexpectedly low accepted ratio.
+all aggregate counters, database-sealed root and result of `npm run catalog:verify` in the
+protected release evidence. The verifier checks exact count/counter identity, the completed
+immutable hash manifest, source traceability and aggregate nutrition/ingredients/allergen/
+provenance evidence. Alert on no active generation, a failed run, manifest/count/hash
+mismatch, source/schema drift or an unexpectedly low accepted ratio.
 Never substitute zero, an old success or a provider outage for a current catalog status.
 
 ## Managed-data status and release boundary
 
-As of 2026-08-04, the repository contains the migration, normalizer, importer,
-verification command and opt-in scheduled workflow, but no managed Supabase project has
-received this migration or an imported catalog generation. The imported-product count,
-last successful import and production URL are therefore **NOT_RUN**. This document must
-be updated with the exact generation, count, source retrieval time, commit and CI run
-only after a real managed import and verification.
+This document does not assert an active production generation. A prior managed staging
+run was safely marked `failed` during the former unbounded sealing operation and was never
+activated. It is not a recovery candidate. Apply the bounded-seal migration, run a new
+approved source import and record its exact generation, aggregate count, source retrieval
+time, commit and verification result only after `npm run catalog:verify` passes. Until
+then, the imported-product count and last successful import remain **NOT_PROVEN**.

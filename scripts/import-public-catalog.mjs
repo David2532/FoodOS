@@ -222,10 +222,29 @@ export async function activateProductCatalogImport(supabase, runId) {
   if (error) throw fail("catalog-activation-failed");
 }
 
+export function parseSealBatchResult(value) {
+  if (!value || typeof value !== "object"
+    || !Number.isSafeInteger(value.sealed_product_count)
+    || value.sealed_product_count < 0
+    || typeof value.is_complete !== "boolean") {
+    throw fail("catalog-import-seal-invalid");
+  }
+  return value;
+}
+
 async function sealProductCatalogImport(supabase, runId) {
-  const { data, error } = await supabase.rpc("seal_product_catalog_import", { target_import_run_id: runId });
-  if (error || !Number.isSafeInteger(data) || data < 0) throw fail("catalog-import-seal-failed");
-  return data;
+  let sealedProductCount = 0;
+  for (let batchIndex = 0; batchIndex < 100_000; batchIndex += 1) {
+    const { data, error } = await supabase
+      .rpc("seal_product_catalog_import_batch", { target_import_run_id: runId })
+      .single();
+    if (error) throw fail("catalog-import-seal-failed");
+    const batch = parseSealBatchResult(data);
+    sealedProductCount += batch.sealed_product_count;
+    if (!Number.isSafeInteger(sealedProductCount)) throw fail("catalog-import-seal-overflow");
+    if (batch.is_complete) return sealedProductCount;
+  }
+  throw fail("catalog-import-seal-batch-limit");
 }
 
 async function inspectImport(supabase, runId) {
