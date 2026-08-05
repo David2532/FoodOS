@@ -146,6 +146,12 @@ Quellen-Traceability und repräsentative Metadaten, ohne Produktpayloads auszuge
 aktive, verifizierte Kataloggeneration ist derzeit **nicht** vorhanden.
 Betrieb, Quelle, Lizenz, Aktivierung und Recovery stehen in
 [`docs/PUBLIC_CATALOG_OPERATIONS.md`](docs/PUBLIC_CATALOG_OPERATIONS.md).
+Die Ops-Finanzmigrationen ab `20260805095221` halten Lieferantenquellen und
+Double-Entry-Zeilen append-only, erzwingen CEO-AAL2 sowie exakte Minor Units und
+behandeln manuell erfasste Rechnungsmetadaten als `ESTIMATE`. Die Forward-Migration
+`20260805165055` ergänzt unveränderliche Quellenvalidierungsereignisse: `SOURCE FINAL`
+setzt ein autoritatives Artefakt samt SHA-256 und Parser-Version voraus; historische
+Metadaten-Finals werden ohne Überschreiben des Journals effektiv herabgestuft.
 `supabase/tests/` beweist AAL1-Verweigerung,
 zweiten Nutzer, Haushaltsisolation, Replay/Payload-Konflikt, Safety-Sperren und atomare
 Mengen-/Logwirkung.

@@ -20,6 +20,7 @@ export const supplierInvoiceIntakeSchema = z.object({
 export type SupplierInvoiceIntake = z.infer<typeof supplierInvoiceIntakeSchema>;
 
 export type OpsExpenseTrust = "SOURCE FINAL" | "ESTIMATE" | "NO SOURCE";
+export type OpsFinanceTrustState = "source_final" | "estimate" | "no_source";
 export type OpsPaymentState = "OPEN" | "PAID" | "UNKNOWN";
 
 export type OpsExpense = {
@@ -43,6 +44,16 @@ export function formatMoneyMinor(amountMinor: number, currency: string): string 
 
 export function isOpenExpense(expense: Pick<OpsExpense, "paymentState">): boolean {
   return expense.paymentState === "OPEN";
+}
+
+export function resolveOpsExpenseTrust(
+  journalTrust: OpsFinanceTrustState,
+  latestValidationTrust: OpsFinanceTrustState | null
+): OpsExpenseTrust {
+  const effectiveTrust = latestValidationTrust ?? journalTrust;
+  if (effectiveTrust === "source_final") return "SOURCE FINAL";
+  if (effectiveTrust === "estimate") return "ESTIMATE";
+  return "NO SOURCE";
 }
 
 export function sumExpensesByCurrency(expenses: readonly OpsExpense[], predicate: (expense: OpsExpense) => boolean): Array<{ currency: string; amountMinor: number }> {

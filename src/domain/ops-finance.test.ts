@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMoneyMinor, isOpenExpense, sumExpensesByCurrency, type OpsExpense } from "./ops-finance";
+import { formatMoneyMinor, isOpenExpense, resolveOpsExpenseTrust, sumExpensesByCurrency, type OpsExpense } from "./ops-finance";
 
 const expense = (overrides: Partial<OpsExpense> = {}): OpsExpense => ({
   id: "expense-1",
@@ -33,5 +33,11 @@ describe("CEO finance domain", () => {
   it("keeps an outstanding supplier invoice visibly open", () => {
     expect(isOpenExpense(expense())).toBe(true);
     expect(isOpenExpense(expense({ paymentState: "PAID" }))).toBe(false);
+  });
+
+  it("lets an immutable validation event correct a legacy metadata-only final label", () => {
+    expect(resolveOpsExpenseTrust("source_final", "estimate")).toBe("ESTIMATE");
+    expect(resolveOpsExpenseTrust("estimate", "source_final")).toBe("SOURCE FINAL");
+    expect(resolveOpsExpenseTrust("no_source", null)).toBe("NO SOURCE");
   });
 });
