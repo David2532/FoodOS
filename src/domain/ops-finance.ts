@@ -19,9 +19,27 @@ export const supplierInvoiceIntakeSchema = z.object({
 
 export type SupplierInvoiceIntake = z.infer<typeof supplierInvoiceIntakeSchema>;
 
+export const paymentReconciliationSchema = z.object({
+  journalId: z.uuid(),
+  paymentSystem: z.string().trim().regex(/^[a-z0-9][a-z0-9_-]{1,39}$/),
+  externalPaymentId: z.string().trim().min(2).max(160),
+  artifactSha256: z.string().trim().regex(/^[0-9a-f]{64}$/),
+  parserVersion: z.string().trim().min(2).max(80).regex(/^[a-z0-9][a-z0-9._-]+$/),
+  amountMinor: z.coerce.number().int().positive().max(999_999_999_999),
+  currency: financeCurrencySchema,
+  paidOn: z.string().date()
+}).strict();
+
+export type PaymentReconciliation = z.infer<typeof paymentReconciliationSchema>;
+
 export type OpsExpenseTrust = "SOURCE FINAL" | "ESTIMATE" | "NO SOURCE";
 export type OpsFinanceTrustState = "source_final" | "estimate" | "no_source";
 export type OpsPaymentState = "OPEN" | "PAID" | "UNKNOWN";
+export type OpsFinancePaymentState = "open" | "paid" | "unknown";
+export type OpsPaymentStateEvent = {
+  eventSequence: number;
+  effectivePaymentState: OpsFinancePaymentState;
+};
 
 export type OpsExpense = {
   id: string;
@@ -36,6 +54,7 @@ export type OpsExpense = {
   issuedOn: string;
   dueOn: string | null;
   recordedAt: string;
+  paymentEvidenceRecordedAt: string | null;
 };
 
 export function formatMoneyMinor(amountMinor: number, currency: string): string {
@@ -43,7 +62,21 @@ export function formatMoneyMinor(amountMinor: number, currency: string): string 
 }
 
 export function isOpenExpense(expense: Pick<OpsExpense, "paymentState">): boolean {
-  return expense.paymentState === "OPEN";
+  return expense.paymentState !== "PAID";
+}
+
+export function resolveOpsPaymentState(
+  journalPaymentState: OpsFinancePaymentState,
+  events: readonly OpsPaymentStateEvent[]
+): OpsPaymentState {
+  const latest = events.reduce<OpsPaymentStateEvent | null>(
+    (current, event) => !current || event.eventSequence > current.eventSequence ? event : current,
+    null
+  );
+  const effectiveState = latest?.effectivePaymentState ?? (journalPaymentState === "paid" ? "unknown" : journalPaymentState);
+  if (effectiveState === "paid") return "PAID";
+  if (effectiveState === "open") return "OPEN";
+  return "UNKNOWN";
 }
 
 export function resolveOpsExpenseTrust(

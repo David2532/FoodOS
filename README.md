@@ -152,6 +152,11 @@ behandeln manuell erfasste Rechnungsmetadaten als `ESTIMATE`. Die Forward-Migrat
 `20260805165055` ergänzt unveränderliche Quellenvalidierungsereignisse: `SOURCE FINAL`
 setzt ein autoritatives Artefakt samt SHA-256 und Parser-Version voraus; historische
 Metadaten-Finals werden ohne Überschreiben des Journals effektiv herabgestuft.
+`20260805180000` ergänzt eine separate, append-only Payment-Reconciliation. `PAID`
+entsteht nur aus dem neuesten konsistenten Payment-Event für ein weiterhin exakt
+zugeordnetes `SOURCE FINAL`-Journal. Die Evidenz speichert ausschließlich System-/Beleg-ID,
+SHA-256, Parser-Provenienz, Minor Units, Währung und Datum; IBAN, Karten-, Konto- und
+Rohbelegdaten werden weder im CEO-Dashboard gelesen noch in diesem Modell gespeichert.
 `supabase/tests/` beweist AAL1-Verweigerung,
 zweiten Nutzer, Haushaltsisolation, Replay/Payload-Konflikt, Safety-Sperren und atomare
 Mengen-/Logwirkung.

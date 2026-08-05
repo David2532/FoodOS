@@ -2,6 +2,7 @@
 
 import { AlertTriangle, BadgeEuro, FileWarning, ShieldCheck } from "lucide-react";
 import { formatMoneyMinor, isOpenExpense, sumExpensesByCurrency, type OpsExpense } from "@/domain/ops-finance";
+import { PaymentReconciliationForm } from "./payment-reconciliation-form";
 import { SupplierInvoiceForm } from "./supplier-invoice-form";
 
 function AmountList({ amounts }: { amounts: Array<{ currency: string; amountMinor: number }> }) {
@@ -29,16 +30,17 @@ export function OpsFinanceDashboard({ expenses }: { expenses: OpsExpense[] }) {
         <section className="ops-hero" aria-labelledby="ops-money-title"><div><p>GELD · QUELLEN · FÄLLIGKEITEN</p><h2 id="ops-money-title">Kosten bleiben getrennt von Zahlung und Cash.</h2><span>Keine Umsatz-, Cash- oder Margenkennzahl wird ohne eigene Quelle ersetzt.</span></div><BadgeEuro size={42} aria-hidden="true" /></section>
         <section className="ops-metrics" aria-label="Finanzstatus">
           <FinanceMetric label="Erfasste Kostenschätzungen" detail="Manuelle Metadaten · noch nicht SOURCE FINAL" amounts={estimated} />
-          <FinanceMetric label="Offene Verbindlichkeiten" detail="Rechnung vorhanden · Zahlung noch nicht abgeglichen" amounts={open} tone="warning" />
-          <FinanceMetric label="Abgeglichene Zahlungen" detail="Nur mit Bank-/Zahlungsnachweis" amounts={paid} />
+          <FinanceMetric label="Offene oder ungeklärte Verbindlichkeiten" detail="SOURCE FINAL · noch kein belastbarer Zahlungsnachweis" amounts={open} tone="warning" />
+          <FinanceMetric label="Belegte Lieferantenzahlungen" detail="Payment Evidence vorhanden · nicht als BANKED bezeichnet" amounts={paid} />
         </section>
         <section className="ops-grid">
           <section className="ops-card ops-source-card" aria-labelledby="ops-sources-title"><div className="ops-section-heading"><div><p>UNVERÄNDERLICHE QUELLEN</p><h2 id="ops-sources-title">Lieferantenkosten</h2></div><span>{expenses.length} Quelle{expenses.length === 1 ? "" : "n"}</span></div>
-            {expenses.length ? <ul className="ops-expense-list">{expenses.map((expense) => <li key={expense.id}><div><strong>{expense.expenseLabel}</strong><span>{expense.supplier} · Quelle {expense.sourceSystem}/{expense.sourceDocumentId}</span><small>Ausgestellt {formatDate(expense.issuedOn)} · fällig {formatDate(expense.dueOn)}</small></div><div className="ops-expense-amount"><strong>{formatMoneyMinor(expense.amountMinor, expense.currency)}</strong><span className={`ops-state ${expense.paymentState.toLowerCase()}`}>{expense.trust} · {expense.paymentState}</span></div></li>)}</ul> : <div className="ops-empty"><FileWarning size={20} aria-hidden="true" /><div><strong>Noch keine geprüfte Kostenquelle</strong><p>ChatGPT Pro wird nicht als Ausgabe gezählt: In der verbundenen Mailbox liegt kein Betrag oder Zahlungsbeleg vor.</p></div></div>}
+            {expenses.length ? <ul className="ops-expense-list">{expenses.map((expense) => <li key={expense.id}><div><strong>{expense.expenseLabel}</strong><span>{expense.supplier} · Quelle {expense.sourceSystem}/{expense.sourceDocumentId}</span><small>Ausgestellt {formatDate(expense.issuedOn)} · fällig {formatDate(expense.dueOn)}</small></div><div className="ops-expense-amount"><strong>{formatMoneyMinor(expense.amountMinor, expense.currency)}</strong><span className={`ops-state ${expense.paymentState.toLowerCase()}`}>{expense.trust} · {expense.paymentState}{expense.paymentEvidenceRecordedAt ? " · EVIDENCE" : ""}</span></div></li>)}</ul> : <div className="ops-empty"><FileWarning size={20} aria-hidden="true" /><div><strong>Noch keine geprüfte Kostenquelle</strong><p>Ohne persistierten, autoritativ validierten Beleg zeigt FoodOS keine Ausgabe als SOURCE FINAL oder PAID.</p></div></div>}
           </section>
           <aside className="ops-card ops-risk-card"><AlertTriangle size={20} aria-hidden="true" /><div><p>KOSTENRAHMEN</p><h2>Spend Cap bleibt aktiv</h2><span>Der Katalog bleibt innerhalb des enthaltenen Speicherbudgets. Zusätzliche Nutzung wird nicht automatisch freigeschaltet.</span></div></aside>
         </section>
         <SupplierInvoiceForm />
+        <PaymentReconciliationForm expenses={expenses} />
       </section>
     </main>
   );

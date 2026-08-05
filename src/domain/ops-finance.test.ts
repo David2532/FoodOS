@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { formatMoneyMinor, isOpenExpense, resolveOpsExpenseTrust, sumExpensesByCurrency, type OpsExpense } from "./ops-finance";
+import {
+  formatMoneyMinor,
+  isOpenExpense,
+  paymentReconciliationSchema,
+  resolveOpsExpenseTrust,
+  resolveOpsPaymentState,
+  sumExpensesByCurrency,
+  type OpsExpense
+} from "./ops-finance";
 
 const expense = (overrides: Partial<OpsExpense> = {}): OpsExpense => ({
   id: "expense-1",
@@ -14,6 +22,7 @@ const expense = (overrides: Partial<OpsExpense> = {}): OpsExpense => ({
   issuedOn: "2026-08-05",
   dueOn: "2026-08-05",
   recordedAt: "2026-08-05T09:45:54Z",
+  paymentEvidenceRecordedAt: null,
   ...overrides
 });
 
@@ -32,7 +41,29 @@ describe("CEO finance domain", () => {
 
   it("keeps an outstanding supplier invoice visibly open", () => {
     expect(isOpenExpense(expense())).toBe(true);
+    expect(isOpenExpense(expense({ paymentState: "UNKNOWN" }))).toBe(true);
     expect(isOpenExpense(expense({ paymentState: "PAID" }))).toBe(false);
+  });
+
+  it("derives payment state from the newest immutable event and distrusts legacy paid flags", () => {
+    expect(resolveOpsPaymentState("paid", [])).toBe("UNKNOWN");
+    expect(resolveOpsPaymentState("open", [
+      { eventSequence: 8, effectivePaymentState: "paid" },
+      { eventSequence: 9, effectivePaymentState: "open" }
+    ])).toBe("OPEN");
+  });
+
+  it("accepts exact minor-unit payment evidence metadata without raw banking data", () => {
+    expect(paymentReconciliationSchema.parse({
+      journalId: "70000000-0000-4000-8000-000000000011",
+      paymentSystem: "paypal",
+      externalPaymentId: "8UR20484M7612024A",
+      artifactSha256: "56ea64760bf68a563a0f98e9b62a45c675b255ca5798c3401c7f2a0ac31d5b2c",
+      parserVersion: "gmail-html-body-v1",
+      amountMinor: 13_113,
+      currency: "EUR",
+      paidOn: "2026-08-05"
+    })).toMatchObject({ amountMinor: 13_113, currency: "EUR" });
   });
 
   it("lets an immutable validation event correct a legacy metadata-only final label", () => {
