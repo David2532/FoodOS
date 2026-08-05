@@ -1,6 +1,7 @@
 import { Readable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { canonicalJson, normalizePublicCatalogProduct, sha256 } from "./public-catalog-core.mjs";
+import { catalogServerConfiguration } from "./catalog-environment.mjs";
 import {
   activateProductCatalogImport,
   assertIntegrity,
@@ -155,6 +156,28 @@ describe("public catalog dump normalizer", () => {
     expect(catalogUserAgent()).toBe("FoodOS/0.1 (+https://github.com/David2532/FoodOS)");
     vi.stubEnv("OPEN_FOOD_FACTS_USER_AGENT", "generic-browser");
     expect(() => catalogUserAgent()).toThrow("catalog-user-agent-required");
+  });
+
+  it("prefers a server-only Supabase secret key and retains the legacy service-role fallback", () => {
+    expect(catalogServerConfiguration({
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SECRET_KEY: "sb_secret_current",
+      SUPABASE_SERVICE_ROLE_KEY: "legacy-service-role"
+    })).toEqual({
+      url: "https://example.supabase.co",
+      credential: "sb_secret_current",
+      credentialKind: "secret"
+    });
+    expect(catalogServerConfiguration({
+      NEXT_PUBLIC_SUPABASE_URL: "https://fallback.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "legacy-service-role"
+    })).toEqual({
+      url: "https://fallback.supabase.co",
+      credential: "legacy-service-role",
+      credentialKind: "service-role"
+    });
+    expect(catalogServerConfiguration({ SUPABASE_URL: "https://example.supabase.co" }))
+      .toEqual({ url: "https://example.supabase.co", credential: undefined, credentialKind: undefined });
   });
 
   it("fails closed when the database capacity result is inconsistent", () => {

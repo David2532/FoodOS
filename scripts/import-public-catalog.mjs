@@ -8,6 +8,7 @@ import { Readable, Transform } from "node:stream";
 import { createGunzip } from "node:zlib";
 import { createInterface } from "node:readline";
 import { createClient } from "@supabase/supabase-js";
+import { catalogServerConfiguration } from "./catalog-environment.mjs";
 import { catalogRowForInsert, normalizePublicCatalogProduct } from "./public-catalog-core.mjs";
 
 const DEFAULT_SOURCE = "https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz";
@@ -85,10 +86,9 @@ export function sourceDescriptor(input) {
 }
 
 function clientFromEnvironment() {
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceRoleKey) throw fail("catalog-import-credentials-missing");
-  return createClient(url, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  const { url, credential } = catalogServerConfiguration();
+  if (!url || !credential) throw fail("catalog-import-credentials-missing");
+  return createClient(url, credential, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
 export function catalogUserAgent() {

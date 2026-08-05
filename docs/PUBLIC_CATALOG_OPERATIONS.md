@@ -19,7 +19,8 @@ The catalog is public source data, physically and logically separated from house
 profile, inventory, consent and nutrition-log data. It has no household foreign key.
 Direct table access is revoked from `anon` and `authenticated`; only the two
 AAL2-protected, security-definer projections may return an active generation. The
-server-only importer is the only ordinary writer and uses a service-role credential.
+server-only importer is the only ordinary writer and uses a modern secret credential
+or the legacy service-role fallback during migration.
 
 For a product search or barcode lookup, the intended order is:
 
@@ -74,7 +75,8 @@ browser build. The scheduled workflow and local importer need these server-only 
 | Control | Purpose |
 |---|---|
 | `SUPABASE_URL` | Preferred server-only Supabase URL; the scripts also accept `NEXT_PUBLIC_SUPABASE_URL` only as a URL fallback. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service-role credential used solely by the importer and verification script. |
+| `SUPABASE_SECRET_KEY` | Preferred modern `sb_secret_...` backend credential used solely by the importer and verification script. It bypasses RLS and must never enter source control or client code. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Optional legacy service-role fallback retained while server workloads migrate to the modern secret key. |
 | `OPEN_FOOD_FACTS_USER_AGENT` | Required identifiable value in the form `App/Version (contact@email)` or `App/Version (https://project.example)` for bulk and live fallback requests. An invalid or absent value fails closed to the visible manual fallback. |
 | `PUBLIC_CATALOG_DUMP_URL` | Optional, reviewed server-side source override. Without it, the importer uses the official full JSONL endpoint above. |
 | `PUBLIC_CATALOG_LOCAL_SOURCE_SHA256` | Required only for an explicit local JSONL test/replay source; its lower-case SHA-256 must match the streamed source bytes. Never use it to bypass source review in production. |
@@ -92,7 +94,8 @@ not an activation control and must never be exposed to a browser build.
 
 Before a first managed import, apply migrations `0015`, `0016`, both bounded-seal
 follow-ups, the nutrition projection and the recovery/capacity migration; configure the
-three secret values
+URL, identifiable user agent and at least one server credential
+(`SUPABASE_SECRET_KEY` preferred, or `SUPABASE_SERVICE_ROLE_KEY` as the legacy fallback)
 in the protected GitHub Environment or another server-only secret store, and complete the
 source/licence review. A controlled operator run is then:
 

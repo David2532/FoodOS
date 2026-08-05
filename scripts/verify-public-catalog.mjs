@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import { catalogServerConfiguration } from "./catalog-environment.mjs";
 
 function loadLocalEnvironment() {
   const file = resolve(".env.local");
@@ -14,13 +15,12 @@ function loadLocalEnvironment() {
 }
 
 loadLocalEnvironment();
-const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!url || !serviceRoleKey) {
-  process.stderr.write("Catalog verification blocked: SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.\n");
+const { url, credential } = catalogServerConfiguration();
+if (!url || !credential) {
+  process.stderr.write("Catalog verification blocked: SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY/SUPABASE_SERVICE_ROLE_KEY are required.\n");
   process.exitCode = 2;
 } else {
-  const supabase = createClient(url, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  const supabase = createClient(url, credential, { auth: { autoRefreshToken: false, persistSession: false } });
   const { data: run, error: runError } = await supabase.from("product_catalog_import_runs")
     .select("id, generation, source_provider, source_schema_version, source_revision, source_retrieved_at, attempted_row_count, accepted_product_count, rejected_row_count, filtered_row_count, duplicate_row_count, normalized_content_sha256")
     .eq("status", "active")

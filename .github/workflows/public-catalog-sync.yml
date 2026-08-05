@@ -24,6 +24,7 @@ jobs:
     environment: production
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       OPEN_FOOD_FACTS_USER_AGENT: ${{ secrets.OPEN_FOOD_FACTS_USER_AGENT }}
     steps:
@@ -40,7 +41,7 @@ jobs:
         shell: bash
         run: |
           test -n "$SUPABASE_URL"
-          test -n "$SUPABASE_SERVICE_ROLE_KEY"
+          test -n "$SUPABASE_SECRET_KEY" || test -n "$SUPABASE_SERVICE_ROLE_KEY"
           test -n "$OPEN_FOOD_FACTS_USER_AGENT"
       - name: Stream, stage and activate official catalog generation
         run: npm run catalog:import

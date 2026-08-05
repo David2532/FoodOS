@@ -187,7 +187,8 @@ function defaultRun(program, args, cwd) {
 
 function defaultRequirement(requirement, cwd) {
   if (requirement === "catalog-env") {
-    return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+    return Boolean(process.env.SUPABASE_URL
+      && (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY));
   }
   if (requirement === "browser") {
     const probe = spawnSync(process.execPath, ["-e", "const fs=require('node:fs');const {chromium}=require('@playwright/test');process.exit(fs.existsSync(chromium.executablePath())?0:1)"], { cwd });
