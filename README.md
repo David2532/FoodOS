@@ -157,6 +157,10 @@ entsteht nur aus dem neuesten konsistenten Payment-Event für ein weiterhin exak
 zugeordnetes `SOURCE FINAL`-Journal. Die Evidenz speichert ausschließlich System-/Beleg-ID,
 SHA-256, Parser-Provenienz, Minor Units, Währung und Datum; IBAN, Karten-, Konto- und
 Rohbelegdaten werden weder im CEO-Dashboard gelesen noch in diesem Modell gespeichert.
+`20260805200000` ergänzt dafür eine ausschließlich für `service_role` ausführbare,
+atomare System-Ingestion. Nutzer- und System-Aktor sind je Datensatz per XOR getrennt;
+exakte Natural-Key-Replays bleiben idempotent, während abweichende Quelle, Hash,
+Betrag, Währung oder Zahlungs-ID die gesamte Transaktion zurückrollen.
 `supabase/tests/` beweist AAL1-Verweigerung,
 zweiten Nutzer, Haushaltsisolation, Replay/Payload-Konflikt, Safety-Sperren und atomare
 Mengen-/Logwirkung.

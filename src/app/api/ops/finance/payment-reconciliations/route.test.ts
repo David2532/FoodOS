@@ -17,8 +17,8 @@ import { POST } from "./route";
 const validPayment = {
   journalId: "70000000-0000-4000-8000-000000000011",
   paymentSystem: "PAYPAL",
-  externalPaymentId: "8UR20484M7612024A",
-  artifactSha256: "56EA64760BF68A563A0F98E9B62A45C675B255CA5798C3401C7F2A0AC31D5B2C",
+  externalPaymentId: "PAYPAL-TEST-PAYMENT-0001",
+  artifactSha256: "A".repeat(64),
   parserVersion: "GMAIL-HTML-BODY-V1",
   amountMinor: 13_113,
   currency: "eur",

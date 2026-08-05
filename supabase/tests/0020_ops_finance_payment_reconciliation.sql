@@ -109,15 +109,15 @@ select throws_ok(
 
 reset role;
 
--- The real Supabase invoice fixture has an authoritative invoice artifact but no
+-- A synthetic Supabase invoice fixture has an authoritative invoice artifact but no
 -- payment evidence. It must therefore remain OPEN. The OpenAI fixture below is a
 -- separate validated supplier journal used to exercise the payment event chain.
 insert into public.ops_finance_source_documents (
   id, source_system, source_document_id, supplier, evidence_kind, source_sha256, issued_on, due_on, captured_by
 ) values
   (
-    '60000000-0000-4000-8000-000000000001', 'supabase', 'ZEALEI-00001', 'Supabase', 'invoice_metadata',
-    '6fc5a55dda8e5103fc14fc8c9d5172dbdc4773626d517b949a02b58688908636',
+    '60000000-0000-4000-8000-000000000001', 'supabase', 'SUPABASE-TEST-INVOICE-0001', 'Supabase', 'invoice_metadata',
+    repeat('6', 64),
     '2026-08-05', '2026-08-05', '44444444-4444-4444-8444-444444444444'
   ),
   (
@@ -134,7 +134,7 @@ insert into public.ops_finance_source_validation_events (
 ) values
   (
     '60000000-0000-4000-8000-000000000001', 'source_final', 'authoritative_artifact_validated',
-    '6fc5a55dda8e5103fc14fc8c9d5172dbdc4773626d517b949a02b58688908636',
+    repeat('6', 64),
     'gmail-pdf-text-v1', '44444444-4444-4444-8444-444444444444'
   ),
   (
@@ -193,8 +193,8 @@ select lives_ok(
     select public.record_ops_supplier_payment(
       '70000000-0000-4000-8000-000000000011',
       'paypal',
-      '8UR20484M7612024A',
-      '56ea64760bf68a563a0f98e9b62a45c675b255ca5798c3401c7f2a0ac31d5b2c',
+      'PAYPAL-TEST-PAYMENT-0020-0001',
+      repeat('5', 64),
       'gmail-html-body-v1',
       13113,
       'EUR',
@@ -219,8 +219,8 @@ select lives_ok(
     select public.record_ops_supplier_payment(
       '70000000-0000-4000-8000-000000000011',
       'paypal',
-      '8UR20484M7612024A',
-      '56ea64760bf68a563a0f98e9b62a45c675b255ca5798c3401c7f2a0ac31d5b2c',
+      'PAYPAL-TEST-PAYMENT-0020-0001',
+      repeat('5', 64),
       'gmail-html-body-v1',
       13113,
       'EUR',
@@ -238,13 +238,13 @@ select results_eq(
   'an exact replay creates neither duplicate evidence nor a duplicate event'
 );
 select throws_ok(
-  $$ select public.record_ops_supplier_payment('70000000-0000-4000-8000-000000000011', 'paypal', '8UR20484M7612024A', repeat('9', 64), 'gmail-html-body-v1', 13113, 'EUR', '2026-08-05') $$,
+  $$ select public.record_ops_supplier_payment('70000000-0000-4000-8000-000000000011', 'paypal', 'PAYPAL-TEST-PAYMENT-0020-0001', repeat('9', 64), 'gmail-html-body-v1', 13113, 'EUR', '2026-08-05') $$,
   'P0001',
   'Conflicting duplicate payment evidence',
   'the same external payment ID with a different hash fails closed'
 );
 select throws_ok(
-  $$ select public.record_ops_supplier_payment('70000000-0000-4000-8000-000000000011', 'paypal', 'different-payment-id', '56ea64760bf68a563a0f98e9b62a45c675b255ca5798c3401c7f2a0ac31d5b2c', 'gmail-html-body-v1', 13113, 'EUR', '2026-08-05') $$,
+  $$ select public.record_ops_supplier_payment('70000000-0000-4000-8000-000000000011', 'paypal', 'different-payment-id', repeat('5', 64), 'gmail-html-body-v1', 13113, 'EUR', '2026-08-05') $$,
   'P0001',
   'Conflicting duplicate payment evidence hash',
   'the same payment artifact hash under another ID fails closed'
@@ -343,7 +343,7 @@ select lives_ok(
         payment_system, external_payment_id, evidence_kind, artifact_sha256, parser_version,
         amount_minor, currency, effective_on, captured_by
       ) values (
-        'paypal', '8UR20484M7612024A-reversal', 'supplier_payment_reversal', repeat('5', 64),
+        'paypal', 'PAYPAL-TEST-PAYMENT-0020-0001-reversal', 'supplier_payment_reversal', repeat('2', 64),
         'gmail-html-body-v1', 13113, 'EUR', '2026-08-05', '44444444-4444-4444-8444-444444444444'
       ) returning id
     )
@@ -367,7 +367,7 @@ select results_eq(
   'the newest append-only event is the effective payment state'
 );
 select throws_ok(
-  $$ update public.ops_finance_payment_evidence set parser_version = 'tampered-v2' where external_payment_id = '8UR20484M7612024A' $$,
+  $$ update public.ops_finance_payment_evidence set parser_version = 'tampered-v2' where external_payment_id = 'PAYPAL-TEST-PAYMENT-0020-0001' $$,
   'P0001',
   'Ops finance records are immutable; post a correction or payment journal instead.',
   'payment evidence cannot be updated'

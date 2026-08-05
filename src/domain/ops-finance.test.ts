@@ -57,8 +57,8 @@ describe("CEO finance domain", () => {
     expect(paymentReconciliationSchema.parse({
       journalId: "70000000-0000-4000-8000-000000000011",
       paymentSystem: "paypal",
-      externalPaymentId: "8UR20484M7612024A",
-      artifactSha256: "56ea64760bf68a563a0f98e9b62a45c675b255ca5798c3401c7f2a0ac31d5b2c",
+      externalPaymentId: "PAYPAL-TEST-PAYMENT-0001",
+      artifactSha256: "a".repeat(64),
       parserVersion: "gmail-html-body-v1",
       amountMinor: 13_113,
       currency: "EUR",
