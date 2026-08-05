@@ -5,6 +5,7 @@ import { Apple, AtSign, KeyRound, LoaderCircle, Mail, Play } from "lucide-react"
 import { useRouter } from "next/navigation";
 import { emailAddressSchema, passwordSignInSchema, passwordSignUpSchema } from "@/domain/password";
 import { oauthCallbackUrl } from "@/domain/auth-redirect";
+import { authCallbackOriginForBrowser } from "@/domain/request-origin";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { AuthFrame } from "./auth-frame";
 
@@ -27,12 +28,14 @@ function ProviderMark({ provider }: { provider: OAuthProvider }) {
 
 export function SignInScreen({
   authError,
+  authCallbackOrigin = null,
   appleEnabled = false,
   demoEnabled = false,
   googleEnabled = false,
   onEditPrivacy
 }: {
   authError?: string;
+  authCallbackOrigin?: string | null;
   appleEnabled?: boolean;
   demoEnabled?: boolean;
   googleEnabled?: boolean;
@@ -46,6 +49,15 @@ export function SignInScreen({
   const [activeProvider, setActiveProvider] = useState<OAuthProvider | null>(null);
   const [error, setError] = useState<string | null>(authError ? authErrorMessages[authError] ?? "Die Anmeldung konnte nicht bestätigt werden." : null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  function secureCallbackUrl(nextPath = "/"): string | null {
+    const origin = authCallbackOriginForBrowser(authCallbackOrigin, window.location.origin);
+    return origin ? oauthCallbackUrl(origin, nextPath) : null;
+  }
+
+  function showCallbackConfigurationError() {
+    setError("Diese Installation kann gerade keinen sicheren Anmeldelink erzeugen. Versuche es später erneut.");
+  }
 
   function returnToCredentials() {
     setScreen("credentials");
@@ -66,14 +78,23 @@ export function SignInScreen({
     }
 
     setEmail(parsed.data.email);
-    setBusy(true);
     const supabase = getSupabaseBrowserClient();
-    const result = mode === "login"
-      ? await supabase.auth.signInWithPassword(parsed.data)
-      : await supabase.auth.signUp({
+    let result;
+    if (mode === "login") {
+      setBusy(true);
+      result = await supabase.auth.signInWithPassword(parsed.data);
+    } else {
+      const emailRedirectTo = secureCallbackUrl();
+      if (!emailRedirectTo) {
+        showCallbackConfigurationError();
+        return;
+      }
+      setBusy(true);
+      result = await supabase.auth.signUp({
           ...parsed.data,
-          options: { emailRedirectTo: oauthCallbackUrl(window.location.origin) }
+          options: { emailRedirectTo }
         });
+    }
     setBusy(false);
 
     if (result.error) {
@@ -102,9 +123,14 @@ export function SignInScreen({
     }
 
     setEmail(parsed.data);
+    const redirectTo = secureCallbackUrl("/auth/passwort-zuruecksetzen");
+    if (!redirectTo) {
+      showCallbackConfigurationError();
+      return;
+    }
     setBusy(true);
     const result = await getSupabaseBrowserClient().auth.resetPasswordForEmail(parsed.data, {
-      redirectTo: oauthCallbackUrl(window.location.origin, "/auth/passwort-zuruecksetzen")
+      redirectTo
     });
     setBusy(false);
     if (result.error) {
@@ -115,14 +141,19 @@ export function SignInScreen({
   }
 
   async function signInWithProvider(provider: OAuthProvider) {
-    setBusy(true);
-    setActiveProvider(provider);
     setError(null);
     setNotice(null);
+    const redirectTo = secureCallbackUrl();
+    if (!redirectTo) {
+      showCallbackConfigurationError();
+      return;
+    }
+    setBusy(true);
+    setActiveProvider(provider);
     const result = await getSupabaseBrowserClient().auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: oauthCallbackUrl(window.location.origin),
+        redirectTo,
         scopes: provider === "google" ? "openid email profile" : "name email"
       }
     });

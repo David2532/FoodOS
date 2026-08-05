@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const testState = vi.hoisted(() => ({
   exchangeCodeForSession: vi.fn(),
@@ -35,6 +35,7 @@ function successfulSession() {
 
 describe("auth confirmation route", () => {
   beforeEach(() => {
+    vi.stubEnv("FOODOS_APP_ORIGIN", "https://foodos.test");
     testState.exchangeCodeForSession.mockReset();
     testState.verifyOtp.mockReset();
     testState.getClaims.mockReset();
@@ -42,6 +43,8 @@ describe("auth confirmation route", () => {
     testState.verifyOtp.mockResolvedValue(successfulSession());
     testState.getClaims.mockResolvedValue({ data: { claims: normalClaims }, error: null });
   });
+
+  afterEach(() => vi.unstubAllEnvs());
 
   it("denies a direct reset-route next value after an ordinary AAL1 code exchange", async () => {
     const response = await GET(new Request("https://foodos.test/auth/confirm?code=normal&next=%2Fauth%2Fpasswort-zuruecksetzen"));
@@ -60,6 +63,8 @@ describe("auth confirmation route", () => {
   });
 
   it("preserves the public host for a local callback when the standalone request URL is localhost", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("FOODOS_APP_ORIGIN", "");
     testState.getClaims.mockResolvedValue({ data: { claims: recoveryClaims }, error: null });
 
     const response = await GET(new Request("http://localhost:3101/auth/confirm?code=recovery", {
@@ -67,6 +72,35 @@ describe("auth confirmation route", () => {
     }));
 
     expect(response.headers.get("location")).toBe("http://127.0.0.1:3101/auth/passwort-zuruecksetzen");
+  });
+
+  it("uses the canonical production origin for an internal next path despite manipulated forwarded hosts", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("FOODOS_APP_ORIGIN", "https://app.foodos.example");
+
+    const response = await GET(new Request("https://internal.invalid/auth/confirm?code=normal&next=%2Finventory%3Ffilter%3Dsoon", {
+      headers: {
+        host: "evil.example",
+        "x-forwarded-host": "attacker.example",
+        "x-forwarded-proto": "http"
+      }
+    }));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("https://app.foodos.example/inventory?filter=soon");
+  });
+
+  it("does not exchange an authorization code when production lacks a valid canonical origin", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("FOODOS_APP_ORIGIN", "");
+
+    const response = await GET(new Request("http://127.0.0.1:3000/auth/confirm?code=normal", {
+      headers: { "x-forwarded-host": "attacker.example", "x-forwarded-proto": "https" }
+    }));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("location")).toBeNull();
+    expect(testState.exchangeCodeForSession).not.toHaveBeenCalled();
   });
 
   it("does not trust a recovery type or next parameter when the verified claim is missing", async () => {

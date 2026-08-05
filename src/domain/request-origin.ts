@@ -24,6 +24,35 @@ function requestUrlOrigin(request: Request): string | null {
   }
 }
 
+function normalizedApplicationOrigin(value: string | null | undefined): string | null {
+  const configured = value?.trim();
+  if (!configured) return null;
+  try {
+    const url = new URL(configured);
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      (url.pathname !== "" && url.pathname !== "/")
+    ) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+function isLoopbackOrigin(origin: string | null): origin is string {
+  if (!origin) return false;
+  try {
+    const hostname = new URL(origin).hostname.toLowerCase();
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Resolves the public origin without reflecting malformed forwarding headers.
  * A valid Host takes precedence over a standalone server's internally rebuilt URL.
@@ -51,22 +80,38 @@ export function publicRequestOrigin(request: Request): string | null {
  * their CSRF boundary. A missing or malformed configuration fails closed.
  */
 export function configuredApplicationOrigin(): string | null {
-  const configured = process.env.FOODOS_APP_ORIGIN?.trim();
-  if (!configured) return null;
-  try {
-    const url = new URL(configured);
-    if (
-      (url.protocol !== "http:" && url.protocol !== "https:") ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash ||
-      (url.pathname !== "" && url.pathname !== "/")
-    ) return null;
-    return url.origin;
-  } catch {
-    return null;
-  }
+  return normalizedApplicationOrigin(process.env.FOODOS_APP_ORIGIN);
+}
+
+/**
+ * Auth callbacks use the deployment-owned origin in production. The only fallback is
+ * an explicit loopback origin for local development and tests; arbitrary request or
+ * proxy hosts are never promoted to a production redirect target.
+ */
+export function authCallbackOriginForRequest(request: Request): string | null {
+  const configured = configuredApplicationOrigin();
+  if (configured) return configured;
+  if (process.env.NODE_ENV === "production") return null;
+
+  const publicOrigin = publicRequestOrigin(request);
+  if (isLoopbackOrigin(publicOrigin)) return publicOrigin;
+  const directOrigin = requestUrlOrigin(request);
+  return isLoopbackOrigin(directOrigin) ? directOrigin : null;
+}
+
+/**
+ * Browser auth initiators receive the canonical origin from the server. A browser-
+ * derived value is accepted only for a loopback development session.
+ */
+export function authCallbackOriginForBrowser(
+  configuredOrigin: string | null | undefined,
+  browserOrigin: string
+): string | null {
+  const configured = normalizedApplicationOrigin(configuredOrigin);
+  if (configured) return configured;
+  if (process.env.NODE_ENV === "production") return null;
+  const localOrigin = normalizedApplicationOrigin(browserOrigin);
+  return isLoopbackOrigin(localOrigin) ? localOrigin : null;
 }
 
 export function hasSameConfiguredOrigin(request: Request): boolean {

@@ -10,7 +10,7 @@ import { readStagedPrivacyChoice, stagePrivacyChoice } from "./privacy-client";
 
 type EntryState = "loading" | "privacy" | "sign-in";
 
-export function EligibilityPrivacyGate({ authError, appleEnabled, demoEnabled, googleEnabled }: { authError?: string; appleEnabled: boolean; demoEnabled: boolean; googleEnabled: boolean }) {
+export function EligibilityPrivacyGate({ authError, authCallbackOrigin, appleEnabled, demoEnabled, googleEnabled }: { authError?: string; authCallbackOrigin: string | null; appleEnabled: boolean; demoEnabled: boolean; googleEnabled: boolean }) {
   const [state, setState] = useState<EntryState>("loading");
 
   useEffect(() => {
@@ -22,7 +22,7 @@ export function EligibilityPrivacyGate({ authError, appleEnabled, demoEnabled, g
   }, []);
 
   if (state === "sign-in") {
-    return <SignInScreen authError={authError} appleEnabled={appleEnabled} demoEnabled={demoEnabled} googleEnabled={googleEnabled} onEditPrivacy={() => setState("privacy")} />;
+    return <SignInScreen authError={authError} authCallbackOrigin={authCallbackOrigin} appleEnabled={appleEnabled} demoEnabled={demoEnabled} googleEnabled={googleEnabled} onEditPrivacy={() => setState("privacy")} />;
   }
   if (state === "loading") {
     return <AuthFrame eyebrow="Privat starten" title="Deine Auswahl wird geladen" description="FoodOS aktiviert vor deiner Entscheidung keine optionale Analyse oder Werbung."><div className="privacy-loading" role="status"><LoaderCircle className="spin" size={20} /> Datenschutz-Status wird geprüft …</div></AuthFrame>;

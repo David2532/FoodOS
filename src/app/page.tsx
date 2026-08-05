@@ -10,6 +10,7 @@ import { loadFoodOsSnapshot } from "@/infrastructure/foodos-repository";
 import { loadCurrentPrivacyChoices } from "@/infrastructure/privacy-repository";
 import { redirect } from "next/navigation";
 import { isBillingLabEnvironment } from "@/domain/entitlements";
+import { configuredApplicationOrigin } from "@/domain/request-origin";
 
 // Authentication depends on request cookies and runtime deployment configuration.
 export const dynamic = "force-dynamic";
@@ -35,6 +36,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ a
     return (
       <EligibilityPrivacyGate
         authError={typeof authError === "string" ? authError : undefined}
+        authCallbackOrigin={configuredApplicationOrigin()}
         appleEnabled={process.env.NEXT_PUBLIC_OAUTH_APPLE_ENABLED === "true"}
         demoEnabled={demoEnabled}
         googleEnabled={process.env.NEXT_PUBLIC_OAUTH_GOOGLE_ENABLED === "true"}
