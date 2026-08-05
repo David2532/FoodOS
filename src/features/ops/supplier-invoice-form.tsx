@@ -45,7 +45,7 @@ export function SupplierInvoiceForm() {
   return (
     <form className="ops-invoice-form" onSubmit={onSubmit} aria-describedby={`${formId}-note`}>
       <div className="ops-form-heading"><span>Quelleneingang</span><h2>Lieferantenrechnung erfassen</h2></div>
-      <p id={`${formId}-note`}>Erfasst nur die Rechnungsmetadaten und deren Hash. Die Buchung bleibt <strong>OPEN</strong>, bis eine Zahlung getrennt abgeglichen ist.</p>
+      <p id={`${formId}-note`}>Erfasst nur Rechnungsmetadaten als <strong>ESTIMATE</strong>. Erst ein separat ingestierter, autoritativer Beleg darf <strong>SOURCE FINAL</strong> werden; die Zahlung bleibt bis zum Abgleich <strong>OPEN</strong>.</p>
       <div className="ops-form-grid">
         <label>Quelle<select name="sourceSystem" defaultValue="supabase" required><option value="supabase">Supabase</option><option value="openai">OpenAI</option><option value="other">Andere Quelle</option></select></label>
         <label>Rechnungs-/Beleg-ID<input name="sourceDocumentId" required minLength={2} maxLength={160} autoComplete="off" /></label>
@@ -58,7 +58,7 @@ export function SupplierInvoiceForm() {
       </div>
       <small id={`${formId}-amount`}>Beispiel: 25,00 USD werden als <strong>2500</strong> gespeichert. Währungen bleiben strikt getrennt.</small>
       {state.kind === "error" && <p className="ops-form-message error" role="alert">{state.message}</p>}
-      {state.kind === "success" && <p className="ops-form-message success" role="status"><CheckCircle2 size={16} aria-hidden="true" /> Unveränderliche Quelle und offenes Journal wurden erfasst.</p>}
+      {state.kind === "success" && <p className="ops-form-message success" role="status"><CheckCircle2 size={16} aria-hidden="true" /> Unveränderliche Metadaten und eine offene Kostenschätzung wurden erfasst.</p>}
       <button className="primary-button ops-submit" disabled={state.kind === "saving"} type="submit">{state.kind === "saving" ? <><LoaderCircle className="spin" size={16} aria-hidden="true" /> Wird erfasst …</> : <><Plus size={16} aria-hidden="true" /> Rechnung als OPEN erfassen</>}</button>
     </form>
   );
