@@ -1,161 +1,132 @@
 # FoodOS repository instructions
 
-## Product
+## Start and scope routing
 
-FoodOS is a Germany-first commercial food inventory product with a Next.js web app and
-planned native iOS/Android apps. It covers batch expiry, barcode metadata, personal
-ingredient relevance, nutrition, meal planning, and shopping. Keep it calm, fast, and
-usable one-handed. Do not call personal relevance a universal harm/safety assessment.
+FoodOS is a Germany-first food inventory product handling private household and
+safety-adjacent food data. Preserve its calm, fast, one-handed mobile experience.
+
+For every task:
+
+1. Run `git status --short --branch` and preserve unrelated changes.
+2. Run `npm run agent:context -- <scope>` (`--list` shows valid scopes).
+3. Read only the files printed for that scope, plus directly edited files.
+4. Implement the smallest cohesive vertical slice.
+5. Run `npm run verify:changed`; broaden checks only when its output or risk requires it.
+
+Do not routinely read every file under `plans/`, `legal/`, `mockups/`,
+`docs/decisions/` or `docs/evidence/`. Their specialist rules remain binding when the
+selected scope names them. `CODEX_PROMPT.md` is only a start point when the user
+explicitly requests the complete multi-stage build; it is not required for normal tasks.
 
 ## Commands
 
-- Install: `npm install`
+- Install locked dependencies: `npm ci`
 - Develop: `npm run dev`
-- Full verification: `npm run verify`
-- Individual checks: `npm run lint`, `npm run typecheck`, `npm run test`, `npm run build`
+- List scopes: `npm run agent:context -- --list`
+- Scope context: `npm run agent:context -- <scope>`
+- Changed verification: `npm run verify:changed -- --base=<ref>`
+- Unit tests: `npm run test:unit`
+- Related unit tests: `npm run test:unit:changed -- <files...>`
+- Database/pgTAP: `npm run test:db`
+- Preview E2E: `npm run test:e2e`
+- Authenticated E2E: `npm run test:e2e:auth`
+- Full verification: `npm run verify:full`
+- Safe migration frame: `npm run migration:new -- <snake_case_name>`
 
-Run `npm run verify` before handing work back. If a check cannot run, state the exact
-reason and do not claim success.
+Use `verify:full` before handoff when shared configuration, routing, dependencies,
+security-critical boundaries or several scopes changed. A missing Docker, Supabase,
+browser or external service is `BLOCKED`, never `PASS`.
 
-## Engineering constraints
+## Architecture boundaries
 
-- Preserve working code and unrelated user changes. Inspect `git status` before edits.
-- Work in complete vertical slices: understand the user flow, define states and data
-  contracts, implement domain logic and persistence, connect the UI, test, then perform
-  visual QA before starting the next slice.
-- Keep routing/composition, feature UI, domain logic, validation, and data access
-  separated. React components must not become the home of database queries or nutrition,
-  inventory, GS1, expiry, and risk business rules.
-- Prefer small, named modules and reusable primitives over giant page components,
-  duplicated JSX, boolean-heavy props, and speculative abstractions. Refactor when a
-  second real use case proves the abstraction.
-- Represent every async feature explicitly with idle/loading/success/empty/error/offline
-  states. Critical multi-step flows must be resumable or fail without partial writes.
-- Use strict TypeScript and validate external input with Zod.
-- Keep secrets server-side. Never expose a Supabase service-role key or another secret
-  through `NEXT_PUBLIC_*` variables.
-- Treat Supabase Row Level Security as a required security boundary. Every household
-  table must be isolated by membership, require authenticated AAL2, and be covered by
-  AAL1/AAL2 and two-household tests or reproducible checks.
-- Keep external product data provenance, retrieval time, and confidence. Unknown data
-  must stay unknown; never invent nutrition, expiry, ingredients, or risk evidence.
-- A normal EAN/UPC barcode usually does not contain an expiry date. Parse GS1 AIs when
-  present; otherwise ask for a second package scan/OCR or manual confirmation.
-- Treat `plans/FOOD_SAFETY_RECALLS_AND_DATA_QUALITY.md` as C0. Recall matching is
-  exact/possible/text-candidate/unchecked, source freshness is visible, and an outage can
-  never become a clear/safe result. An applicable recall overrides MHD/planning.
-- Implement native offline behavior only through the versioned projection/outbox,
-  idempotency, revisions, entity-specific conflicts and tombstones in
-  `plans/OFFLINE_SYNC_AND_DATA_INTEGRITY.md`. Never use silent last-write-wins for
-  quantity, date, recall, membership, consent, security or deletion.
-- Ingredient ratings must distinguish personal allergens/exclusions, evidence-backed
-  concerns, exposure-dependent notes, informational notes, and unknowns. An E-number
-  alone is not evidence of harm. Avoid medical claims.
-- Prefer small vertical slices with tests over disconnected scaffolding.
-- Treat `plans/QUALITY_ENGINEERING_PLAN.md` as binding. Every exported business rule,
-  use case, API/RPC/job/webhook, database function/policy, and critical flow branch needs
-  meaningful automated coverage or a reviewed expiring exemption. Coverage percentage
-  never replaces assertions, mutation tests, integration or E2E evidence.
-- Test status is exact: a first-attempt pass is `PASS`; a retry pass is `FLAKY`; missing
-  evidence is `NOT_RUN`/`NOT_PROVEN`. Never turn flakes, skips, blocked vendors or stale
-  reports into green release evidence.
-- Every failure crosses a typed error boundary with flow/correlation/release identifiers.
-  Do not log raw objects. Telemetry uses compile-time allowlisted fields and the forbidden
-  data rules from `plans/OBSERVABILITY_AND_ERROR_CONSOLE.md`.
-- Lost-factor recovery cannot grant AAL2 from email or helpdesk assertion alone. Follow
-  the recovery/break-glass and key rules in `plans/SECURITY_AI_AND_UPDATE_GOVERNANCE.md`.
-- AI/OCR model versions require an approved registry/evaluation/canary/manual fallback.
-  Production OTA requires signing, runtime fingerprint, staged guardrails, two-person
-  high-risk publish and rollback; runtime services never hold update-publish credentials.
-- CEO/finance metrics follow `plans/CEO_CONTROL_CENTER.md`: every card has one versioned
-  definition, authoritative source, period/grain, freshness, trust state and reconciliation
-  status. Never label estimates as final/booked/filed/paid, use analytics events as
-  accounting truth, use floating point for money, or mix sandbox/test and production.
-- CEO risk actions follow `plans/CEO_RISK_AUTOMATION.md`: missing/stale survival sources
-  are not green; A2 actions are scoped/reversible; legal/tax/insolvency filings,
-  medical/food-safety decisions and evidence deletion are never autonomous actions.
-- Maintain accessible loading, empty, error, offline, and permission-denied states.
-- Treat `plans/UI_UX_PERFORMANCE_PLAN.md` as binding. Use semantic tokens and native
-  platform conventions, design compact/medium/expanded layouts deliberately, keep
-  scanner/chart/client code lazy, and enforce route/device budgets. Web commercial gates
-  are LCP ≤2.5 s, INP ≤200 ms and CLS ≤0.1 at p75; native startup/frame/memory evidence
-  must come from release builds on the pinned device matrix.
-- Prefer semantic HTML/native controls. Any custom ARIA/native widget must implement its
-  full name/role/state, keyboard/focus and assistive-technology contract. Respect 44 pt
-  Apple and 48 dp Android targets, large text, reduced motion and focus-not-obscured.
-- Do not claim a flow is intuitive or validated from a mockup, automated audit, internal
-  dogfooding or funnel alone. Follow `plans/UX_RESEARCH_AND_USABILITY_TESTING.md`, record
-  actual observation separately from interpretation and never fabricate participants,
-  quotes, task success, willingness-to-pay or research evidence.
-- Do not claim a deployment URL until it has been opened and its critical flow verified.
-- Treat allergy, intolerance, weight/body goals, nutrition/health profiles, scans, and
-  consumption as sensitive. Never send them, GTINs, MHD, product names, or images to ad,
-  analytics, crash, URL, or general-log payloads.
-- Ads are contextual/non-personalized only and never appear in auth, consent, scanning,
-  use-by/MHD, ingredient relevance, nutrition profile, export, deletion, or error flows.
-- Keep MHD (quality) and use-by/Verbrauchsdatum (safety for highly perishable food)
-  distinct. After use-by, do not recommend consumption; never promise food is safe.
-- Native store apps must provide native value and use Apple/Google billing for digital
-  premium. A WebView wrapper is not an acceptable implementation shortcut.
-- Do not assert worldwide legal compliance. A country stays disabled until its signed
-  country pack and the release gates in `legal/` and `plans/APP_STORE_RELEASE_PLAN.md`
-  are complete.
-- Do not spend into full native/AI/ads/international scope before the current validation
-  gate in `plans/COMPETITIVE_RESEARCH_AND_VALIDATION.md` has an evidence-backed
-  continue/narrow/pivot/stop decision. Do not fabricate beta or live CEO metrics.
+- `src/app`: routing, layouts, route handlers and composition.
+- `src/features`: feature-specific UI and orchestration.
+- `src/components`: shared consumer UI.
+- `src/domain`: deterministic business and safety rules.
+- `src/contracts`: validated boundary contracts.
+- `src/infrastructure`: providers, repositories and persistence adapters.
+- `src/lib`: shared pure helpers and server/client integration utilities.
+- `supabase/migrations`: forward-only database history.
+- `supabase/tests`: pgTAP, RLS and database boundary proof.
+- `scripts`: operational and developer automation.
 
-## Assets
+Keep business rules out of React components and route handlers. Components do not issue
+distributed table queries. Validate external input as `unknown` with Zod or an explicit
+runtime schema. Keep async idle/loading/success/empty/error/offline/permission states
+explicit. Prefer small named modules over speculative framework layers.
 
-- Create any missing original FoodOS UI assets yourself using the available image or
-  vector-generation tools. Use generated raster art for brand/empty/onboarding visuals,
-  Lucide or authored SVG for interface icons, and real source-backed product images for
-  products. Never fabricate a branded product photograph.
-- Do not ship placeholders, stock watermarks, copied third-party artwork, base64 blobs in
-  components, or inconsistent emoji as final UI assets.
-- Keep a coherent visual direction from `design.md`. Crop intentionally, export modern
-  web formats and responsive sizes, compress assets, include dimensions and useful alt
-  text, and document generation/source notes when relevant.
-- Precise diagrams, status icons, charts, barcodes, and data visualizations must be built
-  deterministically with SVG/CSS/components, not image generation.
+## Trust boundaries
 
-## Source of truth
+- Never commit secrets, tokens, private exports or real user data.
+- Never expose service-role or secret keys through `NEXT_PUBLIC_*`.
+- Private household data requires authenticated AAL2 at API and RLS boundaries.
+- `TO authenticated` alone is not tenant authorization; prove membership/ownership.
+- Test anonymous, AAL1, AAL2, second-household and removed-member cases when affected.
+- Security-definer functions stay private where possible, pin `search_path`, validate
+  caller/role, and revoke default `PUBLIC` execution.
+- Lost-factor recovery cannot grant AAL2 from email or helpdesk assertion alone.
+- Sensitive data includes identity, household, health/body goals, nutrition, allergens,
+  scans, GTIN, product image/name, MHD/use-by, lot and consumption.
+- Sensitive values never enter URLs, general logs, analytics, ads, crash payloads or PR
+  evidence. Telemetry uses compile-time allowlisted fields.
+- Ads are contextual only and absent from auth, consent, scan, expiry, nutrition,
+  export, deletion and error flows.
 
-- Fast orientation and document precedence: `docs/REPOSITORY_MAP.md`
-- Product overview and setup: `README.md`
-- Product UI and interaction rules: `design.md`
-- Adaptive UI, accessibility and performance: `plans/UI_UX_PERFORMANCE_PLAN.md`
-- UX research and usability evidence: `plans/UX_RESEARCH_AND_USABILITY_TESTING.md`
-- Visual direction and screen catalogue: `mockups/README.md`
-- User flows and acceptance paths: `plans/USER_FLOWS.md`
-- Architecture boundaries: `plans/ARCHITECTURE_PLAN.md`
-- Delivery order and milestone gates: `plans/IMPLEMENTATION_PLAN.md`
-- Master critical path: `plans/MASTER_PLAN.md`
-- Red-team decisions: `plans/GAP_AUDIT_AND_OPTIMIZATION.md`
-- Competitor research and validation: `plans/COMPETITIVE_RESEARCH_AND_VALIDATION.md`
-- Food safety and recalls: `plans/FOOD_SAFETY_RECALLS_AND_DATA_QUALITY.md`
-- Offline synchronization: `plans/OFFLINE_SYNC_AND_DATA_INTEGRITY.md`
-- Security, AI/OCR and OTA: `plans/SECURITY_AI_AND_UPDATE_GOVERNANCE.md`
-- Test and release evidence: `plans/QUALITY_ENGINEERING_PLAN.md`
-- Required flow/risk coverage: `plans/TEST_TRACEABILITY_MATRIX.md`
-- Error console and incidents: `plans/OBSERVABILITY_AND_ERROR_CONSOLE.md`
-- CEO, finance, tax and metric truth: `plans/CEO_CONTROL_CENTER.md`
-- CEO risk and continuity automation: `plans/CEO_RISK_AUTOMATION.md`
-- Internal desktop UI: `design-ceo.md`
-- Commercial scope and monetization: `plans/COMMERCIAL_PRODUCT_PLAN.md`
-- Authentication and Docker target: `plans/AUTH_AND_SELF_HOSTING.md`
-- Store release gates: `plans/APP_STORE_RELEASE_PLAN.md`
-- Compliance working register: `legal/COMPLIANCE_MATRIX.md`
-- Data processing/retention: `legal/DATA_PROCESSING_REGISTER.md`
-- Database schema: `supabase/migrations/`
-- Environment contract: `.env.example`
-- Product and nutrition calculations: `src/lib/`
-- Release decision checklist: `docs/RELEASE_CHECKLIST.md`
-- Durable technical decisions: `docs/decisions/`
+## Food-safety invariants
 
-When schema or setup changes, update the migration, `.env.example`, and `README.md` in
-the same change. UI changes must remain consistent with `design.md`; update that file
-only when intentionally changing the design system.
+- Keep MHD (quality) distinct from use-by/Verbrauchsdatum (safety).
+- After use-by, never recommend consumption or claim food is safe.
+- A normal EAN/UPC does not contain expiry; parse GS1 AIs only when present and otherwise
+  require a second scan/OCR or manual confirmation.
+- Recall states remain exact, possible, text candidate or unchecked/stale.
+- A recall outage or stale source never becomes clear/safe.
+- An applicable recall overrides MHD and planning.
+- Unknown nutrition, ingredient, expiry, source or confidence remains unknown.
+- Product data retains provenance, retrieval time and confidence.
+- Personal relevance is not universal harm: distinguish allergens/exclusions,
+  evidence-backed concerns, exposure notes, information and unknowns.
+- An E-number alone is not evidence of harm; do not make medical claims.
 
-Use the issue and draft-PR templates under `.github/`. Do not merge a plan, mockup or
-green baseline CI run as proof that production deployment, native stores, complete tests,
-legal approval or live business metrics exist.
+Read `plans/FOOD_SAFETY_RECALLS_AND_DATA_QUALITY.md` for recall, expiry or ingredient
+safety changes. Those C0 rules override prototype behavior and mockups.
+
+## Data and migrations
+
+- Shared migrations are immutable and forward-only; never rewrite applied history.
+- Create new files with `npm run migration:new -- <name>` or the current Supabase CLI.
+- Design expand/contract compatibility and recovery before destructive changes.
+- Multi-record confirmed intent is transactional and idempotent with payload identity.
+- Offline quantity, date, recall, membership, consent, security and deletion conflicts
+  never use silent last-write-wins.
+- Update migration, grants/RLS, pgTAP, generated contracts, environment documentation
+  and runbook together when their contract changes.
+- Do not apply migrations or touch Production unless the task explicitly authorizes it.
+
+## UI, accessibility and performance
+
+- Follow `design.md` and the UI scope output for intentional UI changes.
+- Preserve semantic tokens and compact/medium/expanded behavior.
+- Prefer semantic HTML and native controls; custom widgets implement complete keyboard,
+  focus, name/role/state and assistive-technology contracts.
+- Respect 44 pt iOS and 48 dp Android targets, large text and reduced motion.
+- Keep scanner, OCR, chart and other heavy client code lazy.
+- Use real source-backed product images; never fabricate branded product photography.
+- Mockups are visual direction, not authority for data, risk, dates or navigation.
+
+## Evidence and delivery
+
+- Status vocabulary is exact: `PASS`, `FAIL`, `FLAKY`, `BLOCKED`, `NOT_RUN`.
+- A retry pass is `FLAKY`; a skip, stale artifact or unavailable service is not green.
+- Never fabricate tests, users, interviews, revenue, legal approval or deployment URLs.
+- Do not claim usability from mockups or automated audits alone.
+- Do not claim deployment until the exact URL and critical flow were opened and checked.
+- Production, native stores, legal approval and commercial release are separate facts.
+- CEO/finance values retain source, period, freshness and trust state. Estimates are not
+  booked, reconciled, filed or paid; money uses integer minor units/decimal.
+- Country support stays disabled until its signed legal/release pack is approved.
+- Native store apps need native value and platform billing; a WebView wrapper is not a
+  release implementation.
+
+Stage only files belonging to the task. Use the handoff structure in
+`docs/agent/HANDOFF_TEMPLATE.md`. Keep the final report tied to the exact commit and
+commands actually run.

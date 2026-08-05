@@ -73,6 +73,8 @@ Required states:
 | Boundary | Behavior |
 |---|---|
 | Local product exists | show immediately and refresh stale metadata in background |
+| Active shared catalog exists | after the AAL2 household cache, return the active generation with source, retrieval time, confidence and licence; direct catalog tables remain unavailable to the client |
+| No active shared catalog / catalog failure | continue to the explicit Open Food Facts live fallback or manual product path; do not imply that the shared catalog is complete or current |
 | OFF succeeds | validate, normalize, store provenance and retrieval time |
 | OFF times out/not found | manual creation remains possible; no dead end |
 | GS1 `15` | label as minimum durability date and request confirmation |

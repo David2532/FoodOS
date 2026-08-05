@@ -28,5 +28,86 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
+      - name: Audit high-severity dependency vulnerabilities
+        run: npm audit --audit-level=high
       - name: Verify repository
         run: npm run verify
+      - name: Enforce coverage thresholds
+        run: npm run test:coverage
+      - name: Upload production build evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-build-${{ github.sha }}
+          path: .next
+          include-hidden-files: true
+          retention-days: 7
+
+  database-and-auth:
+    name: Fresh migrations, pgTAP/RLS and authenticated E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Start local Supabase and apply every migration
+        run: npx supabase start
+      - name: Run pgTAP and RLS transaction tests
+        run: npm run test:db
+      - name: Lint local database schema
+        run: npx supabase db lint --local --level warning --fail-on error
+      - name: Export ephemeral local public environment
+        shell: bash
+        run: |
+          status="$(npx supabase status -o json)"
+          echo "NEXT_PUBLIC_SUPABASE_URL=$(jq -r '.API_URL' <<<"$status")" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$(jq -r '.PUBLISHABLE_KEY' <<<"$status")" >> "$GITHUB_ENV"
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run real local Auth, TOTP and household E2E
+        run: npm run test:e2e:auth
+      - name: Upload authenticated first-failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: authenticated-e2e-failure-${{ github.sha }}
+          path: |
+            test-results
+            playwright-report
+          if-no-files-found: ignore
+          retention-days: 14
+
+  preview-e2e:
+    name: Preview navigation, responsive layout and axe smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run preview E2E matrix
+        run: npm run test:e2e
+      - name: Upload first-failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-e2e-failure-${{ github.sha }}
+          path: |
+            test-results
+            playwright-report
+          if-no-files-found: ignore
+          retention-days: 14

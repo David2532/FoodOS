@@ -20,4 +20,10 @@ describe("FoodOS calculation core", () => {
   it("rounds a shortage to real packages", () => {
     expect(packagesNeeded(1200, 350, 500)).toBe(2);
   });
+
+  it("rejects invalid week and shopping inputs", () => {
+    expect(() => weeklyRemaining([2200], [1000])).toThrow(/seven days/);
+    expect(() => packagesNeeded(-1, 0, 500)).toThrow(/Invalid shopping/);
+    expect(() => packagesNeeded(1, 0, 0)).toThrow(/Invalid shopping/);
+  });
 });

@@ -2,7 +2,17 @@
 
 FoodOS handles sensitive household/food-profile data and safety-adjacent date/recall
 behavior. Changes are reviewed as product-risk changes, not only code style changes.
-Read `AGENTS.md` and `docs/REPOSITORY_MAP.md` before editing.
+Read `AGENTS.md`, then use the scope-first workflow instead of loading every plan.
+
+```bash
+git status --short --branch
+npm run agent:context -- <scope>
+# read only the reported files and implement the cohesive change
+npm run verify:changed
+```
+
+Use `npm run agent:context -- --list` for supported scopes. `CODEX_PROMPT.md` is only
+required for an explicitly requested complete multi-stage build.
 
 ## Local setup
 
@@ -63,11 +73,16 @@ Read `design.md`, `plans/UI_UX_PERFORMANCE_PLAN.md`, the relevant user flow and
 
 ## Tests and evidence
 
-Run the current baseline:
+Start with the changed surface:
 
 ```bash
-npm run verify
+npm run verify:changed -- --base=<ref>
 ```
+
+The command reports how its base was chosen. It selects targeted unit/type/lint/build,
+DB/RLS, catalog and E2E checks conservatively. Missing Docker, Supabase or browser
+services are `BLOCKED`, not green. Run `npm run verify:full` before handing off shared
+configuration, routing, dependency or other central/high-risk changes.
 
 Also run the test levels required by `plans/QUALITY_ENGINEERING_PLAN.md` for the changed
 risk. Every exported business rule, use case, API/RPC/job/webhook, database policy and
@@ -77,7 +92,8 @@ Report exact states:
 
 - `PASS`: passed first attempt for the matching artifact;
 - `FLAKY`: passed only after retry and is not green C0/C1 evidence;
-- `SKIP`, `BLOCKED`, `NOT_RUN`, `STALE`: not proven.
+- `BLOCKED`, `NOT_RUN`: not proven. A skipped command is reported as `SKIPPED` with its
+  reason by developer tooling and is not release evidence.
 
 Every fixed defect gets a regression test at the lowest deterministic layer and, where
 the defect crossed a boundary, at that boundary.

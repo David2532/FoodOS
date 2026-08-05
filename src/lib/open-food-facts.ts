@@ -1,6 +1,39 @@
+import { z } from "zod";
 import type { IngredientAssessment, Product, RiskLevel } from "./types";
 
 type UnknownRecord = Record<string, unknown>;
+
+const ingredientSchema = z.object({
+  id: z.string().optional(),
+  text: z.string().optional(),
+  percent_estimate: z.number().min(0).max(100).optional()
+});
+
+const openFoodFactsResponseSchema = z.object({
+  product: z.object({
+    product_name_de: z.string().optional(),
+    product_name: z.string().optional(),
+    generic_name_de: z.string().optional(),
+    brands: z.string().optional(),
+    quantity: z.string().optional(),
+    serving_size: z.string().optional(),
+    image_front_url: z.string().url().optional(),
+    image_front_small_url: z.string().url().optional(),
+    ingredients_text: z.string().optional(),
+    ingredients_text_de: z.string().optional(),
+    ingredients: z.array(ingredientSchema).optional(),
+    allergens_tags: z.array(z.string()).optional(),
+    traces_tags: z.array(z.string()).optional(),
+    additives_tags: z.array(z.string()).optional(),
+    labels_tags: z.array(z.string()).optional(),
+    categories_tags: z.array(z.string()).optional(),
+    countries_tags: z.array(z.string()).optional(),
+    nutriscore_grade: z.string().optional(),
+    nova_group: z.number().int().optional(),
+    lang: z.string().optional(),
+    nutriments: z.record(z.string(), z.unknown()).optional()
+  })
+});
 
 const euAdditiveNotes: Record<string, { level: RiskLevel; reason: string }> = {
   "e102": { level: "info", reason: "Für diesen Farbstoff ist in der EU ein besonderer Hinweis für Kinder vorgeschrieben." },
@@ -62,20 +95,33 @@ function assessIngredients(product: UnknownRecord): IngredientAssessment[] {
   });
 }
 
-export function normalizeOpenFoodFacts(raw: UnknownRecord, barcode: string): Product {
-  const product = (raw.product && typeof raw.product === "object" ? raw.product : {}) as UnknownRecord;
-  const nutriments = (product.nutriments && typeof product.nutriments === "object" ? product.nutriments : {}) as UnknownRecord;
+export function normalizeOpenFoodFacts(raw: unknown, barcode: string, retrievedAt = new Date().toISOString()): Product {
+  const validated = openFoodFactsResponseSchema.parse(raw);
+  const product: UnknownRecord = validated.product;
+  const nutriments = validated.product.nutriments ?? {};
+  const imageUrl = text(product.image_front_small_url) ?? text(product.image_front_url);
 
   return {
     barcode,
     name: text(product.product_name_de) ?? text(product.product_name) ?? text(product.generic_name_de) ?? "Unbekanntes Produkt",
     brand: text(product.brands),
-    imageUrl: text(product.image_front_small_url) ?? text(product.image_front_url),
+    imageUrl,
     quantity: text(product.quantity),
+    servingSize: text(product.serving_size),
+    categories: strings(product.categories_tags).map(cleanTag).slice(0, 40),
+    countries: strings(product.countries_tags).map(cleanTag).slice(0, 40),
     ingredientsText: text(product.ingredients_text_de) ?? text(product.ingredients_text),
+    structuredIngredients: validated.product.ingredients?.map((ingredient) => ({
+      name: ingredient.text ?? cleanTag(ingredient.id ?? "unbekannt"),
+      normalizedName: ingredient.id ? cleanTag(ingredient.id) : undefined,
+      percentage: ingredient.percent_estimate
+    })) ?? [],
     allergens: strings(product.allergens_tags).map(cleanTag),
     traces: strings(product.traces_tags).map(cleanTag),
+    additives: strings(product.additives_tags).map(cleanTag),
     labels: strings(product.labels_tags).map(cleanTag).slice(0, 8),
+    nutriScore: text(product.nutriscore_grade),
+    novaGroup: number(product.nova_group),
     nutrition: {
       kcal100g: number(nutriments["energy-kcal_100g"]),
       protein100g: number(nutriments.proteins_100g),
@@ -88,6 +134,11 @@ export function normalizeOpenFoodFacts(raw: UnknownRecord, barcode: string): Pro
     },
     assessments: assessIngredients(product),
     source: "open-food-facts",
+    sourceUrl: `https://world.openfoodfacts.org/product/${barcode}`,
+    sourceLanguage: text(product.lang),
+    databaseLicense: "ODbL-1.0; DbCL-1.0",
+    imageLicense: imageUrl ? "CC-BY-SA-4.0" : undefined,
+    retrievedAt,
     confidence: text(product.product_name) || text(product.product_name_de) ? 0.82 : 0.42
   };
 }
