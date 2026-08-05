@@ -2,7 +2,16 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(21);
+select plan(24);
+
+select has_column(
+  'public', 'product_catalog_import_runs', 'purge_deleted_product_count',
+  'catalog product purge progress counter exists'
+);
+select has_column(
+  'public', 'product_catalog_import_runs', 'purge_deleted_chunk_count',
+  'catalog chunk purge progress counter exists'
+);
 
 select has_function('public', 'product_catalog_import_capacity', array[]::text[], 'catalog capacity RPC exists');
 select has_function(
@@ -198,6 +207,14 @@ select results_eq(
   ),
   format('values (%s::bigint, 5000::bigint, 1::bigint, 1::bigint, 0::bigint, false)', :'stale_generation'),
   'the bounded purge removes no more than 5,000 products and reports remaining work'
+);
+select results_eq(
+  format(
+    'select purge_deleted_product_count, purge_deleted_chunk_count from public.product_catalog_import_runs where id = %L::uuid',
+    :'stale_run_id'
+  ),
+  $$ values (5000::bigint, 1::bigint) $$,
+  'catalog purge progress advances only by the committed row counts'
 );
 select results_eq(
   format(
