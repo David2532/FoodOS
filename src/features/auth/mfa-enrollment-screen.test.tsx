@@ -3,10 +3,11 @@
 import type { ReactNode } from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   enroll: vi.fn(),
+  unenroll: vi.fn(),
   challenge: vi.fn(),
   verify: vi.fn(),
   refresh: vi.fn()
@@ -18,6 +19,7 @@ vi.mock("@/lib/supabase", () => ({
     auth: {
       mfa: {
         enroll: state.enroll,
+        unenroll: state.unenroll,
         challenge: state.challenge,
         verify: state.verify
       }
@@ -42,6 +44,10 @@ const enrollmentResult = {
 };
 
 describe("MfaEnrollmentScreen", () => {
+  beforeEach(() => {
+    state.unenroll.mockReset().mockResolvedValue({ data: { id: "factor-123" }, error: null });
+  });
+
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -84,5 +90,30 @@ describe("MfaEnrollmentScreen", () => {
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("JBSWY3DPEHPK3PXP"));
     expect(screen.getByText("Schlüssel kopiert. Teile ihn mit niemandem.")).toBeTruthy();
+  });
+
+  it("removes an unverified factor when enrollment is abandoned", async () => {
+    state.enroll.mockResolvedValue(enrollmentResult);
+    const user = userEvent.setup();
+    const view = render(<MfaEnrollmentScreen />);
+
+    await user.click(screen.getByRole("button", { name: "QR-Code für Google Authenticator erzeugen" }));
+    await screen.findByRole("img", { name: "QR-Code zum Einrichten von FoodOS in Google Authenticator" });
+    view.unmount();
+
+    await waitFor(() => expect(state.unenroll).toHaveBeenCalledWith({ factorId: "factor-123" }));
+  });
+
+  it("explicitly discards an unfinished enrollment before offering a new one", async () => {
+    state.enroll.mockResolvedValue(enrollmentResult);
+    const user = userEvent.setup();
+    render(<MfaEnrollmentScreen />);
+
+    await user.click(screen.getByRole("button", { name: "QR-Code für Google Authenticator erzeugen" }));
+    await screen.findByRole("img", { name: "QR-Code zum Einrichten von FoodOS in Google Authenticator" });
+    await user.click(screen.getByRole("button", { name: "Einrichtung abbrechen und Faktor verwerfen" }));
+
+    await waitFor(() => expect(state.unenroll).toHaveBeenCalledWith({ factorId: "factor-123" }));
+    expect(screen.getByRole("button", { name: "QR-Code für Google Authenticator erzeugen" })).toBeTruthy();
   });
 });

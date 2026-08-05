@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Copy, LoaderCircle, QrCode, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
@@ -50,6 +50,8 @@ const authenticatorOptions: readonly AuthenticatorOption[] = [
 
 export function MfaEnrollmentScreen({ loading = false, initialError }: { loading?: boolean; initialError?: string }) {
   const router = useRouter();
+  const mounted = useRef(true);
+  const pendingFactorId = useRef<string | null>(null);
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [authenticatorApp, setAuthenticatorApp] = useState<AuthenticatorApp>("google");
   const [manualSetupOpen, setManualSetupOpen] = useState(false);
@@ -57,6 +59,22 @@ export function MfaEnrollmentScreen({ loading = false, initialError }: { loading
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(initialError ?? null);
   const selectedAuthenticator = authenticatorOptions.find((option) => option.id === authenticatorApp) ?? authenticatorOptions[0];
+
+  async function removeUnverifiedFactor(factorId: string): Promise<boolean> {
+    try {
+      const result = await getSupabaseBrowserClient().auth.mfa.unenroll({ factorId });
+      return !result.error;
+    } catch {
+      return false;
+    }
+  }
+
+  useEffect(() => () => {
+    mounted.current = false;
+    const factorId = pendingFactorId.current;
+    pendingFactorId.current = null;
+    if (factorId) void removeUnverifiedFactor(factorId);
+  }, []);
 
   async function begin() {
     setBusy(true);
@@ -69,10 +87,31 @@ export function MfaEnrollmentScreen({ loading = false, initialError }: { loading
     });
     setBusy(false);
     if (result.error) {
-      setError("2FA konnte nicht vorbereitet werden. Lade die Seite neu und versuche es erneut.");
+      if (mounted.current) setError("2FA konnte nicht vorbereitet werden. Lade die Seite neu und versuche es erneut.");
+      return;
+    }
+    pendingFactorId.current = result.data.id;
+    if (!mounted.current) {
+      pendingFactorId.current = null;
+      void removeUnverifiedFactor(result.data.id);
       return;
     }
     setEnrollment({ factorId: result.data.id, qrCode: result.data.totp.qr_code, secret: result.data.totp.secret });
+  }
+
+  async function cancelEnrollment() {
+    if (!enrollment) return;
+    setBusy(true);
+    setError(null);
+    const removed = await removeUnverifiedFactor(enrollment.factorId);
+    if (!mounted.current) return;
+    setBusy(false);
+    if (!removed) {
+      setError("Die unbestätigte 2FA-Einrichtung konnte nicht sicher verworfen werden. Lade die Seite neu und versuche es erneut.");
+      return;
+    }
+    pendingFactorId.current = null;
+    setEnrollment(null);
   }
 
   async function copySetupSecret() {
@@ -111,6 +150,7 @@ export function MfaEnrollmentScreen({ loading = false, initialError }: { loading
       setError("Der Code ist nicht gültig oder bereits abgelaufen. Versuche den aktuellen Code.");
       return;
     }
+    pendingFactorId.current = null;
     router.refresh();
   }
 
@@ -181,6 +221,7 @@ export function MfaEnrollmentScreen({ loading = false, initialError }: { loading
           </label>
           {error && <p className="auth-message error" role="alert">{error}</p>}
           <button className="primary-button wide" disabled={busy}>{busy && <LoaderCircle className="spin" size={17} />}2FA bestätigen</button>
+          <button className="secondary-button" type="button" disabled={busy} onClick={cancelEnrollment}>Einrichtung abbrechen und Faktor verwerfen</button>
         </form>
       )}
     </AuthFrame>
