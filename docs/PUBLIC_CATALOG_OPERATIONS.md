@@ -70,7 +70,7 @@ browser build. The scheduled workflow and local importer need these server-only 
 |---|---|
 | `SUPABASE_URL` | Preferred server-only Supabase URL; the scripts also accept `NEXT_PUBLIC_SUPABASE_URL` only as a URL fallback. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service-role credential used solely by the importer and verification script. |
-| `OPEN_FOOD_FACTS_USER_AGENT` | Required identifiable value in the form `App/Version (contact@email)` for bulk and live fallback requests. An invalid or absent value fails closed to the visible manual fallback. |
+| `OPEN_FOOD_FACTS_USER_AGENT` | Required identifiable value in the form `App/Version (contact@email)` or `App/Version (https://project.example)` for bulk and live fallback requests. An invalid or absent value fails closed to the visible manual fallback. |
 | `PUBLIC_CATALOG_DUMP_URL` | Optional, reviewed server-side source override. Without it, the importer uses the official full JSONL endpoint above. |
 | `PUBLIC_CATALOG_LOCAL_SOURCE_SHA256` | Required only for an explicit local JSONL test/replay source; its lower-case SHA-256 must match the streamed source bytes. Never use it to bypass source review in production. |
 | `CATALOG_SYNC_ENABLED=true` | GitHub repository variable that enables the daily schedule only after source/licence review and managed-environment approval. |

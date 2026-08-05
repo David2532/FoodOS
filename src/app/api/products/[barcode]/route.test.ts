@@ -145,7 +145,8 @@ describe("Q-CATALOG-LAYERED-LOOKUP-005 global GTIN lookup", () => {
       retrievedAt: "2026-08-04T10:00:00.000Z",
       confidence: 0.8
     });
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ product: {} }), { status: 200 })));
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ product: {} }), { status: 200 }));
+    vi.stubGlobal("fetch", fetcher);
 
     try {
       const response = await GET(new Request("http://localhost/api/products/3017624010701?preview=1"), {
@@ -153,6 +154,11 @@ describe("Q-CATALOG-LAYERED-LOOKUP-005 global GTIN lookup", () => {
       });
       expect(response.status).toBe(200);
       expect(response.headers.get("X-FoodOS-Product-Source")).toBe("public-preview");
+      expect(fetcher).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v3/product/3017624010701.json?"),
+        expect.any(Object)
+      );
+      expect(fetcher.mock.calls[0]?.[0]).not.toContain("/api/v3.6/");
       await expect(response.json()).resolves.toMatchObject({
         globalCatalogStatus: "not-configured",
         product: { source: "open-food-facts", name: "Öffentliches Preview-Produkt" }

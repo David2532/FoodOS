@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(80);
+select plan(81);
 
 select has_function(
   'public',
@@ -376,6 +376,11 @@ select results_eq(
   $$ select barcode, name from public.search_cached_products('Testprodukt', 8) $$,
   $$ values ('3017624010701'::text, 'Testprodukt'::text) $$,
   'AAL2 product search returns a matching household product'
+);
+select results_eq(
+  $$ select (nutrition_per_100g ->> 'energy_kcal_100g')::numeric from public.search_cached_products('Testprodukt', 8) $$,
+  $$ values (200::numeric) $$,
+  'AAL2 household search exposes only the bounded per-100 nutrition summary'
 );
 select results_eq(
   $$ select count(*)::bigint from public.search_cached_products('Schokolade', 8) $$,

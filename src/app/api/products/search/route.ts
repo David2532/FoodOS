@@ -7,6 +7,18 @@ import { isSupabaseConfigured } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+const catalogNutritionNumber = z.coerce.number().finite().nonnegative();
+const nutritionPer100gSchema = z.object({
+  energy_kcal_100g: catalogNutritionNumber.optional(),
+  proteins_100g: catalogNutritionNumber.optional(),
+  carbohydrates_100g: catalogNutritionNumber.optional(),
+  sugars_100g: catalogNutritionNumber.optional(),
+  fat_100g: catalogNutritionNumber.optional(),
+  "saturated-fat_100g": catalogNutritionNumber.optional(),
+  fiber_100g: catalogNutritionNumber.optional(),
+  salt_100g: catalogNutritionNumber.optional()
+}).optional().default({});
+
 const cachedRowSchema = z.object({
   barcode: z.string().regex(/^\d{8,14}$/),
   name: z.string(),
@@ -14,6 +26,7 @@ const cachedRowSchema = z.object({
   image_url: z.string().nullable(),
   quantity: z.string().nullable(),
   nutri_score: z.string().nullable(),
+  nutrition_per_100g: nutritionPer100gSchema,
   confidence: z.coerce.number()
 });
 
@@ -24,6 +37,7 @@ const globalCatalogRowSchema = z.object({
   image_url: z.string().nullable(),
   quantity: z.string().nullable(),
   nutri_score: z.string().nullable(),
+  nutrition_per_100g: nutritionPer100gSchema,
   confidence: z.coerce.number(),
   source_url: z.string().nullable(),
   source_updated_at: z.string().nullable(),
@@ -46,6 +60,19 @@ function allowSearch(key: string, now = Date.now()): boolean {
   return true;
 }
 
+function nutritionSummary(value: z.infer<typeof nutritionPer100gSchema>): CatalogSearchItem["nutrition"] {
+  return {
+    kcal100g: value.energy_kcal_100g,
+    protein100g: value.proteins_100g,
+    carbs100g: value.carbohydrates_100g,
+    sugar100g: value.sugars_100g,
+    fat100g: value.fat_100g,
+    saturatedFat100g: value["saturated-fat_100g"],
+    fiber100g: value.fiber_100g,
+    salt100g: value.salt_100g
+  };
+}
+
 async function searchHouseholdCache(supabase: SupabaseClient | null, query: string, page: number): Promise<CatalogSearchItem[]> {
   if (!supabase || page !== 1) return [];
   const result = await supabase.rpc("search_cached_products", { search_text: query, result_limit: 8 });
@@ -59,6 +86,7 @@ async function searchHouseholdCache(supabase: SupabaseClient | null, query: stri
     nutriScore: row.nutri_score && /^[a-e]$/i.test(row.nutri_score)
       ? row.nutri_score.toLowerCase() as "a" | "b" | "c" | "d" | "e"
       : undefined,
+    nutrition: nutritionSummary(row.nutrition_per_100g),
     source: "household-cache",
     confidence: Math.max(0, Math.min(1, row.confidence))
   }));
@@ -96,6 +124,7 @@ async function searchGlobalCatalog(supabase: SupabaseClient | null, query: strin
       nutriScore: row.nutri_score && /^[a-e]$/i.test(row.nutri_score)
         ? row.nutri_score.toLowerCase() as "a" | "b" | "c" | "d" | "e"
         : undefined,
+      nutrition: nutritionSummary(row.nutrition_per_100g),
       source: "global-catalog",
       confidence: Math.max(0, Math.min(1, row.confidence)),
       sourceUrl: validUrl(row.source_url),

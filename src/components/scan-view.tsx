@@ -34,6 +34,12 @@ export function ScanView({ householdId, initialCatalogQuery, onSaved, preview = 
 
   useEffect(() => () => controlsRef.current?.stop(), []);
 
+  function stopCamera() {
+    controlsRef.current?.stop();
+    controlsRef.current = null;
+    setCameraActive(false);
+  }
+
   async function lookup(code: string) {
     if (lookupInFlightRef.current) return;
     const trimmed = code.trim();
@@ -56,8 +62,7 @@ export function ScanView({ householdId, initialCatalogQuery, onSaved, preview = 
     setLoading(true);
     setError(null);
     setManualEntry(null);
-    controlsRef.current?.stop();
-    setCameraActive(false);
+    stopCamera();
     try {
       const response = await fetch(`/api/products/${gtin}${preview ? "?preview=1" : ""}`);
       const body: unknown = await response.json();
@@ -94,14 +99,21 @@ export function ScanView({ householdId, initialCatalogQuery, onSaved, preview = 
       const { BrowserMultiFormatReader } = await import("@zxing/browser");
       const reader = new BrowserMultiFormatReader();
       if (!videoRef.current) return;
-      controlsRef.current = await reader.decodeFromVideoDevice(undefined, videoRef.current, (result) => {
+      controlsRef.current = await reader.decodeFromConstraints({
+        audio: false,
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      }, videoRef.current, (result) => {
         if (!result) return;
         const value = result.getText();
         setBarcode(value);
         void lookup(value);
       });
     } catch {
-      setCameraActive(false);
+      stopCamera();
       setError("Kamera konnte nicht gestartet werden. Prüfe die Browserfreigabe oder gib den Barcode manuell ein.");
     }
   }
@@ -112,7 +124,7 @@ export function ScanView({ householdId, initialCatalogQuery, onSaved, preview = 
   return (
     <div className="scan-page page-enter">
       <section className={`scanner-stage ${cameraActive ? "is-live" : ""}`}>
-        <video ref={videoRef} muted playsInline />
+        <video ref={videoRef} muted playsInline aria-hidden="true" />
         <div className="scanner-overlay">
           <div className="scan-corner top-left" /><div className="scan-corner top-right" />
           <div className="scan-corner bottom-left" /><div className="scan-corner bottom-right" />
@@ -126,7 +138,10 @@ export function ScanView({ householdId, initialCatalogQuery, onSaved, preview = 
             <button className="primary-button" onClick={startCamera}><Camera size={18} /> Kamera starten</button>
           </div>
         )}
-        {cameraActive && <div className="camera-hint"><span className="status-pulse" />Barcode ruhig in den Rahmen halten</div>}
+        {cameraActive && <>
+          <div className="camera-hint" role="status"><span className="status-pulse" />Barcode ruhig in den Rahmen halten</div>
+          <button type="button" className="camera-stop" onClick={stopCamera}>Kamera beenden</button>
+        </>}
       </section>
 
       <div className="scan-divider"><span>oder manuell</span></div>
@@ -291,7 +306,7 @@ function ProductResult({ product, globalCatalogStatus, householdId, gs1, onReset
       </section>
 
       {globalCatalogStatus === "unavailable" && product.source === "open-food-facts" && <div className="safety-banner" role="status"><AlertTriangle size={17} /><span>Der gemeinsame FoodOS-Katalog war nicht erreichbar. Dieses Ergebnis kommt direkt von Open Food Facts; Quelle und fehlende Angaben bleiben sichtbar.</span></div>}
-      {product.source === "global-catalog" && (product.sourceUrl || product.databaseLicense || product.imageLicense) && <details className="product-source-details">
+      {(product.sourceUrl || product.databaseLicense || product.imageLicense) && <details className="product-source-details">
         <summary>Quelle, Aktualität und Lizenz</summary>
         <dl>
           {product.sourceUrl && <><dt>Quelle</dt><dd><a href={product.sourceUrl} target="_blank" rel="noreferrer">Originaldatensatz öffnen</a></dd></>}
@@ -314,11 +329,14 @@ function ProductResult({ product, globalCatalogStatus, householdId, gs1, onReset
         {householdId ? <button className="primary-button wide" disabled={saving}>{saving ? <LoaderCircle className="spin" size={18} /> : <Check size={18} />}{saving ? "Charge wird gespeichert …" : "Charge zum Vorrat hinzufügen"}</button> : <p className="preview-save-note">Preview-Modus: Produktdaten können geprüft, aber nicht dauerhaft gespeichert werden.</p>}
       </form>
 
-      <section className="nutrition-strip">
-        <div><strong>{product.nutrition.kcal100g ?? "–"}</strong><span>kcal</span></div>
-        <div><strong>{product.nutrition.protein100g ?? "–"} g</strong><span>Protein</span></div>
-        <div><strong>{product.nutrition.sugar100g ?? "–"} g</strong><span>Zucker</span></div>
-        <div><strong>{product.nutrition.salt100g ?? "–"} g</strong><span>Salz</span></div>
+      <section className="nutrition-card" aria-labelledby="nutrition-title">
+        <div className="nutrition-heading"><div><p>PRODUKTANGABEN</p><h2 id="nutrition-title">Nährwerte pro 100 g/ml</h2></div><small>Fehlende Werte bleiben unbekannt</small></div>
+        <div className="nutrition-strip">
+          <div><strong>{formatNutrient(product.nutrition.kcal100g)}</strong><span>kcal</span></div>
+          <div><strong>{formatNutrient(product.nutrition.protein100g, " g")}</strong><span>Protein</span></div>
+          <div><strong>{formatNutrient(product.nutrition.carbs100g, " g")}</strong><span>Kohlenhydrate</span></div>
+          <div><strong>{formatNutrient(product.nutrition.fat100g, " g")}</strong><span>Fett</span></div>
+        </div>
       </section>
 
       <section className="assessment-card">
@@ -336,4 +354,9 @@ function ProductResult({ product, globalCatalogStatus, householdId, gs1, onReset
 
     </div>
   );
+}
+
+function formatNutrient(value: number | undefined, suffix = ""): string {
+  if (value === undefined) return "–";
+  return `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1 }).format(value)}${suffix}`;
 }

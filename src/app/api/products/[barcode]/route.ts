@@ -85,7 +85,7 @@ async function fetchProduct(barcode: string) {
   if (Date.now() < providerOpenUntil) throw new Error("Product provider circuit is open");
   const userAgent = requireOpenFoodFactsUserAgent();
   const endpoints = [
-    `https://world.openfoodfacts.org/api/v3.6/product/${barcode}.json?fields=${fields}`,
+    `https://world.openfoodfacts.org/api/v3/product/${barcode}.json?fields=${fields}`,
     `https://world.openfoodfacts.org/api/v2/product/${barcode}.json?fields=${fields}`
   ];
 

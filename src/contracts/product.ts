@@ -2,6 +2,17 @@ import { z } from "zod";
 
 const optionalNumber = z.number().finite().nonnegative().optional();
 
+export const productNutritionSchema = z.object({
+  kcal100g: optionalNumber,
+  protein100g: optionalNumber,
+  carbs100g: optionalNumber,
+  fat100g: optionalNumber,
+  sugar100g: optionalNumber,
+  saturatedFat100g: optionalNumber,
+  fiber100g: optionalNumber,
+  salt100g: optionalNumber
+});
+
 export const ingredientAssessmentSchema = z.object({
   name: z.string().min(1).max(240),
   originalName: z.string().max(500).optional(),
@@ -33,16 +44,7 @@ export const productSchema = z.object({
   nutriScore: z.string().max(16).optional(),
   novaGroup: z.number().int().min(1).max(4).optional(),
   servingSize: z.string().max(120).optional(),
-  nutrition: z.object({
-    kcal100g: optionalNumber,
-    protein100g: optionalNumber,
-    carbs100g: optionalNumber,
-    fat100g: optionalNumber,
-    sugar100g: optionalNumber,
-    saturatedFat100g: optionalNumber,
-    fiber100g: optionalNumber,
-    salt100g: optionalNumber
-  }),
+  nutrition: productNutritionSchema,
   assessments: z.array(ingredientAssessmentSchema).max(200),
   source: z.enum(["open-food-facts", "global-catalog", "manual", "cache"]),
   sourceUrl: z.url().optional(),

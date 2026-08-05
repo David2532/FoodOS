@@ -38,18 +38,20 @@ describe("Q-CATALOG-LAYERED-API-004 product catalog search", () => {
     testState.user = { id: "catalog-user" };
     testState.aal = "aal2";
     testState.cacheRows = [{
-      barcode: "4058172307409", name: "Haushaltsprodukt", brand: null, image_url: null, quantity: null, nutri_score: null, confidence: 1
+      barcode: "4058172307409", name: "Haushaltsprodukt", brand: null, image_url: null, quantity: null, nutri_score: null,
+      nutrition_per_100g: { energy_kcal_100g: 380, proteins_100g: 12 }, confidence: 1
     }];
     testState.globalRows = [{
-      barcode: "3017624010701", name: "Globales Produkt", brand: "Marke", image_url: null, quantity: "100 g", nutri_score: "b", confidence: "0.88",
+      barcode: "3017624010701", name: "Globales Produkt", brand: "Marke", image_url: null, quantity: "100 g", nutri_score: "b",
+      nutrition_per_100g: { energy_kcal_100g: 220, proteins_100g: 8 }, confidence: "0.88",
       source_url: "https://world.openfoodfacts.org/product/3017624010701", source_updated_at: "2026-08-04T09:00:00Z", source_retrieved_at: "2026-08-04T10:00:00Z", database_license: "ODbL-1.0", image_license: "CC-BY-SA-4.0"
     }];
     testState.globalError = false;
     testState.provider.mockReset();
     testState.provider.mockResolvedValue({
       items: [
-        { barcode: "3017624010701", name: "Provider-Duplikat", source: "open-food-facts", confidence: 0.8 },
-        { barcode: "5449000000996", name: "Provider-Produkt", source: "open-food-facts", confidence: 0.8 }
+        { barcode: "3017624010701", name: "Provider-Duplikat", nutrition: {}, source: "open-food-facts", confidence: 0.8 },
+        { barcode: "5449000000996", name: "Provider-Produkt", nutrition: { kcal100g: 42 }, source: "open-food-facts", confidence: 0.8 }
       ],
       count: 2,
       countExact: true,
@@ -67,9 +69,9 @@ describe("Q-CATALOG-LAYERED-API-004 product catalog search", () => {
       globalCatalogStatus: "live",
       providerStatus: "live",
       results: [
-        { barcode: "4058172307409", source: "household-cache" },
-        { barcode: "3017624010701", source: "global-catalog", databaseLicense: "ODbL-1.0" },
-        { barcode: "5449000000996", source: "open-food-facts" }
+        { barcode: "4058172307409", source: "household-cache", nutrition: { kcal100g: 380, protein100g: 12 } },
+        { barcode: "3017624010701", source: "global-catalog", databaseLicense: "ODbL-1.0", nutrition: { kcal100g: 220, protein100g: 8 } },
+        { barcode: "5449000000996", source: "open-food-facts", nutrition: { kcal100g: 42 } }
       ]
     });
     expect(testState.provider).toHaveBeenCalledOnce();
@@ -93,10 +95,10 @@ describe("Q-CATALOG-LAYERED-API-004 product catalog search", () => {
 
   it("does not disclose a search to the external provider when private and shared catalog results fill the page", async () => {
     testState.cacheRows = Array.from({ length: 8 }, (_, index) => ({
-      barcode: `40000000000${index}`, name: `Haushalt ${index}`, brand: null, image_url: null, quantity: null, nutri_score: null, confidence: 1
+      barcode: `40000000000${index}`, name: `Haushalt ${index}`, brand: null, image_url: null, quantity: null, nutri_score: null, nutrition_per_100g: {}, confidence: 1
     }));
     testState.globalRows = Array.from({ length: 8 }, (_, index) => ({
-      barcode: `50000000000${index}`, name: `Katalog ${index}`, brand: null, image_url: null, quantity: null, nutri_score: null, confidence: 0.8,
+      barcode: `50000000000${index}`, name: `Katalog ${index}`, brand: null, image_url: null, quantity: null, nutri_score: null, nutrition_per_100g: {}, confidence: 0.8,
       source_url: null, source_updated_at: null, source_retrieved_at: "2026-08-04T10:00:00Z", database_license: null, image_license: null
     }));
 

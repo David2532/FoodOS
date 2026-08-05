@@ -13,6 +13,14 @@ only the explicit test fixture and no authenticated household/profile data. They
 the client contract, responsive layout and accessibility smoke without sending a test
 query to Open Food Facts; they are not live-provider or product-data evidence.
 
+`live-open-food-facts-ruehls-mobile.png` and
+`live-open-food-facts-product-detail-mobile.png` were captured manually on 2026-08-05
+from the local 390 x 844 Preview flow after a real Open Food Facts query for
+`Rühls Bestes Whey`. They contain public catalog data only and show the responsive
+result cards, available source images, nutrition summary, provider provenance and the
+manual MHD/lot handoff. They are local live-provider evidence, not Production uptime,
+production RUM or authenticated persistence evidence.
+
 `auth-google-desktop.png` is produced by the local Supabase Auth E2E before any
 credentials are entered. The legacy filename now documents the Apple and Google
 one-click options and contains no user or household data; it is not evidence that either

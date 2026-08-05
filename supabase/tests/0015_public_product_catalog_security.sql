@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(35);
+select plan(36);
 
 select has_table('public', 'product_catalog_import_runs', 'catalog import runs are persisted separately');
 select has_table('public', 'product_catalog_products', 'global catalog products are persisted separately');
@@ -267,6 +267,11 @@ select results_eq(
 select ok(
   (select source_retrieved_at is not null from public.search_global_catalog_products('Globaler', 1)),
   'search exposes the real source retrieval timestamp for freshness presentation'
+);
+select results_eq(
+  $$ select (nutrition_per_100g ->> 'energy_kcal_100g')::numeric from public.search_global_catalog_products('Globaler', 1) $$,
+  $$ values (100::numeric) $$,
+  'AAL2 global search exposes only the bounded per-100 nutrition summary'
 );
 select results_eq(
   $$ select barcode from public.lookup_global_catalog_product('00000017') $$,

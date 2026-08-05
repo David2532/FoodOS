@@ -7,6 +7,7 @@ describe("Q-SCAN-OFF-CONTRACT-001 Open Food Facts allowlist", () => {
       product: {
         product_name_de: "Fiktive Haferflocken",
         brands: "Testmarke",
+        image_front_small_url: "https://images.openfoodfacts.org/test.jpg",
         ingredients_text_de: "Haferflocken",
         ingredients: [{ id: "de:haferflocken", text: "Haferflocken", percent_estimate: 100 }],
         allergens_tags: ["de:gluten"],
@@ -24,6 +25,8 @@ describe("Q-SCAN-OFF-CONTRACT-001 Open Food Facts allowlist", () => {
       percentage: 100
     });
     expect(product.retrievedAt).toBe("2026-08-02T12:00:00.000Z");
+    expect(product.databaseLicense).toBe("ODbL-1.0; DbCL-1.0");
+    expect(product.imageLicense).toBe("CC-BY-SA-4.0");
     expect(product).not.toHaveProperty("unexpected_private_field");
   });
 

@@ -181,7 +181,8 @@ function CatalogResults({ response, selectingBarcode, loadingMore, onSelect, onM
           </div>
           <h3>{item.name}</h3>
           <p>{[item.brand, item.quantity].filter(Boolean).join(" · ") || "Marke und Menge nicht angegeben"}</p>
-          <small>GTIN {item.barcode}</small>
+          <CatalogNutrition item={item} />
+          <small className="catalog-gtin">GTIN {item.barcode}</small>
           {item.source === "global-catalog" && <CatalogProvenance item={item} />}
         </div>
         <button onClick={() => onSelect(item.barcode)} disabled={Boolean(selectingBarcode)}>
@@ -191,6 +192,33 @@ function CatalogResults({ response, selectingBarcode, loadingMore, onSelect, onM
     </div> : <div className="catalog-empty"><PackageSearch size={23} /><div><strong>Kein belastbarer Treffer</strong><span>Versuche Marke plus Produktname oder erfasse den Barcode.</span></div></div>}
     {response.hasMore && <button className="catalog-more" onClick={onMore} disabled={loadingMore}>{loadingMore ? <LoaderCircle className="spin" size={17} /> : <Database size={17} />}{loadingMore ? "Weitere Treffer werden geladen …" : "Weitere echte Produkte laden"}</button>}
   </div>;
+}
+
+function CatalogNutrition({ item }: { item: CatalogSearchItem }) {
+  const values = [
+    ["kcal", item.nutrition.kcal100g],
+    ["Protein", item.nutrition.protein100g],
+    ["Kohlenh.", item.nutrition.carbs100g],
+    ["Fett", item.nutrition.fat100g]
+  ] as const;
+  const available = values.filter(([, value]) => value !== undefined);
+
+  if (!available.length) {
+    return <span className="catalog-nutrition-empty">Nährwerte nicht angegeben</span>;
+  }
+
+  return <dl className="catalog-nutrition" aria-label="Nährwerte pro 100 Gramm oder Milliliter">
+    {available.map(([label, value]) => <div key={label}>
+      <dt>{label}</dt>
+      <dd>{formatNutrient(value)}{label === "kcal" ? "" : " g"}</dd>
+    </div>)}
+    <span>pro 100 g/ml</span>
+  </dl>;
+}
+
+function formatNutrient(value: number | undefined): string {
+  if (value === undefined) return "–";
+  return new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1 }).format(value);
 }
 
 function sourceLabel(source: CatalogSearchItem["source"]): string {
@@ -223,7 +251,7 @@ function CatalogProductImage({ item, eager }: { item: CatalogSearchItem; eager: 
   const [failed, setFailed] = useState(false);
   return <span className={`catalog-product-image ${failed || !item.imageUrl ? "fallback" : ""}`}>
     {item.imageUrl && !failed
-      ? <Image src={item.imageUrl} alt="" width={72} height={72} loading={eager ? "eager" : "lazy"} onError={() => setFailed(true)} unoptimized />
+      ? <Image src={item.imageUrl} alt="" width={72} height={86} loading={eager ? "eager" : "lazy"} onError={() => setFailed(true)} unoptimized />
       : <PackageSearch size={25} />}
   </span>;
 }

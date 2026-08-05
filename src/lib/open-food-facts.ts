@@ -99,12 +99,13 @@ export function normalizeOpenFoodFacts(raw: unknown, barcode: string, retrievedA
   const validated = openFoodFactsResponseSchema.parse(raw);
   const product: UnknownRecord = validated.product;
   const nutriments = validated.product.nutriments ?? {};
+  const imageUrl = text(product.image_front_small_url) ?? text(product.image_front_url);
 
   return {
     barcode,
     name: text(product.product_name_de) ?? text(product.product_name) ?? text(product.generic_name_de) ?? "Unbekanntes Produkt",
     brand: text(product.brands),
-    imageUrl: text(product.image_front_small_url) ?? text(product.image_front_url),
+    imageUrl,
     quantity: text(product.quantity),
     servingSize: text(product.serving_size),
     categories: strings(product.categories_tags).map(cleanTag).slice(0, 40),
@@ -135,6 +136,8 @@ export function normalizeOpenFoodFacts(raw: unknown, barcode: string, retrievedA
     source: "open-food-facts",
     sourceUrl: `https://world.openfoodfacts.org/product/${barcode}`,
     sourceLanguage: text(product.lang),
+    databaseLicense: "ODbL-1.0; DbCL-1.0",
+    imageLicense: imageUrl ? "CC-BY-SA-4.0" : undefined,
     retrievedAt,
     confidence: text(product.product_name) || text(product.product_name_de) ? 0.82 : 0.42
   };

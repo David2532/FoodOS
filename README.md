@@ -162,7 +162,8 @@ Mengen-/Logwirkung.
 
 Der Bulk-Katalogimport läuft nicht in Vercel. Er benötigt für den getrennten GitHub-
 Workflow einen server-only `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` und einen
-identifizierenden `OPEN_FOOD_FACTS_USER_AGENT` im Format `App/Version (contact@email)`.
+identifizierenden `OPEN_FOOD_FACTS_USER_AGENT` im Format
+`App/Version (contact@email)` oder `App/Version (https://project.example)`.
 Der tägliche Lauf bleibt bis zur Quellen-/Lizenzfreigabe durch die Repository-Variable
 `CATALOG_SYNC_ENABLED=true` deaktiviert; Details stehen im Katalog-Betriebsdokument.
 

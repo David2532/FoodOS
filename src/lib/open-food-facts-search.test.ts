@@ -9,7 +9,15 @@ describe("Open Food Facts catalog search", () => {
   it("normalizes real search hits and drops invalid or duplicate products", () => {
     expect(normalizeOpenFoodFactsSearch({
       hits: [
-        { code: "4058172307409", product_name_de: "Haferflocken Feinblatt", brands: ["dmBio", "dm Bio"], quantity: "1 kg", nutriscore_grade: "A" },
+        {
+          code: "4058172307409",
+          product_name_de: "Haferflocken Feinblatt",
+          brands: ["dmBio", "dm Bio"],
+          quantity: "1 kg",
+          image_front_small_url: "https://images.openfoodfacts.org/images/products/405/817/230/7409/front_de.4.200.jpg",
+          nutriscore_grade: "A",
+          nutriments: { "energy-kcal_100g": 372, proteins_100g: 13.5, carbohydrates_100g: 58.7, fat_100g: 7 }
+        },
         { code: "4058172307409", product_name: "Duplicate" },
         { code: "no-code", product_name: "Invalid" },
         { code: "12345678", product_name: "Invalid check digit" }
@@ -20,15 +28,20 @@ describe("Open Food Facts catalog search", () => {
       count: 37,
       is_count_exact: true,
       timed_out: false
-    })).toEqual({
+    }, "2026-08-05T12:00:00.000Z")).toEqual({
       items: [{
         barcode: "4058172307409",
         name: "Haferflocken Feinblatt",
         brand: "dmBio",
         quantity: "1 kg",
+        imageUrl: "https://images.openfoodfacts.org/images/products/405/817/230/7409/front_de.4.200.jpg",
         nutriScore: "a",
+        nutrition: { kcal100g: 372, protein100g: 13.5, carbs100g: 58.7, fat100g: 7 },
         source: "open-food-facts",
-        confidence: 0.86
+        confidence: 0.86,
+        sourceUrl: "https://world.openfoodfacts.org/product/4058172307409",
+        sourceRetrievedAt: "2026-08-05T12:00:00.000Z",
+        databaseLicense: "ODbL-1.0"
       }],
       count: 37,
       countExact: true,
@@ -49,6 +62,7 @@ describe("Open Food Facts catalog search", () => {
     expect(init?.method).toBe("POST");
     expect(JSON.parse(String(init?.body))).toMatchObject({ q: "Haferflocken", page: 1, page_size: 12, langs: ["de", "en"] });
     expect(JSON.parse(String(init?.body)).fields).not.toContain("ingredients_text");
+    expect(JSON.parse(String(init?.body)).fields).toContain("nutriments");
     expect(init?.headers).toMatchObject({ "User-Agent": "FoodOS/0.1 (ops@example.com)" });
   });
 });

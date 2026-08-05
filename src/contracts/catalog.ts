@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { productNutritionSchema } from "./product";
 
 export const catalogSearchQuerySchema = z.object({
   query: z.string().trim().min(2, "Gib mindestens zwei Zeichen ein.").max(80),
@@ -12,6 +13,7 @@ export const catalogSearchItemSchema = z.object({
   quantity: z.string().max(120).optional(),
   imageUrl: z.url().optional(),
   nutriScore: z.enum(["a", "b", "c", "d", "e"]).optional(),
+  nutrition: productNutritionSchema,
   source: z.enum(["household-cache", "global-catalog", "open-food-facts"]),
   confidence: z.number().min(0).max(1),
   sourceUrl: z.url().optional(),

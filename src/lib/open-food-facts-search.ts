@@ -10,7 +10,8 @@ const externalProductSchema = z.object({
   brands: z.union([z.string(), z.array(z.string())]).optional(),
   quantity: z.string().optional(),
   image_front_small_url: z.string().url().optional(),
-  nutriscore_grade: z.string().optional()
+  nutriscore_grade: z.string().optional(),
+  nutriments: z.record(z.string(), z.unknown()).optional()
 });
 
 const externalSearchResponseSchema = z.object({
@@ -44,7 +45,11 @@ function firstBrand(value: string | string[] | undefined): string | undefined {
   return candidate?.trim() || undefined;
 }
 
-export function normalizeOpenFoodFactsSearch(raw: unknown): OpenFoodFactsSearchResult {
+function nutrient(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+export function normalizeOpenFoodFactsSearch(raw: unknown, retrievedAt = new Date().toISOString()): OpenFoodFactsSearchResult {
   const response = externalSearchResponseSchema.parse(raw);
   if (response.timed_out) throw new Error("Open Food Facts search timed out");
 
@@ -63,8 +68,21 @@ export function normalizeOpenFoodFactsSearch(raw: unknown): OpenFoodFactsSearchR
       quantity: hit.quantity?.trim().slice(0, 120) || undefined,
       imageUrl: hit.image_front_small_url,
       nutriScore: grade && /^[a-e]$/.test(grade) ? grade as "a" | "b" | "c" | "d" | "e" : undefined,
+      nutrition: {
+        kcal100g: nutrient(hit.nutriments?.["energy-kcal_100g"]),
+        protein100g: nutrient(hit.nutriments?.proteins_100g),
+        carbs100g: nutrient(hit.nutriments?.carbohydrates_100g),
+        fat100g: nutrient(hit.nutriments?.fat_100g),
+        sugar100g: nutrient(hit.nutriments?.sugars_100g),
+        saturatedFat100g: nutrient(hit.nutriments?.["saturated-fat_100g"]),
+        fiber100g: nutrient(hit.nutriments?.fiber_100g),
+        salt100g: nutrient(hit.nutriments?.salt_100g)
+      },
       source: "open-food-facts",
-      confidence: hit.product_name_de ? 0.86 : 0.78
+      confidence: hit.product_name_de ? 0.86 : 0.78,
+      sourceUrl: `https://world.openfoodfacts.org/product/${barcode}`,
+      sourceRetrievedAt: retrievedAt,
+      databaseLicense: "ODbL-1.0"
     });
   }
 
@@ -106,7 +124,8 @@ export async function searchOpenFoodFacts(
         "brands",
         "quantity",
         "image_front_small_url",
-        "nutriscore_grade"
+        "nutriscore_grade",
+        "nutriments"
       ]
     }),
     signal: AbortSignal.timeout(7_000),
