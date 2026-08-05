@@ -2,6 +2,15 @@ import { describe, expect, it } from "vitest";
 import { hasValidGtinCheckDigit, parseGs1 } from "./gs1";
 
 describe("Q-SCAN-GS1-UNIT-001 GS1 parsing", () => {
+  it("validates the standard GTIN-8, GTIN-12, GTIN-13 and GTIN-14 lengths", () => {
+    for (const value of ["96385074", "036000291452", "4006381333931", "04012345123456"]) {
+      expect(hasValidGtinCheckDigit(value)).toBe(true);
+    }
+    for (const value of ["96385075", "036000291453", "4006381333932", "04012345123457", "123456789"]) {
+      expect(hasValidGtinCheckDigit(value)).toBe(false);
+    }
+  });
+
   it("parses GTIN, lot, best-before and serial from a parenthesized code", () => {
     expect(parseGs1("(01)04012345123456(15)260831(10)LOT-7(21)SERIAL-2")).toEqual({
       ok: true,

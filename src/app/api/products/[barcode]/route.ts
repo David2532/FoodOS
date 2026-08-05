@@ -8,10 +8,14 @@ import { normalizeCachedProduct } from "@/lib/product-cache";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { assessIngredientFacts, personalizeProductAssessments, type FoodRiskPreference } from "@/domain/ingredient-relevance";
+import { hasValidGtinCheckDigit } from "@/domain/gs1";
 import type { Product } from "@/lib/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const barcodeSchema = z.string().regex(/^\d{8,14}$/, "Barcode muss 8 bis 14 Ziffern enthalten.");
+const barcodeSchema = z.string().refine(
+  hasValidGtinCheckDigit,
+  "Der Barcode hat keine gültige GTIN-Länge oder Prüfziffer."
+);
 const fields = [
   "code", "product_name", "product_name_de", "generic_name_de", "brands", "quantity",
   "image_front_url", "image_front_small_url", "ingredients_text", "ingredients_text_de",

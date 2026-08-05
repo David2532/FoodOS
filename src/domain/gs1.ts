@@ -25,7 +25,7 @@ function gs1Date(value: string): string | null {
 }
 
 export function hasValidGtinCheckDigit(value: string): boolean {
-  if (!/^\d{8,14}$/.test(value)) return false;
+  if (!/^(?:\d{8}|\d{12,14})$/.test(value)) return false;
   const digits = [...value].map(Number);
   const check = digits.pop();
   if (check == null) return false;

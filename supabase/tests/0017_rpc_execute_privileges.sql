@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(3);
+select plan(4);
 
 select ok(
   not exists (
@@ -32,6 +32,18 @@ select ok(
   and not has_function_privilege('authenticated', 'public.seal_product_catalog_import_batch(uuid)'::regprocedure, 'execute')
   and not has_function_privilege('authenticated', 'public.inspect_product_catalog_import(uuid)'::regprocedure, 'execute'),
   'Q-SEC-RPC-DB-003: legacy and catalog-administration RPCs are not client-callable'
+);
+
+select ok(
+  not has_schema_privilege('authenticated', 'inventory_private', 'usage')
+  and not exists (
+    select 1
+    from pg_proc procedure
+    join pg_namespace namespace on namespace.oid = procedure.pronamespace
+    where namespace.nspname = 'inventory_private'
+      and has_function_privilege('authenticated', procedure.oid, 'execute')
+  ),
+  'Q-SEC-RPC-DB-004: authenticated clients cannot invoke inventory payload validators directly'
 );
 
 select * from finish();

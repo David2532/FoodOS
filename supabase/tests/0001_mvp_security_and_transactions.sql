@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(81);
+select plan(102);
 
 select has_function(
   'public',
@@ -350,7 +350,7 @@ select public.add_inventory_batch(
     "barcode":"3017624010701",
     "name":"Testprodukt",
     "brand":"FoodOS Test",
-    "source":"open_food_facts",
+    "source":"open-food-facts",
     "confidence":0.9,
     "retrievedAt":"2026-08-02T10:00:00Z",
     "nutrition":{"kcal100g":200,"protein100g":10,"carbs100g":20,"fat100g":8},
@@ -405,7 +405,7 @@ select is(
         "barcode":"3017624010701",
         "name":"Testprodukt",
         "brand":"FoodOS Test",
-        "source":"open_food_facts",
+        "source":"open-food-facts",
         "confidence":0.9,
         "retrievedAt":"2026-08-02T10:00:00Z",
         "nutrition":{"kcal100g":200,"protein100g":10,"carbs100g":20,"fat100g":8},
@@ -441,6 +441,244 @@ select throws_ok(
   '23505',
   'Mutation ID payload conflict',
   'inventory intake rejects a reused mutation ID with a different payload'
+);
+
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, null::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household', '{"amount":1,"unit":"piece","location":"pantry"}',
+    '10000000-0000-4000-8000-000000000001'
+  ),
+  '22023',
+  'Invalid product payload shape',
+  'Q-SCAN-RPC-DB-001: a direct AAL2 caller cannot submit a null product payload'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"3017624010702","name":"Checksum","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
+    '{"amount":1,"unit":"piece","location":"pantry"}',
+    '10000000-0000-4000-8000-000000000002'
+  ),
+  '22023',
+  'Invalid product payload GTIN',
+  'Q-SCAN-RPC-DB-002: a direct AAL2 caller cannot bypass the GTIN checksum'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"Source","source":"scraped","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
+    '{"amount":1,"unit":"piece","location":"pantry"}',
+    '10000000-0000-4000-8000-000000000003'
+  ),
+  '22023',
+  'Invalid product payload source',
+  'Q-SCAN-RPC-DB-003: a direct AAL2 caller cannot invent product provenance'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"URL","source":"manual","imageUrl":"javascript:alert(1)","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
+    '{"amount":1,"unit":"piece","location":"pantry"}',
+    '10000000-0000-4000-8000-000000000004'
+  ),
+  '22023',
+  'Invalid product payload URL',
+  'Q-SCAN-RPC-DB-004: a direct AAL2 caller cannot store a non-HTTP product URL'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, jsonb_set(%L::jsonb, ''{brand}'', to_jsonb(repeat(''x'', 241))), %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"Text","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
+    '{"amount":1,"unit":"piece","location":"pantry"}',
+    '10000000-0000-4000-8000-000000000005'
+  ),
+  '22023',
+  'Invalid product payload text',
+  'Q-SCAN-RPC-DB-005: product text bounds hold at the direct RPC boundary'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"JSON","source":"manual","allergens":{"0":"milk"},"confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
+    '{"amount":1,"unit":"piece","location":"pantry"}',
+    '10000000-0000-4000-8000-000000000006'
+  ),
+  '22023',
+  'Invalid product payload JSON bounds',
+  'Q-SCAN-RPC-DB-006: malformed metadata JSON is rejected before risk evaluation'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"Nutrition","source":"manual","nutrition":{"kcal100g":1201},"confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
+    '{"amount":1,"unit":"piece","location":"pantry"}',
+    '10000000-0000-4000-8000-000000000007'
+  ),
+  '22023',
+  'Invalid product payload nutrition',
+  'Q-SCAN-RPC-DB-007: implausible nutrition is rejected before numeric persistence'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"Mass assignment","source":"manual","admin":true,"confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
+    '{"amount":1,"unit":"piece","location":"pantry"}',
+    '10000000-0000-4000-8000-000000000008'
+  ),
+  '22023',
+  'Invalid product payload shape',
+  'Q-SCAN-RPC-DB-008: unknown product keys cannot cross the RPC allowlist'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"Future provenance","source":"manual","confidence":1,"retrievedAt":"2100-01-01T00:00:00Z"}',
+    '{"amount":1,"unit":"piece","location":"pantry"}',
+    '10000000-0000-4000-8000-000000000009'
+  ),
+  '22023',
+  'Invalid product payload provenance timestamp',
+  'Q-SCAN-RPC-DB-009: provenance timestamps are bounded against the server clock'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, null::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"Batch null","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
+    '10000000-0000-4000-8000-000000000010'
+  ),
+  '22023',
+  'Invalid batch payload shape',
+  'Q-SCAN-RPC-DB-010: a direct AAL2 caller cannot submit a null batch payload'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"Dates","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
+    '{"amount":1,"unit":"piece","location":"pantry","best_before_date":"2027-06-30","use_by_date":"2027-06-30","date_source":"manual_confirmed"}',
+    '10000000-0000-4000-8000-000000000011'
+  ),
+  '22023',
+  'Invalid batch payload date combination',
+  'Q-SCAN-RPC-DB-011: MHD and use-by cannot be asserted for one batch together'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"Date source","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
+    '{"amount":1,"unit":"piece","location":"pantry","best_before_date":"2027-06-30"}',
+    '10000000-0000-4000-8000-000000000012'
+  ),
+  '22023',
+  'Invalid batch payload date combination',
+  'Q-SCAN-RPC-DB-012: a confirmed date requires explicit provenance'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"Date bounds","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
+    '{"amount":1,"unit":"piece","location":"pantry","best_before_date":"1999-12-31","date_source":"manual_confirmed"}',
+    '10000000-0000-4000-8000-000000000013'
+  ),
+  '22023',
+  'Invalid batch payload date bounds',
+  'Q-SCAN-RPC-DB-013: physical-package dates stay inside the supported range'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"Date provenance","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
+    '{"amount":1,"unit":"piece","location":"pantry","best_before_date":"2027-06-30","date_source":"provider_guessed"}',
+    '10000000-0000-4000-8000-000000000014'
+  ),
+  '22023',
+  'Invalid batch payload date source',
+  'Q-SCAN-RPC-DB-014: a direct caller cannot invent date provenance'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"Price","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
+    '{"amount":1,"unit":"piece","location":"pantry","purchase_price_cents":100000001}',
+    '10000000-0000-4000-8000-000000000015'
+  ),
+  '22023',
+  'Invalid batch payload numeric bounds',
+  'Q-SCAN-RPC-DB-015: purchase price bounds hold before the integer cast'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"Amount","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
+    '{"amount":1.0001,"unit":"piece","location":"pantry"}',
+    '10000000-0000-4000-8000-000000000016'
+  ),
+  '22023',
+  'Invalid batch payload numeric bounds',
+  'Q-SCAN-RPC-DB-016: amount precision cannot be silently rounded by the table type'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"Batch keys","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
+    '{"amount":1,"unit":"piece","location":"pantry","household_id":"00000000-0000-4000-8000-000000000000"}',
+    '10000000-0000-4000-8000-000000000017'
+  ),
+  '22023',
+  'Invalid batch payload shape',
+  'Q-SCAN-RPC-DB-017: unknown batch keys cannot cross the RPC allowlist'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"Confidence","source":"manual","retrievedAt":"2026-08-02T10:00:00Z"}',
+    '{"amount":1,"unit":"piece","location":"pantry"}',
+    '10000000-0000-4000-8000-000000000018'
+  ),
+  '22023',
+  'Invalid product payload numeric bounds',
+  'Q-SCAN-RPC-DB-018: missing product confidence fails closed'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"Assessment confidence","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z","assessments":[{"name":"Hinweis","level":"info","reason":"Fixture"}]}',
+    '{"amount":1,"unit":"piece","location":"pantry"}',
+    '10000000-0000-4000-8000-000000000019'
+  ),
+  '22023',
+  'Invalid product payload assessments',
+  'Q-SCAN-RPC-DB-019: missing assessment confidence fails closed'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"Missing amount","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
+    '{"unit":"piece","location":"pantry"}',
+    '10000000-0000-4000-8000-000000000020'
+  ),
+  '22023',
+  'Invalid batch payload numeric bounds',
+  'Q-SCAN-RPC-DB-020: missing batch amount fails closed'
 );
 select id::text as owner_batch from public.inventory_batches limit 1 \gset
 
@@ -524,7 +762,7 @@ select throws_ok(
 
 select (public.add_inventory_batch(
   :'owner_household'::uuid,
-  '{"barcode":"4006381333931","name":"Verbrauchsdatum-Test","source":"manual","confidence":1}'::jsonb,
+  '{"barcode":"4006381333931","name":"Verbrauchsdatum-Test","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}'::jsonb,
   jsonb_build_object(
     'amount', 200, 'unit', 'g', 'location', 'fridge',
     'use_by_date', (current_date - 1)::text, 'date_source', 'manual_confirmed'
@@ -543,7 +781,7 @@ select throws_ok(
 
 select (public.add_inventory_batch(
   :'owner_household'::uuid,
-  '{"barcode":"4006381333948","name":"MHD-Test","source":"manual","confidence":1}'::jsonb,
+  '{"barcode":"4006381333948","name":"MHD-Test","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}'::jsonb,
   jsonb_build_object(
     'amount', 200, 'unit', 'g', 'location', 'pantry',
     'best_before_date', (current_date - 1)::text, 'date_source', 'manual_confirmed'
@@ -605,7 +843,7 @@ select throws_ok(
   format(
     'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
     :'owner_household',
-    '{"barcode":"4006381333955","name":"Risikoprofil-Test","allergens":["en:milk"],"source":"manual","confidence":1}',
+    '{"barcode":"4006381333955","name":"Risikoprofil-Test","allergens":["en:milk"],"source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}',
     '{"amount":100,"unit":"g","location":"pantry"}',
     '88888888-8888-4888-8888-888888888888'
   ),
@@ -616,7 +854,7 @@ select throws_ok(
 select is(
   (public.add_inventory_batch(
     :'owner_household'::uuid,
-    '{"barcode":"4006381333955","name":"Risikoprofil-Test","allergens":["en:milk"],"source":"manual","confidence":1}'::jsonb,
+    '{"barcode":"4006381333955","name":"Risikoprofil-Test","allergens":["en:milk"],"source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}'::jsonb,
     '{"amount":100,"unit":"g","location":"pantry","personal_risk_confirmed":true}'::jsonb,
     '88888888-8888-4888-8888-888888888888'::uuid
   ) ->> 'idempotent_replay')::boolean,
@@ -711,7 +949,7 @@ select ok(
 
 select public.add_inventory_batch(
   :'owner_household'::uuid,
-  '{"barcode":"4006381333962","name":"Plan-Datums-Test","source":"manual","confidence":1}'::jsonb,
+  '{"barcode":"4006381333962","name":"Plan-Datums-Test","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}'::jsonb,
   jsonb_build_object(
     'amount', 30, 'unit', 'g', 'location', 'pantry',
     'use_by_date', (current_date - ((extract(isodow from current_date)::integer - 1)) + 1)::text,
@@ -721,7 +959,7 @@ select public.add_inventory_batch(
 ) as allocation_early_result \gset
 select public.add_inventory_batch(
   :'owner_household'::uuid,
-  '{"barcode":"4006381333962","name":"Plan-Datums-Test","source":"manual","confidence":1}'::jsonb,
+  '{"barcode":"4006381333962","name":"Plan-Datums-Test","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}'::jsonb,
   jsonb_build_object(
     'amount', 60, 'unit', 'g', 'location', 'pantry',
     'use_by_date', (current_date - ((extract(isodow from current_date)::integer - 1)) + 6)::text,
@@ -763,7 +1001,7 @@ select results_eq(
 
 select public.add_inventory_batch(
   :'owner_household'::uuid,
-  '{"barcode":"4006381333962","name":"Plan-Datums-Test","source":"manual","confidence":1}'::jsonb,
+  '{"barcode":"4006381333962","name":"Plan-Datums-Test","source":"manual","confidence":1,"retrievedAt":"2026-08-02T10:00:00Z"}'::jsonb,
   jsonb_build_object(
     'amount', 50, 'unit', 'g', 'location', 'pantry',
     'use_by_date', (current_date - ((extract(isodow from current_date)::integer - 1)) + 6)::text,
@@ -787,6 +1025,48 @@ select results_eq(
   $$ select count(*)::bigint from public.shopping_items where source = 'manual' $$,
   $$ values (1::bigint) $$,
   'plan regeneration retains confirmed manual shopping intent'
+);
+
+select lives_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{
+      "barcode":"3017624010701",
+      "name":"Nutella E2E-Testprodukt",
+      "brand":"FoodOS Testquelle",
+      "quantity":"450 g",
+      "categories":["Süßaufstriche"],
+      "countries":["Deutschland"],
+      "labels":[],
+      "ingredientsText":"Zucker, Haselnüsse",
+      "structuredIngredients":[],
+      "allergens":["Haselnüsse"],
+      "traces":[],
+      "additives":[],
+      "nutrition":{"kcal100g":539,"protein100g":6.3,"carbs100g":57.5,"fat100g":30.9},
+      "assessments":[],
+      "source":"open-food-facts",
+      "sourceUrl":"https://world.openfoodfacts.org/product/3017624010701",
+      "sourceLanguage":"de",
+      "retrievedAt":"2026-08-04T10:00:00.000Z",
+      "confidence":0.82
+    }',
+    '{
+      "amount":1,
+      "unit":"piece",
+      "location":"pantry",
+      "best_before_date":null,
+      "use_by_date":null,
+      "lot_number":null,
+      "serial_number":null,
+      "purchase_price_cents":null,
+      "date_source":"manual_confirmed",
+      "personal_risk_confirmed":false
+    }',
+    '10000000-0000-4000-8000-000000000021'
+  ),
+  'Q-SCAN-RPC-DB-021: the serialized authenticated E2E scan payload remains accepted'
 );
 
 reset role;

@@ -93,6 +93,33 @@ describe("Q-CATALOG-LAYERED-LOOKUP-005 global GTIN lookup", () => {
     expect(state.providerNormalizer).not.toHaveBeenCalled();
   });
 
+  it("serializes nullable catalog optionals as absent product fields for the RPC payload", async () => {
+    state.globalRows = [{
+      ...globalProduct,
+      brand: null,
+      image_url: null,
+      quantity: null,
+      source_url: null,
+      source_language: null,
+      source_updated_at: null,
+      database_license: null,
+      image_license: null
+    }];
+
+    const response = await GET(new Request("http://localhost/api/products/3017624010701"), {
+      params: Promise.resolve({ barcode: "3017624010701" })
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    for (const field of [
+      "brand", "imageUrl", "quantity", "sourceUrl", "sourceLanguage", "sourceUpdatedAt",
+      "databaseLicense", "imageLicense"
+    ]) {
+      expect(body.product).not.toHaveProperty(field);
+    }
+  });
+
   it("requires authentication and AAL2 before the shared catalog projection", async () => {
     state.user = null;
     expect((await GET(new Request("http://localhost/api/products/3017624010701"), {
@@ -104,6 +131,24 @@ describe("Q-CATALOG-LAYERED-LOOKUP-005 global GTIN lookup", () => {
     expect((await GET(new Request("http://localhost/api/products/3017624010701"), {
       params: Promise.resolve({ barcode: "3017624010701" })
     })).status).toBe(403);
+  });
+
+  it("rejects a malformed GTIN before authentication, cache or provider access", async () => {
+    state.user = null;
+    state.globalRows = [];
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+
+    const response = await GET(new Request("http://localhost/api/products/3017624010702"), {
+      params: Promise.resolve({ barcode: "3017624010702" })
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Der Barcode hat keine gültige GTIN-Länge oder Prüfziffer."
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(state.providerNormalizer).not.toHaveBeenCalled();
   });
 
   it("fails closed to the visible manual path when no monitored provider identity is configured", async () => {
