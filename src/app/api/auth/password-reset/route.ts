@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isRecoverySessionClaims } from "@/domain/auth-recovery";
 import { passwordResetSchema } from "@/domain/password";
+import { hasSameConfiguredOrigin } from "@/domain/request-origin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -11,49 +12,6 @@ function noStoreJson(body: unknown, status: number): Response {
     status,
     headers: { "Cache-Control": "no-store, max-age=0", Pragma: "no-cache" }
   });
-}
-
-/**
- * Returns the server-owned public origin for state-changing browser requests.
- * Request Host and forwarding headers remain untrusted input and must never decide
- * whether a password-changing request passes the CSRF boundary.
- */
-function configuredApplicationOrigin(): string | null {
-  const configured = process.env.FOODOS_APP_ORIGIN?.trim();
-  if (!configured) return null;
-
-  try {
-    const url = new URL(configured);
-    if (
-      (url.protocol !== "http:" && url.protocol !== "https:") ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash ||
-      (url.pathname !== "" && url.pathname !== "/")
-    ) {
-      return null;
-    }
-    return url.origin;
-  } catch {
-    return null;
-  }
-}
-
-function hasSameOrigin(request: Request): boolean {
-  const rawOrigin = request.headers.get("origin");
-  if (!rawOrigin) return false;
-
-  let origin: URL;
-  try {
-    origin = new URL(rawOrigin);
-  } catch {
-    return false;
-  }
-  if (origin.origin !== rawOrigin) return false;
-
-  const expectedOrigin = configuredApplicationOrigin();
-  return expectedOrigin !== null && origin.origin === expectedOrigin;
 }
 
 async function hasVerifiedRecoverySession(supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>): Promise<boolean> {
@@ -71,7 +29,7 @@ async function revokeAllSessions(supabase: Awaited<ReturnType<typeof createSupab
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (!hasSameOrigin(request)) return noStoreJson({ error: "INVALID_REQUEST_ORIGIN" }, 403);
+  if (!hasSameConfiguredOrigin(request)) return noStoreJson({ error: "INVALID_REQUEST_ORIGIN" }, 403);
 
   let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   try {

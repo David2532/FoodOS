@@ -726,3 +726,78 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   .theme-menu-popup { right: -6px; width: min(300px, calc(100vw - 20px)); }
   .settings-card { padding: 14px; }
 }
+
+/* The CEO workspace intentionally uses the same calm FoodOS tokens, but stays
+   separate from private household navigation and only exposes sourced aggregates. */
+.ops-canvas { min-height: 100svh; padding: 20px; color: var(--ink); background: radial-gradient(circle at 92% -12%, color-mix(in srgb, var(--lime) 19%, transparent), transparent 34%), var(--canvas); }
+.ops-shell { width: min(100%, 1240px); margin: 0 auto; display: grid; gap: 18px; }
+.ops-topbar { min-height: 72px; border: 1px solid var(--line); border-radius: 20px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--shell-background); }
+.ops-topbar p, .ops-hero p, .ops-section-heading p, .ops-form-heading span, .ops-risk-card p { margin: 0; color: var(--muted); font-size: 11px; font-weight: 780; letter-spacing: .12em; }
+.ops-topbar h1 { margin: 4px 0 0; font-size: clamp(22px, 4vw, 30px); letter-spacing: -.045em; }
+.ops-proof { min-height: 36px; border: 1px solid color-mix(in srgb, var(--lime) 42%, var(--line)); border-radius: 999px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; color: var(--lime); background: var(--success-background); font-size: 10px; font-weight: 800; white-space: nowrap; }
+.ops-hero { border: 1px solid color-mix(in srgb, var(--lime) 43%, var(--line)); border-radius: 24px; padding: clamp(18px, 4vw, 32px); display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; background: var(--hero-background); box-shadow: var(--hero-shadow); }
+.ops-hero h2 { max-width: 620px; margin: 7px 0; font-size: clamp(23px, 4.5vw, 36px); letter-spacing: -.055em; line-height: 1.05; }
+.ops-hero > div > span { max-width: 580px; display: block; color: var(--muted-2); font-size: 13px; line-height: 1.5; }
+.ops-hero > svg { flex: 0 0 auto; color: var(--lime); }
+.ops-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.ops-metric { min-height: 142px; border: 1px solid var(--line); border-radius: 19px; padding: 16px; display: grid; align-content: start; gap: 8px; background: var(--card-background); }
+.ops-metric > span { color: var(--muted); font-size: 11px; font-weight: 720; }
+.ops-metric > strong { font-size: clamp(18px, 3vw, 25px); font-variant-numeric: tabular-nums; letter-spacing: -.035em; }
+.ops-metric > small { color: var(--muted-2); font-size: 11px; line-height: 1.4; }
+.ops-metric.warning { border-color: color-mix(in srgb, var(--warm) 38%, var(--line)); background: var(--warm-background); }
+.ops-metric.warning > strong { color: var(--warm); }
+.ops-no-value { color: var(--muted-2); }
+.ops-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(250px, 1fr); gap: 14px; align-items: start; }
+.ops-card { border: 1px solid var(--line); border-radius: 20px; background: var(--card-background); }
+.ops-source-card { overflow: hidden; }
+.ops-section-heading { min-height: 78px; border-bottom: 1px solid var(--line); padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ops-section-heading h2, .ops-form-heading h2, .ops-risk-card h2 { margin: 5px 0 0; font-size: 18px; letter-spacing: -.025em; }
+.ops-section-heading > span { border: 1px solid var(--line); border-radius: 999px; padding: 5px 8px; color: var(--muted-2); font-size: 11px; font-weight: 740; white-space: nowrap; }
+.ops-expense-list { margin: 0; padding: 0; list-style: none; }
+.ops-expense-list li { min-height: 92px; border-bottom: 1px solid var(--line); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.ops-expense-list li:last-child { border-bottom: 0; }
+.ops-expense-list li > div { min-width: 0; display: grid; gap: 4px; }
+.ops-expense-list strong { font-size: 13px; }
+.ops-expense-list span, .ops-expense-list small { color: var(--muted-2); font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
+.ops-expense-amount { justify-items: end; text-align: right; }
+.ops-expense-amount > strong { font-variant-numeric: tabular-nums; }
+.ops-state { border: 1px solid var(--line); border-radius: 999px; padding: 4px 7px; font-size: 9px !important; font-weight: 800; letter-spacing: .04em; white-space: nowrap; }
+.ops-state.open { color: var(--warm); border-color: color-mix(in srgb, var(--warm) 48%, var(--line)); }
+.ops-state.paid { color: var(--lime); }
+.ops-empty { min-height: 150px; padding: 18px; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-content: center; color: var(--muted); }
+.ops-empty > svg { color: var(--warm); }
+.ops-empty strong { color: var(--ink); font-size: 13px; }
+.ops-empty p { margin: 5px 0 0; font-size: 12px; line-height: 1.5; }
+.ops-risk-card { padding: 18px; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 11px; border-color: color-mix(in srgb, var(--warm) 42%, var(--line)); background: var(--warm-background); }
+.ops-risk-card > svg { color: var(--warm); }
+.ops-risk-card h2 { margin-top: 5px; }
+.ops-risk-card span { margin-top: 8px; display: block; color: var(--muted-2); font-size: 12px; line-height: 1.48; }
+.ops-invoice-form { border: 1px solid var(--line); border-radius: 21px; padding: clamp(16px, 3vw, 22px); display: grid; gap: 14px; background: var(--card-background); }
+.ops-invoice-form > p { max-width: 740px; margin: -5px 0 0; color: var(--muted-2); font-size: 12px; line-height: 1.48; }
+.ops-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ops-invoice-form label { min-width: 0; display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 720; }
+.ops-invoice-form input, .ops-invoice-form select { min-width: 0; min-height: 48px; border: 1px solid var(--line); border-radius: 13px; padding: 0 12px; color: var(--ink); background: var(--field-background); font: inherit; }
+.ops-invoice-form input:focus-visible, .ops-invoice-form select:focus-visible { outline: 3px solid color-mix(in srgb, var(--lime) 50%, transparent); outline-offset: 1px; border-color: var(--lime); }
+.ops-invoice-form > small { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.ops-form-message { margin: 0; min-height: 42px; border-radius: 12px; padding: 10px 11px; display: flex; align-items: center; gap: 7px; font-size: 12px; line-height: 1.4; }
+.ops-form-message.error { color: var(--danger-text); background: var(--danger-background); }
+.ops-form-message.success { color: var(--lime); background: var(--success-background); }
+.ops-submit { justify-self: start; min-height: 48px; padding-inline: 16px; }
+.spin { animation: ops-spin .8s linear infinite; }
+@keyframes ops-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 700px) {
+  .ops-canvas { padding: 12px; }
+  .ops-metrics, .ops-grid { grid-template-columns: 1fr; }
+  .ops-topbar { align-items: flex-start; }
+  .ops-proof { margin-top: 3px; }
+  .ops-form-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 420px) {
+  .ops-topbar { padding: 13px; }
+  .ops-proof { font-size: 9px; padding-inline: 8px; }
+  .ops-expense-list li { align-items: flex-start; flex-direction: column; gap: 9px; }
+  .ops-expense-amount { justify-items: start; text-align: left; }
+  .ops-submit { width: 100%; }
+}

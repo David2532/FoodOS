@@ -45,3 +45,38 @@ export function publicRequestOrigin(request: Request): string | null {
   const protocol = forwardedProtocol ?? requestUrl.protocol.slice(0, -1);
   return httpOrigin(protocol, host) ?? fallback;
 }
+
+/**
+ * State-changing routes use an environment-owned origin, never request headers, as
+ * their CSRF boundary. A missing or malformed configuration fails closed.
+ */
+export function configuredApplicationOrigin(): string | null {
+  const configured = process.env.FOODOS_APP_ORIGIN?.trim();
+  if (!configured) return null;
+  try {
+    const url = new URL(configured);
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      (url.pathname !== "" && url.pathname !== "/")
+    ) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+export function hasSameConfiguredOrigin(request: Request): boolean {
+  const originValue = request.headers.get("origin");
+  if (!originValue) return false;
+  let origin: URL;
+  try {
+    origin = new URL(originValue);
+  } catch {
+    return false;
+  }
+  return origin.origin === originValue && origin.origin === configuredApplicationOrigin();
+}
