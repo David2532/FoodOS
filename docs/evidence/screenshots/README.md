@@ -25,3 +25,9 @@ production RUM or authenticated persistence evidence.
 credentials are entered. The legacy filename now documents the Apple and Google
 one-click options and contains no user or household data; it is not evidence that either
 remote provider is configured.
+
+`billing-lab-preview-desktop.png` and `billing-lab-preview-mobile.png` were captured
+manually on 2026-08-05 from the local development-only entitlement laboratory. They
+contain deterministic Free, Plus, Family and 14-day-trial simulations only. They are
+not evidence of a live payment, store integration, Vercel Preview access control or
+Production availability.

@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowLeft, CircleUserRound, KeyRound, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, BadgeEuro, CircleUserRound, KeyRound, ShieldCheck } from "lucide-react";
 import type { PrivacyChoices } from "@/domain/privacy";
 import { SignOutButton } from "@/features/auth/sign-out-button";
 import { DataExportButton } from "@/features/privacy/data-export-button";
@@ -8,8 +9,9 @@ import { PrivacyCenterButton } from "@/features/privacy/privacy-center-button";
 import { PasswordChangeForm } from "./password-change-form";
 import { ThemeOptions } from "./theme-options";
 
-export function AccountSettingsView({ accountEmail, initialPrivacyChoices, onClose }: {
+export function AccountSettingsView({ accountEmail, billingLabAvailable = false, initialPrivacyChoices, onClose }: {
   accountEmail?: string;
+  billingLabAvailable?: boolean;
   initialPrivacyChoices?: PrivacyChoices;
   onClose: () => void;
 }) {
@@ -41,6 +43,11 @@ export function AccountSettingsView({ accountEmail, initialPrivacyChoices, onClo
         <DataExportButton variant="settings" />
         <SignOutButton variant="settings" />
       </section>
+
+      {billingLabAvailable ? <section className="settings-card settings-action-list" aria-labelledby="billing-lab-link-title">
+        <div className="settings-section-heading"><span>Dev / Preview</span><h3 id="billing-lab-link-title"><BadgeEuro size={18} aria-hidden="true" /> Billing-Lab</h3></div>
+        <Link className="settings-action" href="/billing-lab"><BadgeEuro aria-hidden="true" /><span><strong>Tarife und Trial testen</strong><small>Nur Simulation: keine Karte, kein Kauf, keine Abbuchung.</small></span></Link>
+      </section> : null}
     </section>
   );
 }

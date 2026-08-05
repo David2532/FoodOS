@@ -36,6 +36,7 @@ export function FoodOsApp({
   authenticated = false,
   preview = false,
   authEntryAvailable = false,
+  billingLabAvailable = false,
   accountEmail,
   initialPrivacyChoices,
   initialSnapshot
@@ -43,6 +44,7 @@ export function FoodOsApp({
   authenticated?: boolean;
   preview?: boolean;
   authEntryAvailable?: boolean;
+  billingLabAvailable?: boolean;
   accountEmail?: string;
   initialPrivacyChoices?: PrivacyChoices;
   initialSnapshot?: AppSnapshot;
@@ -95,7 +97,7 @@ export function FoodOsApp({
           {view === "scan" && <ScanView householdId={initialSnapshot?.household.id} initialCatalogQuery={scanCatalogQuery} onSaved={() => { setView("inventory"); router.refresh(); }} preview={preview} />}
           {view === "plan" && <PlanView snapshot={initialSnapshot} onChanged={initialSnapshot ? () => router.refresh() : undefined} />}
           {view === "shopping" && <ShoppingView snapshot={initialSnapshot} onChanged={initialSnapshot ? () => router.refresh() : undefined} />}
-          {view === "settings" && authenticated && <AccountSettingsView accountEmail={accountEmail} initialPrivacyChoices={initialPrivacyChoices} onClose={() => setView("today")} />}
+          {view === "settings" && authenticated && <AccountSettingsView accountEmail={accountEmail} billingLabAvailable={billingLabAvailable} initialPrivacyChoices={initialPrivacyChoices} onClose={() => setView("today")} />}
         </div>
 
         <nav className="bottom-nav" aria-label="Hauptnavigation">
