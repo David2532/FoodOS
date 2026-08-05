@@ -24,6 +24,18 @@ button { color: inherit; }
 button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid var(--lime); outline-offset: 3px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
+.pwa-update-notice { position: fixed; z-index: 100; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); width: min(440px, calc(100% - 24px)); margin-inline: auto; border: 1px solid color-mix(in srgb, var(--lime) 48%, var(--line)); border-radius: 19px; padding: 15px; display: grid; gap: 13px; color: var(--ink); background: color-mix(in srgb, var(--surface-2) 94%, transparent); box-shadow: var(--shadow); backdrop-filter: blur(20px); }
+.pwa-update-notice.error { border-color: color-mix(in srgb, var(--warm) 48%, var(--line)); }
+.pwa-update-copy { display: grid; gap: 5px; }
+.pwa-update-copy strong { font-size: 14px; letter-spacing: -.015em; }
+.pwa-update-copy p { margin: 0; color: var(--muted-2); font-size: 11px; line-height: 1.5; }
+.pwa-update-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.pwa-update-actions .primary-button, .pwa-update-actions .secondary-button { min-width: 0; min-height: 48px; padding-inline: 12px; }
+
+@media (max-width: 380px) {
+  .pwa-update-actions { grid-template-columns: 1fr; }
+}
+
 .app-canvas { min-height: 100svh; position: relative; overflow: hidden; background: radial-gradient(circle at 50% -20%, #163324 0, var(--canvas) 48%); }
 .ambient { position: fixed; width: 360px; height: 360px; border-radius: 50%; filter: blur(90px); opacity: .1; pointer-events: none; }
 .ambient-one { background: var(--lime); top: -180px; left: 10%; }
