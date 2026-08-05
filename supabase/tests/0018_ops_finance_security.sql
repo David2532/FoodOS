@@ -2,13 +2,14 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(38);
+select plan(39);
 
 select has_table('public', 'ops_members', 'Ops roles are persisted separately from household data');
 select has_table('public', 'ops_finance_source_documents', 'finance sources are immutable records');
 select has_table('public', 'ops_finance_journals', 'finance journals are persisted');
 select has_table('public', 'ops_finance_ledger_lines', 'double-entry lines are persisted');
 select has_table('public', 'ops_finance_source_validation_events', 'finance source trust changes are append-only');
+select has_index('public', 'ops_finance_source_validation_events', 'ops_finance_source_validation_recorded_by_idx', 'validation recorder foreign key is indexed');
 select has_function('private', 'has_ops_role', array['public.ops_role'], 'Ops authorization helper is outside the exposed API schema');
 select has_function('public', 'record_ops_supplier_invoice', array['text', 'text', 'text', 'text', 'bigint', 'character', 'date', 'date', 'text'], 'CEO invoice RPC exists');
 select has_function('public', 'assert_ops_source_final_authoritative', array[]::text[], 'SOURCE FINAL guard exists');
