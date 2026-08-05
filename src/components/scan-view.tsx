@@ -8,7 +8,12 @@ import type { Product, RiskLevel } from "@/lib/types";
 import { productApiResponseSchema } from "@/contracts/product";
 import { addBatchResultSchema, inventoryBatchInputSchema } from "@/contracts/inventory";
 import { hasValidGtinCheckDigit, parseGs1, type Gs1Elements } from "@/domain/gs1";
-import { submitDurableRpc } from "@/infrastructure/offline-outbox";
+import {
+  discardRejectedOperation,
+  submitDurableRpc,
+  subscribeToOperationOutcome,
+  type DurableMutationRejectionReason
+} from "@/infrastructure/offline-outbox";
 import { ProductCatalogSearch } from "@/features/catalog/product-catalog-search";
 
 const riskLabels: Record<RiskLevel, { label: string; icon: typeof Check }> = {
@@ -19,7 +24,7 @@ const riskLabels: Record<RiskLevel, { label: string; icon: typeof Check }> = {
   unknown: { label: "Daten unbekannt", icon: Info }
 };
 
-export function ScanView({ householdId, initialCatalogQuery, onSaved, preview = false }: { householdId?: string; initialCatalogQuery?: string; onSaved?: () => void; preview?: boolean }) {
+export function ScanView({ householdId, initialCatalogQuery, onSaved, onOpenInventory, preview = false }: { householdId?: string; initialCatalogQuery?: string; onSaved?: () => void; onOpenInventory?: () => void; preview?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
   const lookupInFlightRef = useRef(false);
@@ -118,7 +123,7 @@ export function ScanView({ householdId, initialCatalogQuery, onSaved, preview = 
     }
   }
 
-  if (product) return <ProductResult product={product} globalCatalogStatus={globalCatalogStatus} householdId={householdId} gs1={gs1} onSaved={onSaved} onReset={() => { setProduct(null); setBarcode(""); setGs1(null); setManualEntry(null); setGlobalCatalogStatus("not-configured"); }} />;
+  if (product) return <ProductResult product={product} globalCatalogStatus={globalCatalogStatus} householdId={householdId} gs1={gs1} onSaved={onSaved} onOpenInventory={onOpenInventory} onReset={() => { setProduct(null); setBarcode(""); setGs1(null); setManualEntry(null); setGlobalCatalogStatus("not-configured"); }} />;
   if (manualEntry) return <ManualProductEntry barcode={manualEntry.barcode} reason={manualEntry.reason} onCancel={() => setManualEntry(null)} onConfirm={(manualProduct) => setProduct(manualProduct)} />;
 
   return (
@@ -215,19 +220,46 @@ function ManualProductEntry({ barcode, reason, onCancel, onConfirm }: { barcode:
   </div>;
 }
 
-function ProductResult({ product, globalCatalogStatus, householdId, gs1, onReset, onSaved }: { product: Product; globalCatalogStatus: "live" | "unavailable" | "not-configured"; householdId?: string; gs1: Gs1Elements | null; onReset: () => void; onSaved?: () => void }) {
+type BatchSaveState =
+  | { status: "idle" }
+  | { status: "saving" }
+  | { status: "queued"; operationId: string; summary: string }
+  | { status: "acked"; operationId: string; batchId: string; summary: string }
+  | { status: "rejected"; message: string; reason: DurableMutationRejectionReason }
+  | { status: "error"; message: string };
+
+function ProductResult({ product, globalCatalogStatus, householdId, gs1, onReset, onSaved, onOpenInventory }: { product: Product; globalCatalogStatus: "live" | "unavailable" | "not-configured"; householdId?: string; gs1: Gs1Elements | null; onReset: () => void; onSaved?: () => void; onOpenInventory?: () => void }) {
   const [showIngredients, setShowIngredients] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<BatchSaveState>({ status: "idle" });
+  const [rejectedOperationId, setRejectedOperationId] = useState<string | null>(null);
   const [dateKind, setDateKind] = useState<"best_before" | "use_by" | "none">(gs1?.useByDate ? "use_by" : gs1?.bestBeforeDate ? "best_before" : "none");
   const mutationId = useRef<string>(crypto.randomUUID());
   const topAssessments = product.assessments.slice(0, 4);
   const requiresPersonalRiskConfirmation = product.assessments.some((assessment) => assessment.level === "avoid");
 
+  useEffect(() => {
+    if (saveState.status !== "queued") return;
+    return subscribeToOperationOutcome<unknown>(saveState.operationId, (outcome) => {
+      if (outcome.status === "rejected") {
+        setRejectedOperationId(outcome.operationId);
+        mutationId.current = crypto.randomUUID();
+        setSaveState({ status: "rejected", message: outcome.message, reason: outcome.reason });
+        return;
+      }
+      const parsed = addBatchResultSchema.safeParse(outcome.data);
+      if (!parsed.success) {
+        setSaveState({ status: "error", message: "Die Serversynchronisierung wurde bestätigt, lieferte aber ein unerwartetes Ergebnis. Bitte nicht erneut speichern." });
+        return;
+      }
+      setSaveState({ status: "acked", operationId: outcome.operationId, batchId: parsed.data.batch_id, summary: saveState.summary });
+      onSaved?.();
+    });
+  }, [onSaved, saveState]);
+
   async function saveBatch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!householdId) return;
-    setSaveError(null);
+    setSaveState({ status: "saving" });
     const form = new FormData(event.currentTarget);
     const price = String(form.get("purchasePrice") ?? "").trim().replace(",", ".");
     const personalRiskConfirmed = form.get("personalRiskConfirmed") === "yes";
@@ -242,11 +274,17 @@ function ProductResult({ product, globalCatalogStatus, householdId, gs1, onReset
       purchasePriceCents: price ? Math.round(Number(price) * 100) : undefined
     });
     if (!parsed.success) {
-      setSaveError(parsed.error.issues[0]?.message ?? "Prüfe Menge, Datum und Lagerort.");
+      setSaveState({ status: "error", message: parsed.error.issues[0]?.message ?? "Prüfe Menge, Datum und Lagerort." });
       return;
     }
 
-    setSaving(true);
+    const operationId = mutationId.current;
+    const summary = formatBatchSummary(parsed.data.amount, parsed.data.unit, parsed.data.location, parsed.data.dateKind, parsed.data.date, parsed.data.lotNumber);
+    const recognizedGs1Date = parsed.data.dateKind === "best_before"
+      ? gs1?.bestBeforeDate
+      : parsed.data.dateKind === "use_by"
+        ? gs1?.useByDate
+        : undefined;
     const args = {
       target_household: householdId,
       product_payload: product,
@@ -259,10 +297,10 @@ function ProductResult({ product, globalCatalogStatus, householdId, gs1, onReset
         lot_number: parsed.data.lotNumber || null,
         serial_number: parsed.data.serialNumber || null,
         purchase_price_cents: parsed.data.purchasePriceCents ?? null,
-        date_source: gs1 ? "gs1_confirmed" : "manual_confirmed",
+        date_source: recognizedGs1Date && parsed.data.date === recognizedGs1Date ? "gs1_confirmed" : "manual_confirmed",
         personal_risk_confirmed: personalRiskConfirmed
       },
-      mutation_id: mutationId.current
+      mutation_id: operationId
     };
     try {
       const result = await submitDurableRpc<unknown>({
@@ -270,23 +308,44 @@ function ProductResult({ product, globalCatalogStatus, householdId, gs1, onReset
         rpc: "add_inventory_batch",
         args,
         householdId,
-        operationId: mutationId.current
+        operationId
       });
-      setSaving(false);
       if (result.status === "queued") {
-        setSaveError("Auf diesem Gerät verschlüsselt gespeichert. Die Charge erscheint nach sicherer Serversynchronisierung im gemeinsamen Vorrat.");
+        setSaveState({ status: "queued", operationId, summary });
+        if (rejectedOperationId && rejectedOperationId !== operationId) {
+          const replacedOperationId = rejectedOperationId;
+          setRejectedOperationId(null);
+          void discardRejectedOperation(replacedOperationId);
+        }
         return;
       }
-      if (result.status === "rejected" || !addBatchResultSchema.safeParse(result.data).success) {
-        setSaveError(result.status === "rejected" ? result.message : "Der Server hat ein unerwartetes Ergebnis geliefert.");
+      if (result.status === "rejected") {
+        if (result.reason === "payload_conflict") mutationId.current = crypto.randomUUID();
+        if (result.reason === "server_rejected" || result.reason === "operation_rejected") {
+          setRejectedOperationId(operationId);
+          mutationId.current = crypto.randomUUID();
+        }
+        setSaveState({ status: "rejected", message: result.message, reason: result.reason });
         return;
       }
+      const parsedResult = addBatchResultSchema.safeParse(result.data);
+      if (!parsedResult.success) {
+        setSaveState({ status: "error", message: "Der Server hat ein unerwartetes Ergebnis geliefert. Bitte nicht erneut speichern." });
+        return;
+      }
+      if (rejectedOperationId && rejectedOperationId !== operationId) {
+        const replacedOperationId = rejectedOperationId;
+        setRejectedOperationId(null);
+        void discardRejectedOperation(replacedOperationId);
+      }
+      setSaveState({ status: "acked", operationId, batchId: parsedResult.data.batch_id, summary });
       onSaved?.();
     } catch {
-      setSaving(false);
-      setSaveError("Die Änderung konnte weder lokal sicher gespeichert noch vom Server bestätigt werden.");
+      setSaveState({ status: "error", message: "Die Änderung konnte weder lokal sicher gespeichert noch vom Server bestätigt werden. Deine Eingaben bleiben erhalten; versuche es mit derselben Vorgangs-ID erneut." });
     }
   }
+
+  const formLocked = saveState.status === "saving" || saveState.status === "queued" || saveState.status === "acked";
 
   return (
     <div className="product-result page-enter">
@@ -319,14 +378,27 @@ function ProductResult({ product, globalCatalogStatus, householdId, gs1, onReset
 
       <form className="batch-form" onSubmit={saveBatch}>
         <div className="batch-form-heading"><span><Camera size={20} /></span><div><p>PACKUNG BESTÄTIGEN</p><strong>MHD/Verbrauchsdatum und Charge</strong><small>{gs1 ? "Aus GS1 erkannt – vor dem Speichern prüfen" : "Bei normalem EAN manuell von der Packung übernehmen"}</small></div></div>
-        <fieldset><legend>Art des Datums</legend><label><input type="radio" name="dateKind" checked={dateKind === "best_before"} onChange={() => setDateKind("best_before")} /> MHD</label><label><input type="radio" name="dateKind" checked={dateKind === "use_by"} onChange={() => setDateKind("use_by")} /> Verbrauchsdatum</label><label><input type="radio" name="dateKind" checked={dateKind === "none"} onChange={() => setDateKind("none")} /> Kein Datum</label></fieldset>
-        {dateKind !== "none" && <label className="field-label"><span>{dateKind === "use_by" ? "Zu verbrauchen bis" : "Mindestens haltbar bis"}</span><input name="date" type="date" defaultValue={gs1?.useByDate ?? gs1?.bestBeforeDate ?? ""} required /></label>}
-        <div className="batch-grid"><label className="field-label"><span>Menge</span><input name="amount" type="number" inputMode="decimal" min="0.001" step="0.001" defaultValue="1" required /></label><label className="field-label"><span>Einheit</span><select name="unit" defaultValue="piece"><option value="piece">Stück</option><option value="g">g</option><option value="ml">ml</option></select></label></div>
-        <label className="field-label"><span>Lagerort</span><select name="location" defaultValue="pantry"><option value="fridge">Kühlschrank</option><option value="freezer">Gefrierfach</option><option value="pantry">Vorrat</option><option value="drinks">Getränke</option><option value="other">Sonstiges</option></select></label>
-        <div className="batch-grid"><label className="field-label"><span>Charge · optional</span><input name="lotNumber" defaultValue={gs1?.lotNumber ?? ""} maxLength={120} /></label><label className="field-label"><span>Kaufpreis € · optional</span><input name="purchasePrice" inputMode="decimal" pattern="[0-9]+([,.][0-9]{1,2})?" /></label></div>
-        {requiresPersonalRiskConfirmation && <label className="risk-confirmation"><input type="checkbox" name="personalRiskConfirmed" value="yes" required /><span><strong>Persönlichen Konflikt ausdrücklich bestätigen</strong><small>Dieses Produkt passt zu einem hinterlegten Allergen oder Ausschluss. Prüfe die vollständige Packungskennzeichnung; FoodOS ersetzt keine medizinische Beratung.</small></span></label>}
-        {saveError && <div className="error-banner" role="alert"><AlertTriangle size={17} /><span>{saveError}</span></div>}
-        {householdId ? <button className="primary-button wide" disabled={saving}>{saving ? <LoaderCircle className="spin" size={18} /> : <Check size={18} />}{saving ? "Charge wird gespeichert …" : "Charge zum Vorrat hinzufügen"}</button> : <p className="preview-save-note">Preview-Modus: Produktdaten können geprüft, aber nicht dauerhaft gespeichert werden.</p>}
+        <fieldset className="batch-form-fields" disabled={formLocked}>
+          <fieldset><legend>Art des Datums</legend><label><input type="radio" name="dateKind" checked={dateKind === "best_before"} onChange={() => setDateKind("best_before")} /> MHD</label><label><input type="radio" name="dateKind" checked={dateKind === "use_by"} onChange={() => setDateKind("use_by")} /> Verbrauchsdatum</label><label><input type="radio" name="dateKind" checked={dateKind === "none"} onChange={() => setDateKind("none")} /> Kein Datum</label></fieldset>
+          {dateKind !== "none" && <label className="field-label"><span>{dateKind === "use_by" ? "Zu verbrauchen bis" : "Mindestens haltbar bis"}</span><input name="date" type="date" defaultValue={gs1?.useByDate ?? gs1?.bestBeforeDate ?? ""} required /></label>}
+          <div className="batch-grid"><label className="field-label"><span>Menge</span><input name="amount" type="number" inputMode="decimal" min="0.001" step="0.001" defaultValue="1" required /></label><label className="field-label"><span>Einheit</span><select name="unit" defaultValue="piece"><option value="piece">Stück</option><option value="g">g</option><option value="ml">ml</option></select></label></div>
+          <label className="field-label"><span>Lagerort</span><select name="location" defaultValue="pantry"><option value="fridge">Kühlschrank</option><option value="freezer">Gefrierfach</option><option value="pantry">Vorrat</option><option value="drinks">Getränke</option><option value="other">Sonstiges</option></select></label>
+          <div className="batch-grid"><label className="field-label"><span>Charge · optional</span><input name="lotNumber" defaultValue={gs1?.lotNumber ?? ""} maxLength={120} /></label><label className="field-label"><span>Kaufpreis € · optional</span><input name="purchasePrice" inputMode="decimal" pattern="[0-9]+([,.][0-9]{1,2})?" /></label></div>
+          {requiresPersonalRiskConfirmation && <label className="risk-confirmation"><input type="checkbox" name="personalRiskConfirmed" value="yes" required /><span><strong>Persönlichen Konflikt ausdrücklich bestätigen</strong><small>Dieses Produkt passt zu einem hinterlegten Allergen oder Ausschluss. Prüfe die vollständige Packungskennzeichnung; FoodOS ersetzt keine medizinische Beratung.</small></span></label>}
+        </fieldset>
+        {(saveState.status === "rejected" || saveState.status === "error") && <div className="error-banner" role="alert"><AlertTriangle size={17} /><span>{saveState.message}</span></div>}
+        {(saveState.status === "queued" || saveState.status === "acked") && <section className={`batch-save-state ${saveState.status}`} role="status" aria-live="polite">
+          {saveState.status === "acked" ? <Check size={22} /> : <LoaderCircle className="spin" size={22} />}
+          <div>
+            <strong>{saveState.status === "acked" ? "Vom Server bestätigt" : "Sicher vorgemerkt"}</strong>
+            <p>{saveState.status === "acked" ? "Die Charge ist dauerhaft im gemeinsamen Vorrat gespeichert." : "Die Änderung ist auf diesem Gerät verschlüsselt gespeichert und wird bei sicherer Verbindung synchronisiert."}</p>
+            <small>{saveState.summary}</small>
+          </div>
+        </section>}
+        {householdId && (saveState.status === "queued" || saveState.status === "acked") ? <div className="batch-save-actions">
+          <button type="button" className="primary-button" onClick={onReset}><ScanLine size={18} /> Weiter scannen</button>
+          <button type="button" className="secondary-button" onClick={onOpenInventory}>Vorrat ansehen</button>
+        </div> : householdId ? <button className="primary-button wide" disabled={saveState.status === "saving"}>{saveState.status === "saving" ? <LoaderCircle className="spin" size={18} /> : <Check size={18} />}{saveState.status === "saving" ? "Charge wird gespeichert …" : saveState.status === "rejected" ? "Erneut sicher speichern" : "Charge zum Vorrat hinzufügen"}</button> : <p className="preview-save-note">Preview-Modus: Produktdaten können geprüft, aber nicht dauerhaft gespeichert werden.</p>}
       </form>
 
       <section className="nutrition-card" aria-labelledby="nutrition-title">
@@ -359,4 +431,15 @@ function ProductResult({ product, globalCatalogStatus, householdId, gs1, onReset
 function formatNutrient(value: number | undefined, suffix = ""): string {
   if (value === undefined) return "–";
   return `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1 }).format(value)}${suffix}`;
+}
+
+function formatBatchSummary(amount: number, unit: "g" | "ml" | "piece", location: "fridge" | "freezer" | "pantry" | "drinks" | "other", dateKind: "best_before" | "use_by" | "none", date: string | undefined, lotNumber: string | undefined): string {
+  const units = unit === "piece" ? "Stück" : unit;
+  const locations = { fridge: "Kühlschrank", freezer: "Gefrierfach", pantry: "Vorrat", drinks: "Getränke", other: "Sonstiges" } as const;
+  const values = [`${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 }).format(amount)} ${units}`, locations[location]];
+  if (dateKind !== "none" && date) {
+    values.push(`${dateKind === "best_before" ? "MHD" : "Verbrauchsdatum"} ${new Intl.DateTimeFormat("de-DE").format(new Date(`${date}T00:00:00`))}`);
+  }
+  if (lotNumber) values.push(`Charge ${lotNumber}`);
+  return values.join(" · ");
 }

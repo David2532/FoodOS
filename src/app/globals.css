@@ -290,10 +290,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .batch-form-heading strong, .batch-form-heading small { display: block; }
 .batch-form-heading strong { font-size: 13px; }
 .batch-form-heading small { margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.4; }
-.batch-form fieldset { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; border: 0; }
+.batch-form .batch-form-fields { min-width: 0; display: grid; gap: 14px; margin: 0; padding: 0; border: 0; }
+.batch-form fieldset:not(.batch-form-fields) { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; border: 0; }
 .batch-form legend, .field-label > span { display: block; width: 100%; margin: 0 0 7px 2px; color: var(--muted-2); font-size: 11px; font-weight: 700; }
-.batch-form fieldset label { min-height: 44px; display: flex; align-items: center; gap: 7px; padding: 0 11px; border: 1px solid var(--line); border-radius: 12px; background: rgba(7,16,12,.55); font-size: 11px; cursor: pointer; }
-.batch-form fieldset input { accent-color: var(--lime); }
+.batch-form fieldset:not(.batch-form-fields) label { min-height: 44px; display: flex; align-items: center; gap: 7px; padding: 0 11px; border: 1px solid var(--line); border-radius: 12px; background: rgba(7,16,12,.55); font-size: 11px; cursor: pointer; }
+.batch-form fieldset:not(.batch-form-fields) input { accent-color: var(--lime); }
+.batch-form-fields:disabled { opacity: .72; }
+.batch-save-state { min-width: 0; border: 1px solid color-mix(in srgb, var(--blue) 42%, var(--line)); border-radius: 16px; padding: 13px; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; align-items: start; color: var(--blue); background: color-mix(in srgb, var(--blue) 9%, var(--surface)); }
+.batch-save-state.acked { border-color: color-mix(in srgb, var(--lime) 42%, var(--line)); color: var(--lime); background: var(--success-background); }
+.batch-save-state div { min-width: 0; }
+.batch-save-state strong { display: block; color: var(--ink); font-size: 13px; }
+.batch-save-state p { margin: 4px 0; color: var(--muted-2); font-size: 11px; line-height: 1.45; }
+.batch-save-state small { color: currentColor; font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
+.batch-save-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .field-label { min-width: 0; }
 .field-label input, .field-label select { width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 13px; padding: 0 12px; color: var(--ink); background: var(--canvas); }
 .batch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

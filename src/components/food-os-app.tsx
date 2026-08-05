@@ -94,7 +94,7 @@ export function FoodOsApp({
           {authenticated && <OutboxStatus />}
           {view === "today" && <TodayView onNavigate={setView} onOpenCatalog={openCatalog} snapshot={initialSnapshot} />}
           {view === "inventory" && <InventoryView householdId={initialSnapshot?.household.id} onScan={() => setView("scan")} onConsumed={initialSnapshot ? () => router.refresh() : undefined} items={initialSnapshot?.inventory} />}
-          {view === "scan" && <ScanView householdId={initialSnapshot?.household.id} initialCatalogQuery={scanCatalogQuery} onSaved={() => { setView("inventory"); router.refresh(); }} preview={preview} />}
+          {view === "scan" && <ScanView householdId={initialSnapshot?.household.id} initialCatalogQuery={scanCatalogQuery} onSaved={() => router.refresh()} onOpenInventory={() => setView("inventory")} preview={preview} />}
           {view === "plan" && <PlanView snapshot={initialSnapshot} onChanged={initialSnapshot ? () => router.refresh() : undefined} />}
           {view === "shopping" && <ShoppingView snapshot={initialSnapshot} onChanged={initialSnapshot ? () => router.refresh() : undefined} />}
           {view === "settings" && authenticated && <AccountSettingsView accountEmail={accountEmail} billingLabAvailable={billingLabAvailable} initialPrivacyChoices={initialPrivacyChoices} onClose={() => setView("today")} />}

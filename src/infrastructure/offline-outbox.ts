@@ -16,6 +16,7 @@ const DB_VERSION = 1;
 const OPERATIONS = "operations";
 const METADATA = "metadata";
 const OUTBOX_EVENT = "foodos:outbox-change";
+export const OUTBOX_OPERATION_RESULT_EVENT = "foodos:outbox-operation-result";
 const OFFLINE_DATA_STATE_EVENT = "foodos:offline-data-state";
 const OFFLINE_DATA_PURGED_KEY = "foodos:offline-data-purged-v1";
 const OFFLINE_DATA_CLEANUP_OBSERVATION_MS = 1_500;
@@ -38,7 +39,7 @@ let activeOfflineDataCleanup: OfflineDataCleanupAttempt | null = null;
 interface StoredOperation {
   id: string;
   kind: OfflineOperationKind;
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   state: OfflineOperationState;
   createdAt: string;
   attempts: number;
@@ -67,7 +68,17 @@ export interface OutboxSummary {
 export type DurableMutationResult<T> =
   | { status: "acked"; data: T }
   | { status: "queued" }
-  | { status: "rejected"; message: string };
+  | { status: "rejected"; message: string; reason: DurableMutationRejectionReason };
+
+export type DurableMutationRejectionReason =
+  | "precondition"
+  | "payload_conflict"
+  | "operation_rejected"
+  | "server_rejected";
+
+export type DurableOperationOutcome<T> =
+  | { operationId: string; status: "acked"; data: T }
+  | { operationId: string; status: "rejected"; message: string; reason: DurableMutationRejectionReason };
 
 function requestValue<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -146,6 +157,24 @@ async function sha256(value: unknown): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+export function outboxPayloadIdentity(input: {
+  rpc: string;
+  args: Record<string, unknown>;
+  householdId: string;
+}, schemaVersion: 1 | 2 = 2): unknown {
+  return schemaVersion === 1
+    ? input.args
+    : { rpc: input.rpc, args: input.args, householdId: input.householdId };
+}
+
+export async function outboxPayloadHash(input: {
+  rpc: string;
+  args: Record<string, unknown>;
+  householdId: string;
+}, schemaVersion: 1 | 2 = 2): Promise<string> {
+  return sha256(outboxPayloadIdentity(input, schemaVersion));
+}
+
 async function encrypt(db: IDBDatabase, value: OperationSecret): Promise<Pick<StoredOperation, "iv" | "ciphertext">> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
@@ -167,6 +196,10 @@ async function decrypt(db: IDBDatabase, operation: StoredOperation): Promise<Ope
 
 function emitChange() {
   globalThis.dispatchEvent?.(new Event(OUTBOX_EVENT));
+}
+
+function emitOperationOutcome<T>(outcome: DurableOperationOutcome<T>) {
+  globalThis.dispatchEvent?.(new CustomEvent(OUTBOX_OPERATION_RESULT_EVENT, { detail: outcome }));
 }
 
 function emitOfflineDataStorageState() {
@@ -254,19 +287,25 @@ async function sendOperation<T>(db: IDBDatabase, operation: StoredOperation, cli
   const secret = await decrypt(db, operation);
   if (!isAllowedOfflineRpc(operation.kind, secret.rpc)) {
     await putOperation(db, { ...operation, state: "REJECTED", safeError: "unsupported_operation" });
-    return { status: "rejected", message: "Diese lokale Änderung wird von dieser App-Version nicht unterstützt." };
+    const result = { status: "rejected", message: "Diese lokale Änderung wird von dieser App-Version nicht unterstützt.", reason: "precondition" } as const;
+    emitOperationOutcome({ operationId: operation.id, ...result });
+    return result;
   }
   const actor = await authenticatedActor(client);
   if (actor !== secret.actorId) {
     await putOperation(db, { ...operation, state: "REJECTED", safeError: "actor_changed" });
-    return { status: "rejected", message: "Die lokale Änderung gehört zu einer anderen Sitzung und wurde nicht gesendet." };
+    const result = { status: "rejected", message: "Die lokale Änderung gehört zu einer anderen Sitzung und wurde nicht gesendet.", reason: "server_rejected" } as const;
+    emitOperationOutcome({ operationId: operation.id, ...result });
+    return result;
   }
   const sending = { ...operation, state: "SENDING" as const, attempts: operation.attempts + 1 };
   await putOperation(db, sending);
   const { data, error } = await client.rpc(secret.rpc, secret.args);
   if (!error) {
     await removeOperation(db, operation.id);
-    return { status: "acked", data: data as T };
+    const result = { status: "acked", data: data as T } as const;
+    emitOperationOutcome({ operationId: operation.id, ...result });
+    return result;
   }
   const retryable = isRetryableTransportFailure(error.message, navigator.onLine);
   await putOperation(db, {
@@ -275,9 +314,10 @@ async function sendOperation<T>(db: IDBDatabase, operation: StoredOperation, cli
     nextAttemptAt: retryable ? Date.now() + nextRetryDelayMs(sending.attempts) : 0,
     safeError: retryable ? "transport_unavailable" : "server_rejected"
   });
-  return retryable
-    ? { status: "queued" }
-    : { status: "rejected", message: error.message };
+  if (retryable) return { status: "queued" };
+  const result = { status: "rejected", message: error.message, reason: "server_rejected" } as const;
+  emitOperationOutcome({ operationId: operation.id, ...result });
+  return result;
 }
 
 export async function submitDurableRpc<T>(input: {
@@ -287,19 +327,32 @@ export async function submitDurableRpc<T>(input: {
   householdId: string;
   operationId: string;
 }): Promise<DurableMutationResult<T>> {
-  if (!isAllowedOfflineRpc(input.kind, input.rpc)) return { status: "rejected", message: "Offline operation is not allowed" };
+  if (!isAllowedOfflineRpc(input.kind, input.rpc)) return { status: "rejected", message: "Offline operation is not allowed", reason: "precondition" };
   const client = getSupabaseBrowserClient();
   const actorId = await authenticatedActor(client);
   if (!allowOfflineDataForAuthenticatedMutation()) {
-    return { status: "rejected", message: "Die sichere Entfernung lokaler Offline-Daten ist noch nicht bestätigt. Schließe weitere FoodOS-Tabs oder beende die sichere Abmeldung, bevor du neue Offline-Änderungen speicherst." };
+    return { status: "rejected", message: "Die sichere Entfernung lokaler Offline-Daten ist noch nicht bestätigt. Schließe weitere FoodOS-Tabs oder beende die sichere Abmeldung, bevor du neue Offline-Änderungen speicherst.", reason: "precondition" };
   }
   const db = await openDatabase();
   try {
     const operations = await allOperations(db);
-    if (operations.length >= OFFLINE_QUEUE_CAP) return { status: "rejected", message: "Die Offline-Warteschlange ist voll. Stelle eine Verbindung her, bevor du weitere Änderungen bestätigst." };
+    if (operations.length >= OFFLINE_QUEUE_CAP) return { status: "rejected", message: "Die Offline-Warteschlange ist voll. Stelle eine Verbindung her, bevor du weitere Änderungen bestätigst.", reason: "precondition" };
     const existing = operations.find((operation) => operation.id === input.operationId);
-    if (existing?.state === "REJECTED") return { status: "rejected", message: "Diese Änderung wurde vom Server abgelehnt." };
-    if (existing) return navigator.onLine ? await sendOperation<T>(db, existing, client) : { status: "queued" };
+    if (existing) {
+      const secret = await decrypt(db, existing);
+      const incomingHash = await outboxPayloadHash(input, existing.schemaVersion);
+      if (secret.payloadSha256 !== incomingHash) {
+        return {
+          status: "rejected",
+          message: "Diese Vorgangs-ID gehört bereits zu einer anderen bestätigten Änderung. Die ursprüngliche Änderung bleibt erhalten.",
+          reason: "payload_conflict"
+        };
+      }
+      if (existing.state === "REJECTED") {
+        return { status: "rejected", message: "Diese Änderung wurde vom Server abgelehnt.", reason: "operation_rejected" };
+      }
+      return navigator.onLine ? await sendOperation<T>(db, existing, client) : { status: "queued" };
+    }
     const secret: OperationSecret = {
       rpc: input.rpc,
       args: input.args,
@@ -307,12 +360,12 @@ export async function submitDurableRpc<T>(input: {
       actorId,
       deviceId: await deviceId(db),
       baseRevision: null,
-      payloadSha256: await sha256(input.args)
+      payloadSha256: await outboxPayloadHash(input)
     };
     const operation: StoredOperation = {
       id: input.operationId,
       kind: input.kind,
-      schemaVersion: 1,
+      schemaVersion: 2,
       state: "QUEUED",
       createdAt: new Date().toISOString(),
       attempts: 0,
@@ -321,6 +374,20 @@ export async function submitDurableRpc<T>(input: {
     };
     await putOperation(db, operation);
     return navigator.onLine ? await sendOperation<T>(db, operation, client) : { status: "queued" };
+  } finally {
+    db.close();
+  }
+}
+
+export async function discardRejectedOperation(operationId: string): Promise<boolean> {
+  const db = await openDatabase();
+  try {
+    const operation = await requestValue(
+      db.transaction(OPERATIONS, "readonly").objectStore(OPERATIONS).get(operationId)
+    ) as StoredOperation | undefined;
+    if (!operation || operation.state !== "REJECTED") return false;
+    await removeOperation(db, operationId);
+    return true;
   } finally {
     db.close();
   }
@@ -339,6 +406,12 @@ export async function flushQueuedOperations(): Promise<OutboxSummary> {
         await sendOperation(db, operation, client);
       } catch {
         await putOperation(db, { ...operation, state: "REJECTED", safeError: "session_revalidation_failed" });
+        emitOperationOutcome({
+          operationId: operation.id,
+          status: "rejected",
+          message: "Die Sitzung oder Zwei-Faktor-Bestätigung konnte vor der Synchronisierung nicht erneut bestätigt werden.",
+          reason: "server_rejected"
+        });
       }
     }
     return summarizeOperations(await allOperations(db));
@@ -442,6 +515,18 @@ export async function discardRejectedOperations(): Promise<void> {
 export function subscribeToOutbox(listener: () => void): () => void {
   globalThis.addEventListener?.(OUTBOX_EVENT, listener);
   return () => globalThis.removeEventListener?.(OUTBOX_EVENT, listener);
+}
+
+export function subscribeToOperationOutcome<T>(
+  operationId: string,
+  listener: (outcome: DurableOperationOutcome<T>) => void
+): () => void {
+  const handleOutcome = (event: Event) => {
+    const outcome = (event as CustomEvent<DurableOperationOutcome<T>>).detail;
+    if (outcome?.operationId === operationId) listener(outcome);
+  };
+  globalThis.addEventListener?.(OUTBOX_OPERATION_RESULT_EVENT, handleOutcome);
+  return () => globalThis.removeEventListener?.(OUTBOX_OPERATION_RESULT_EVENT, handleOutcome);
 }
 
 export function subscribeToOfflineDataStorageState(listener: (state: OfflineDataStorageState) => void): () => void {

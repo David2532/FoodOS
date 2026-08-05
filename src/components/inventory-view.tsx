@@ -136,7 +136,7 @@ export function InventoryView({ onScan, onConsumed, items, householdId }: Invent
           {visibleItems.map((item) => (
             <button className="inventory-row" key={item.id} onClick={() => choose(item)} aria-expanded={selectedId === item.id}>
               <span className="inventory-emoji">{item.imageUrl ? <Image src={item.imageUrl} alt="" width={47} height={47} unoptimized /> : <PackageOpen size={21} />}</span>
-              <span className="inventory-copy"><small>{item.location}</small><strong>{item.name}</strong><em>{item.brand} · {item.remainingLabel}</em></span>
+              <span className="inventory-copy"><small>{item.location}</small><strong>{item.name}</strong><em>{[item.brand, item.remainingLabel, item.lotNumber ? `Charge ${item.lotNumber}` : null].filter(Boolean).join(" · ")}</em></span>
               {item.expiryDate ? <span className={`expiry-pill ${item.expiryState === "past_use_by" || item.expiryState === "today" ? "urgent" : ""}`}><small>{item.dateKind === "use_by" ? "ZU VERBRAUCHEN" : "MHD"}</small>{item.expiryDate}</span> : <span className="stock-pill">Kein Datum</span>}
               <ChevronRight size={17} />
             </button>
@@ -145,7 +145,7 @@ export function InventoryView({ onScan, onConsumed, items, householdId }: Invent
 
         {selected && <form className="consume-card" onSubmit={consume} aria-label={`Verzehr von ${selected.name} buchen`}>
           <button type="button" className="consume-close" onClick={() => setSelectedId(null)} aria-label="Verzehr schließen"><X size={18} /></button>
-          <p>VERZEHR BUCHEN</p><h2>{selected.name}</h2><span>Verfügbar: {selected.remainingLabel}</span>
+          <p>VERZEHR BUCHEN</p><h2>{selected.name}</h2><span>Verfügbar: {selected.remainingLabel}{selected.lotNumber ? ` · Charge ${selected.lotNumber}` : ""}</span>
           {selected.expiryState === "past_use_by" && <div className="error-banner" role="alert"><AlertTriangle size={17} /><span><strong>Nicht verwenden.</strong> Das Verbrauchsdatum ist überschritten; ein Verzehr kann nicht gebucht werden.</span></div>}
           {selected.recall.kind !== "none" && <div className={selected.recall.blocksConsumption ? "error-banner" : "safety-banner"} role={selected.recall.blocksConsumption ? "alert" : "status"}><AlertTriangle size={17} /><span>{selected.recall.wording}{selected.recall.sourceUrl && <> <a href={selected.recall.sourceUrl} target="_blank" rel="noreferrer">Amtliche Quelle öffnen</a></>}</span></div>}
           {!consumptionBlocked && <label className="field-label"><span>Portion in {selected.unit === "piece" ? "Stück" : selected.unit}</span><input type="number" min="0.001" max={selected.remainingAmount} step="0.001" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} required /></label>}
