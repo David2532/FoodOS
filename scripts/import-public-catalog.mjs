@@ -19,6 +19,7 @@ const MINIMUM_ACCEPTANCE_RATIO = 0.001;
 const MINIMUM_METADATA_SAMPLES = 100;
 const MAX_LINE_BYTES = 512 * 1024;
 const HEADER_TIMEOUT_MS = 30_000;
+const IMPORT_RUN_ID_PATTERN = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const OFFICIAL_SOURCE_HOSTS = new Set([
   "static.openfoodfacts.org",
   "world.openfoodfacts.org",
@@ -90,9 +91,12 @@ function clientFromEnvironment() {
   return createClient(url, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
-function catalogUserAgent() {
+export function catalogUserAgent() {
   const value = process.env.OPEN_FOOD_FACTS_USER_AGENT?.trim();
-  if (!value || !/^[^/\s]+\/[^\s]+\s+\([^\s()]+@[^\s()]+\)$/.test(value)) throw fail("catalog-user-agent-required");
+  const contact = "(?:[^\\s()]+@[^\\s()]+|\\+?https:\\/\\/[^\\s()]+)";
+  if (!value || !new RegExp(`^[^/\\s]+/[^\\s]+\\s+\\(${contact}\\)$`).test(value)) {
+    throw fail("catalog-user-agent-required");
+  }
   return value;
 }
 
@@ -185,8 +189,32 @@ async function updateRun(supabase, runId, values) {
   if (error) throw fail("catalog-import-run-update-failed");
 }
 
+export function parseCapacityResult(value) {
+  if (!value || typeof value !== "object"
+    || !Number.isSafeInteger(value.database_size_bytes)
+    || !Number.isSafeInteger(value.soft_limit_bytes)
+    || !Number.isSafeInteger(value.hard_limit_bytes)
+    || value.database_size_bytes < 0
+    || value.soft_limit_bytes <= 0
+    || value.hard_limit_bytes <= value.soft_limit_bytes
+    || typeof value.can_write !== "boolean"
+    || value.can_write !== (value.database_size_bytes < value.soft_limit_bytes)) {
+    throw fail("catalog-capacity-result-invalid");
+  }
+  return value;
+}
+
+async function ensureCapacity(supabase) {
+  const { data, error } = await supabase.rpc("product_catalog_import_capacity").single();
+  if (error) throw fail("catalog-capacity-check-failed");
+  const capacity = parseCapacityResult(data);
+  if (!capacity.can_write) throw fail("catalog-storage-soft-limit-reached");
+  return capacity;
+}
+
 async function insertBatch(supabase, runId, batch) {
   if (!batch.length) return;
+  await ensureCapacity(supabase);
   const { error } = await supabase.from("product_catalog_products").upsert(
     batch.map((product) => catalogRowForInsert(product, runId)),
     { onConflict: "import_run_id,gtin" }
@@ -202,6 +230,15 @@ async function markFailed(supabase, runId, code) {
   if (error) throw fail("catalog-import-failure-status-unknown");
 }
 
+async function leaveResumable(supabase, runId, code) {
+  if (!runId) return;
+  await updateRun(supabase, runId, {
+    last_interrupted_at: new Date().toISOString(),
+    last_progress_at: new Date().toISOString(),
+    failure_code: code.slice(0, 120)
+  });
+}
+
 async function createStagingRun(supabase, source) {
   const { data, error } = await supabase.from("product_catalog_import_runs").insert({
     source_provider: "open-food-facts",
@@ -215,6 +252,53 @@ async function createStagingRun(supabase, source) {
   }).select("id").single();
   if (error || !data?.id) throw fail("catalog-staging-run-create-failed");
   return data.id;
+}
+
+async function loadStagingRun(supabase, runId, source) {
+  if (!IMPORT_RUN_ID_PATTERN.test(runId)) throw fail("catalog-resume-run-invalid");
+  const { data, error } = await supabase.from("product_catalog_import_runs")
+    .select("id, status, source_dataset_url, source_schema_version, source_revision, attempted_row_count, accepted_product_count, rejected_row_count, filtered_row_count, duplicate_row_count, candidate_row_count, ingestion_completed_at, seal_cursor_gtin, resume_count")
+    .eq("id", runId)
+    .single();
+  if (error || !data) throw fail("catalog-resume-run-not-found");
+  const expectedSource = source.isRemote ? source.value : `file://${basename(source.value)}`;
+  if (data.status !== "staging"
+    || data.source_dataset_url !== expectedSource
+    || data.source_schema_version !== "off-jsonl-v3.6-compatible") {
+    throw fail("catalog-resume-run-incompatible");
+  }
+  if (!Number.isSafeInteger(data.resume_count) || data.resume_count < 0) throw fail("catalog-resume-run-invalid");
+  await updateRun(supabase, runId, {
+    resume_count: data.resume_count + 1,
+    last_progress_at: new Date().toISOString(),
+    last_interrupted_at: null,
+    failure_code: null
+  });
+  return data;
+}
+
+function parseIngestionCheckpoint(value) {
+  if (!value || typeof value !== "object"
+    || !Number.isSafeInteger(value.persisted_product_count)
+    || !Number.isSafeInteger(value.duplicate_row_count)
+    || value.persisted_product_count < 0
+    || value.duplicate_row_count < 0) {
+    throw fail("catalog-ingestion-checkpoint-invalid");
+  }
+  return value;
+}
+
+async function checkpointIngestion(supabase, runId, counters, sourceRevision) {
+  const { data, error } = await supabase.rpc("checkpoint_product_catalog_ingestion", {
+    target_import_run_id: runId,
+    target_attempted_row_count: counters.attempted,
+    target_rejected_row_count: counters.rejected,
+    target_filtered_row_count: counters.filtered,
+    target_candidate_row_count: counters.candidates,
+    target_source_revision: sourceRevision
+  }).single();
+  if (error) throw fail("catalog-ingestion-checkpoint-failed");
+  return parseIngestionCheckpoint(data);
 }
 
 export async function activateProductCatalogImport(supabase, runId) {
@@ -290,6 +374,7 @@ export function assertIntegrity(integrity, { attempted, rejected, filtered, cand
 async function main() {
   loadLocalEnvironment();
   const source = sourceDescriptor(argument("source") ?? process.env.PUBLIC_CATALOG_DUMP_URL);
+  const resumeRunId = argument("resume-run");
   const minimumAccepted = positiveInteger(argument("minimum-accepted"), MINIMUM_ACCEPTED);
   const minimumRatio = minimumAcceptanceRatio(argument("minimum-acceptance-ratio"));
   const supabase = clientFromEnvironment();
@@ -298,6 +383,7 @@ async function main() {
   const abort = new AbortController();
   let runId;
   let activeStream;
+  let mayResume = false;
   const onInterrupt = () => {
     abort.abort();
     activeStream?.destroy();
@@ -307,63 +393,118 @@ async function main() {
 
   try {
     // Credential/database validation occurs before the potentially multi-gigabyte download.
-    runId = await createStagingRun(supabase, source);
-    const input = await sourceStream(source, abort.signal, userAgent);
-    if (!input.contentLength || input.contentLength < MINIMUM_REMOTE_SOURCE_BYTES) throw fail("catalog-source-too-small");
-    activeStream = input.stream;
-    if (input.sourceRevision) await updateRun(supabase, runId, { source_revision: input.sourceRevision });
-    const sourceDigest = createHash("sha256");
-    const lines = readLines(digestingStream(input.stream, sourceDigest), input.compressed);
-    let attempted = 0;
-    let rejected = 0;
-    let filtered = 0;
-    let candidates = 0;
-    let batch = [];
+    const resumedRun = resumeRunId ? await loadStagingRun(supabase, resumeRunId, source) : undefined;
+    runId = resumedRun?.id ?? await createStagingRun(supabase, source);
+    mayResume = Boolean(resumedRun);
 
-    try {
-      for await (const line of lines) {
-        if (abort.signal.aborted) throw fail("catalog-import-interrupted");
-        if (!line.trim()) continue;
-        attempted += 1;
-        let record;
-        try {
-          record = JSON.parse(line);
-        } catch {
-          rejected += 1;
-          continue;
-        }
-        const normalized = normalizePublicCatalogProduct(record);
-        if (normalized.kind === "filtered") {
-          filtered += 1;
-        } else if (normalized.kind === "rejected") {
-          rejected += 1;
-        } else {
-          batch.push(normalized.product);
-          candidates += 1;
-          if (batch.length >= BATCH_SIZE) {
-            await insertBatch(supabase, runId, batch);
-            batch = [];
+    let attempted;
+    let rejected;
+    let filtered;
+    let candidates;
+    let persisted;
+    let duplicates;
+
+    if (resumedRun?.ingestion_completed_at) {
+      const storedCounters = [
+        resumedRun.attempted_row_count,
+        resumedRun.accepted_product_count,
+        resumedRun.rejected_row_count,
+        resumedRun.filtered_row_count,
+        resumedRun.duplicate_row_count,
+        resumedRun.candidate_row_count
+      ];
+      if (storedCounters.some((value) => !Number.isSafeInteger(value) || value < 0)
+        || resumedRun.candidate_row_count !== resumedRun.accepted_product_count + resumedRun.duplicate_row_count
+        || resumedRun.attempted_row_count !== resumedRun.rejected_row_count
+          + resumedRun.filtered_row_count + resumedRun.candidate_row_count) {
+        throw fail("catalog-resume-counters-invalid");
+      }
+      attempted = resumedRun.attempted_row_count;
+      rejected = resumedRun.rejected_row_count;
+      filtered = resumedRun.filtered_row_count;
+      candidates = resumedRun.candidate_row_count;
+      persisted = resumedRun.accepted_product_count;
+      duplicates = resumedRun.duplicate_row_count;
+    } else {
+      const input = await sourceStream(source, abort.signal, userAgent);
+      if (source.isRemote && (!input.contentLength || input.contentLength < MINIMUM_REMOTE_SOURCE_BYTES)) {
+        throw fail("catalog-source-too-small");
+      }
+      if (resumedRun?.source_revision && input.sourceRevision !== resumedRun.source_revision) {
+        throw fail("catalog-source-revision-changed");
+      }
+      activeStream = input.stream;
+      if (input.sourceRevision) {
+        await updateRun(supabase, runId, {
+          source_revision: input.sourceRevision,
+          last_progress_at: new Date().toISOString()
+        });
+      }
+      const sourceDigest = createHash("sha256");
+      const lines = readLines(digestingStream(input.stream, sourceDigest), input.compressed);
+      attempted = 0;
+      rejected = 0;
+      filtered = 0;
+      candidates = 0;
+      let batch = [];
+
+      try {
+        for await (const line of lines) {
+          if (abort.signal.aborted) throw fail("catalog-import-interrupted");
+          if (!line.trim()) continue;
+          attempted += 1;
+          let record;
+          try {
+            record = JSON.parse(line);
+          } catch {
+            rejected += 1;
+            continue;
+          }
+          const normalized = normalizePublicCatalogProduct(record);
+          if (normalized.kind === "filtered") {
+            filtered += 1;
+          } else if (normalized.kind === "rejected") {
+            rejected += 1;
+          } else {
+            batch.push(normalized.product);
+            candidates += 1;
+            if (batch.length >= BATCH_SIZE) {
+              await insertBatch(supabase, runId, batch);
+              batch = [];
+            }
+          }
+          if (attempted % PROGRESS_INTERVAL === 0) {
+            await updateRun(supabase, runId, {
+              attempted_row_count: attempted,
+              rejected_row_count: rejected,
+              filtered_row_count: filtered,
+              candidate_row_count: candidates,
+              last_progress_at: new Date().toISOString()
+            });
           }
         }
-        if (attempted % PROGRESS_INTERVAL === 0) {
-          await updateRun(supabase, runId, {
-            attempted_row_count: attempted,
-            rejected_row_count: rejected,
-            filtered_row_count: filtered
-          });
-        }
+      } finally {
+        lines.close();
+        input.stream.destroy();
       }
-    } finally {
-      lines.close();
-      input.stream.destroy();
+
+      await insertBatch(supabase, runId, batch);
+      const sourceContentSha256 = sourceDigest.digest("hex");
+      if (localSourceDigest && sourceContentSha256 !== localSourceDigest) throw fail("catalog-local-source-digest-mismatch");
+      const checkpoint = await checkpointIngestion(
+        supabase,
+        runId,
+        { attempted, rejected, filtered, candidates },
+        input.sourceRevision ?? sourceContentSha256
+      );
+      persisted = checkpoint.persisted_product_count;
+      duplicates = checkpoint.duplicate_row_count;
+      mayResume = true;
     }
 
-    await insertBatch(supabase, runId, batch);
-    const sourceContentSha256 = sourceDigest.digest("hex");
-    if (localSourceDigest && sourceContentSha256 !== localSourceDigest) throw fail("catalog-local-source-digest-mismatch");
     await sealProductCatalogImport(supabase, runId);
     const integrity = await inspectImport(supabase, runId);
-    const { persisted, duplicates } = assertIntegrity(integrity, {
+    const integrityCounters = assertIntegrity(integrity, {
       attempted,
       rejected,
       filtered,
@@ -371,14 +512,13 @@ async function main() {
       minimumAccepted,
       minimumRatio
     });
+    if (integrityCounters.persisted !== persisted || integrityCounters.duplicates !== duplicates) {
+      throw fail("catalog-resume-integrity-mismatch");
+    }
     await updateRun(supabase, runId, {
-      attempted_row_count: attempted,
-      accepted_product_count: persisted,
-      rejected_row_count: rejected,
-      filtered_row_count: filtered,
-      duplicate_row_count: duplicates,
       normalized_content_sha256: integrity.normalized_content_sha256,
-      source_revision: input.sourceRevision ?? sourceContentSha256
+      last_progress_at: new Date().toISOString(),
+      failure_code: null
     });
     await activateProductCatalogImport(supabase, runId);
     process.stdout.write(`Catalog import activated: accepted=${persisted}; rejected=${rejected}; filtered=${filtered}; duplicates=${duplicates}; attempted=${attempted}\n`);
@@ -386,7 +526,11 @@ async function main() {
     const code = error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : "catalog-import-failed";
     let finalCode = code;
     try {
-      await markFailed(supabase, runId, code);
+      if (mayResume || code === "catalog-import-interrupted" || code === "catalog-storage-soft-limit-reached") {
+        await leaveResumable(supabase, runId, code);
+      } else {
+        await markFailed(supabase, runId, code);
+      }
     } catch {
       finalCode = "catalog-import-failure-status-unknown";
     }

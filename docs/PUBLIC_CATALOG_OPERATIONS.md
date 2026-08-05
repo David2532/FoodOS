@@ -8,7 +8,9 @@ confirmed-product cache. This document describes the operational path for migrat
 `0015_public_product_catalog.sql` and
 `0016_public_catalog_import_integrity.sql` and the bounded-seal follow-up migrations
 `20260805074723_bounded_catalog_import_seal.sql` and
-`20260805075456_fix_catalog_seal_guard_generated_columns.sql`. It does **not** claim
+`20260805075456_fix_catalog_seal_guard_generated_columns.sql`, the nutrition projection
+`20260805122303_catalog_search_nutrition_summary.sql` and recovery/capacity migration
+`20260805141655_catalog_import_recovery.sql`. It does **not** claim
 that a managed database has an active or verified catalog generation.
 
 ## Data boundary and source order
@@ -43,9 +45,12 @@ intentional country filters and duplicate GTIN source rows. Missing facts remain
 The normalized projection
 retains provenance, source URL/language/revision/retrieval time, normalized content hash
 and applicable license fields; raw provider objects are not written. The allowlisted
-image reference accepts the documented bulk `image_url` / `image_front_url` and small-image
-variants over HTTPS; when none is supplied, the product UI must show its neutral no-image
-state rather than a made-up package photo.
+image reference accepts documented `image_url` / `image_front_url` variants over HTTPS.
+The full JSONL dump normally omits those convenience URLs, so the normalizer also derives
+the 400/200/100/full URL only from an existing `images.front_<language>` entry, its real
+revision and advertised size according to the OFF image path contract. When that evidence
+is absent, the product UI shows its neutral no-image state rather than a made-up package
+photo.
 
 Open Food Facts asks high-volume consumers to use exports instead of many API requests,
 requires an identifiable User-Agent for API use, and documents current v3.6 as the
@@ -85,8 +90,9 @@ The current scheduled workflow deliberately does not inject `PUBLIC_CATALOG_DUMP
 so its manual and daily runs use the official default. The variable is an input selector,
 not an activation control and must never be exposed to a browser build.
 
-Before a first managed import, apply migrations `0015`, `0016` and both bounded-seal
-follow-up migrations, configure the three secret values
+Before a first managed import, apply migrations `0015`, `0016`, both bounded-seal
+follow-ups, the nutrition projection and the recovery/capacity migration; configure the
+three secret values
 in the protected GitHub Environment or another server-only secret store, and complete the
 source/licence review. A controlled operator run is then:
 
@@ -103,6 +109,21 @@ lower the production minimum merely to make a sample appear successful. `catalog
 returns exit code 2 when its server-only credentials are missing and exit code 1 when
 there is no intact active generation. Neither outcome proves a catalog is populated.
 
+The importer persists attempted/rejected/filtered/candidate counters at least every 1,000
+source rows and checks database capacity before every 250-product write. It stops new
+writes at 5.5 GiB and the database rejects product insert/update statements at the hard
+6 GiB boundary. SIGINT, SIGTERM, the soft limit and post-ingestion failures leave an
+explicit non-active, resumable staging run. Resume only the same source generation with:
+
+```bash
+npm run catalog:import -- --resume-run=<exact-run-uuid>
+```
+
+A resume with a different source URL, schema or remote revision fails closed. Before
+ingestion completes it safely re-reads the unchanged source and idempotently upserts into
+the same generation; after the ingestion checkpoint it skips the dump and continues the
+bounded seal. It never creates a second generation merely to resume a stopped one.
+
 `.github/workflows/public-catalog-sync.yml` permits a manual controlled run. Its daily
 03:23 UTC schedule remains disabled until `CATALOG_SYNC_ENABLED=true` is set after the
 review. The workflow is not a Vercel request and must run only in the protected
@@ -110,8 +131,10 @@ review. The workflow is not a Vercel request and must run only in the protected
 
 ## Generation activation, failure and recovery
 
-Each import creates a `staging` generation, records attempted/accepted/rejected/filtered/
-duplicate counts, then writes in bounded batches. After source writes finish, the database
+Each new import creates a `staging` generation, records attempted/accepted/rejected/
+filtered/candidate/duplicate counts, then writes in bounded batches. After source writes
+finish, a service-only database checkpoint reconciles persisted and duplicate counts
+before the database
 seals at most 1,000 GTIN-ordered rows per service-only transaction. Every seal writes the
 canonical per-product hash and an immutable manifest chunk containing its ordered hash and
 metadata-evidence counters. Once sealing starts, product facts cannot be inserted, deleted
@@ -123,10 +146,21 @@ evidence pass, the root matches the run and at least 25,000 products were persis
 service-only activation function atomically supersedes the prior active generation and
 marks the complete staging generation active. Reads join only the active generation.
 
-Credential validation happens before a remote dump download. A fetch, parse, validation,
-write, interruption or minimum-count failure marks the staging run `failed`; it must not
+Credential validation happens before a remote dump download. An interrupted or
+post-checkpoint run remains explicitly staging/resumable; a non-resumable fetch, source
+revision, parse, validation or integrity failure is marked `failed`. Neither state can
 silently replace an existing active generation. Record only aggregate counts and safe
 failure codes in operational output, never product payloads or GTINs.
+
+A stale staging run is not deleted by hand. The service-only retirement RPC requires the
+exact run UUID, generation and current attempted/product/chunk/sealed counts, the approved
+source/schema, no active state and at least 30 minutes without progress. It first records
+the controlled `catalog-import-stale-retired` failed state. A separate service-only purge
+RPC repeats exact generation/product/chunk/sealed checks and opens a transaction-local
+delete gate only for that failed run. It removes at most 5,000 product rows per call,
+persists the original expected counts and can resume the same exact purge until it reports
+`is_complete=true`; any mismatch aborts without deleting data. These RPCs have no
+household/user/inventory references or client grants.
 
 The current migration deliberately has no RPC to reactivate a `superseded` generation.
 Consequently, do **not** edit import-run states by hand or call a failed staging run a
@@ -145,9 +179,11 @@ Never substitute zero, an old success or a provider outage for a current catalog
 
 ## Managed-data status and release boundary
 
-This document does not assert an active production generation. A prior managed staging
-run was safely marked `failed` during the former unbounded sealing operation and was never
-activated. It is not a recovery candidate. Apply the bounded-seal migration, run a new
-approved source import and record its exact generation, aggregate count, source retrieval
-time, commit and verification result only after `npm run catalog:verify` passes. Until
-then, the imported-product count and last successful import remain **NOT_PROVEN**.
+This document does not assert an active production generation. Read-only inspection on
+2026-08-05 found no active generation and one abandoned, partially sealed `staging`
+generation from the former importer. It has not been deleted or called successful. Apply
+and verify the recovery migration, re-read all exact cleanup preconditions, retire and
+purge only that exact inactive generation, then run one bounded/resumable approved import.
+Record its generation, aggregate count, source retrieval time, commit and verification
+result only after `npm run catalog:verify` passes. Until then, the imported-product count
+and last successful import remain **NOT_PROVEN**.

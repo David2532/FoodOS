@@ -84,6 +84,36 @@ function structuredIngredients(value) {
   }).slice(0, 500);
 }
 
+function selectedFrontImageUrl(raw, gtin) {
+  if (!raw.images || typeof raw.images !== "object" || Array.isArray(raw.images)) return undefined;
+  const images = /** @type {Record<string, unknown>} */ (raw.images);
+  const language = text(raw.lang, 16)?.toLowerCase();
+  const candidates = [
+    "front_de",
+    ...(language && /^[a-z]{2}$/.test(language) ? [`front_${language}`] : []),
+    "front_en",
+    ...Object.keys(images).filter((key) => /^front_[a-z]{2}$/.test(key)).sort()
+  ];
+  const imageKey = [...new Set(candidates)].find((key) => {
+    const image = images[key];
+    return image && typeof image === "object" && !Array.isArray(image);
+  });
+  if (!imageKey) return undefined;
+
+  const image = /** @type {Record<string, unknown>} */ (images[imageKey]);
+  const revision = identifier(image.rev, 20);
+  const sizes = image.sizes && typeof image.sizes === "object" && !Array.isArray(image.sizes)
+    ? /** @type {Record<string, unknown>} */ (image.sizes)
+    : {};
+  const resolution = ["400", "200", "100", "full"].find((candidate) => sizes[candidate]);
+  if (!revision || !/^\d+$/.test(revision) || !resolution) return undefined;
+
+  const folder = gtin.length > 8
+    ? `${gtin.slice(0, 3)}/${gtin.slice(3, 6)}/${gtin.slice(6, 9)}/${gtin.slice(9)}`
+    : gtin;
+  return `https://images.openfoodfacts.org/images/products/${folder}/${imageKey}.${revision}.${resolution}.jpg`;
+}
+
 /** @param {unknown} value */
 export function canonicalJson(value) {
   if (value === null || typeof value === "boolean" || typeof value === "number" || typeof value === "string") return JSON.stringify(value);
@@ -139,7 +169,8 @@ export function normalizePublicCatalogProduct(value) {
   const imageUrl = text(raw.image_front_url, 2_000)
     ?? text(raw.image_url, 2_000)
     ?? text(raw.image_front_small_url, 2_000)
-    ?? text(raw.image_small_url, 2_000);
+    ?? text(raw.image_small_url, 2_000)
+    ?? selectedFrontImageUrl(raw, gtin);
   if (imageUrl && !/^https:\/\//i.test(imageUrl)) return { kind: "rejected", reason: "invalid-image-url" };
 
   const product = {
@@ -182,7 +213,7 @@ export function normalizePublicCatalogProduct(value) {
       source: "open-food-facts-jsonl",
       source_fields: [
         "code", "product_name_de", "product_name", "generic_name_de", "generic_name", "brands", "quantity", "serving_size",
-        "image_front_url", "image_url", "image_front_small_url", "image_small_url", "ingredients_text_de", "ingredients_text", "ingredients", "allergens_tags",
+        "image_front_url", "image_url", "image_front_small_url", "image_small_url", "images", "ingredients_text_de", "ingredients_text", "ingredients", "allergens_tags",
         "traces_tags", "additives_tags", "categories_tags", "labels_tags", "countries_tags", "packaging_tags", "stores_tags",
         "origins_tags", "origins", "nutriments", "nutriscore_grade", "nova_group", "ecoscore_grade", "completeness", "lang", "last_modified_datetime", "last_modified_t"
       ]

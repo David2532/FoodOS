@@ -4,6 +4,8 @@ import { canonicalJson, normalizePublicCatalogProduct, sha256 } from "./public-c
 import {
   activateProductCatalogImport,
   assertIntegrity,
+  catalogUserAgent,
+  parseCapacityResult,
   parseSealBatchResult,
   readLines,
   sourceDescriptor,
@@ -22,7 +24,10 @@ const germanyProduct = {
 };
 
 describe("public catalog dump normalizer", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
 
   it("allowlists a real dump shape without retaining unknown fields", () => {
     const normalized = normalizePublicCatalogProduct({ ...germanyProduct, internal_unknown: "never persist" });
@@ -55,6 +60,34 @@ describe("public catalog dump normalizer", () => {
       image_url: "https://images.openfoodfacts.org/images/products/400/638/133/3931/front_de.3.400.jpg",
       image_license: "CC-BY-SA-4.0 (verify image-specific rights before reuse)"
     });
+  });
+
+  it("derives the documented selected front image URL from the real JSONL dump shape", () => {
+    const normalized = normalizePublicCatalogProduct({
+      ...germanyProduct,
+      lang: "de",
+      images: {
+        front_de: {
+          rev: "7",
+          sizes: { 100: { w: 80, h: 100 }, 400: { w: 320, h: 400 } }
+        }
+      }
+    });
+    expect(normalized).toMatchObject({ kind: "accepted" });
+    if (normalized.kind !== "accepted") return;
+    expect(normalized.product.image_url)
+      .toBe("https://images.openfoodfacts.org/images/products/400/638/133/3931/front_de.7.400.jpg");
+  });
+
+  it("keeps the image unknown when selected-image revision metadata is incomplete", () => {
+    const normalized = normalizePublicCatalogProduct({
+      ...germanyProduct,
+      images: { front_de: { sizes: { 400: { w: 320, h: 400 } } } }
+    });
+    expect(normalized).toMatchObject({ kind: "accepted" });
+    if (normalized.kind !== "accepted") return;
+    expect(normalized.product).not.toHaveProperty("image_url");
+    expect(normalized.product.image_license).toBe("not-applicable");
   });
 
   it("filters non-Germany records and rejects invalid GTINs and impossible nutrition", () => {
@@ -113,6 +146,30 @@ describe("public catalog dump normalizer", () => {
       .toThrow("catalog-import-seal-invalid");
     expect(() => parseSealBatchResult({ sealed_product_count: 1_000, is_complete: "yes" }))
       .toThrow("catalog-import-seal-invalid");
+  });
+
+  it("requires an accountable Open Food Facts user agent with email or public URL", () => {
+    vi.stubEnv("OPEN_FOOD_FACTS_USER_AGENT", "FoodOS/0.1 (ops@example.test)");
+    expect(catalogUserAgent()).toBe("FoodOS/0.1 (ops@example.test)");
+    vi.stubEnv("OPEN_FOOD_FACTS_USER_AGENT", "FoodOS/0.1 (+https://github.com/David2532/FoodOS)");
+    expect(catalogUserAgent()).toBe("FoodOS/0.1 (+https://github.com/David2532/FoodOS)");
+    vi.stubEnv("OPEN_FOOD_FACTS_USER_AGENT", "generic-browser");
+    expect(() => catalogUserAgent()).toThrow("catalog-user-agent-required");
+  });
+
+  it("fails closed when the database capacity result is inconsistent", () => {
+    expect(parseCapacityResult({
+      database_size_bytes: 1_000,
+      soft_limit_bytes: 5_905_580_032,
+      hard_limit_bytes: 6_442_450_944,
+      can_write: true
+    })).toMatchObject({ can_write: true });
+    expect(() => parseCapacityResult({
+      database_size_bytes: 6_000_000_000,
+      soft_limit_bytes: 5_905_580_032,
+      hard_limit_bytes: 6_442_450_944,
+      can_write: true
+    })).toThrow("catalog-capacity-result-invalid");
   });
 
   it("allows only reviewed source hosts and follows an allowed redirect once", async () => {
