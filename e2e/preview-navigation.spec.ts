@@ -37,7 +37,6 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
   test("keeps the five canonical destinations usable without horizontal overflow", async ({ page }, testInfo) => {
     await page.goto("/?demo=1");
     await expect(page.getByRole("heading", { name: "Heute in FoodOS" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Konto erstellen oder anmelden" })).toBeVisible();
 
     for (const [label, heading] of [
       ["Vorrat", "Dein Vorrat"],

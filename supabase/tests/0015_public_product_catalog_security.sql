@@ -22,7 +22,11 @@ select ok(
   and (
     select count(*)
     from pg_class
-    where oid in ('public.product_catalog_import_runs'::regclass, 'public.product_catalog_products'::regclass)
+    where oid in (
+      'public.product_catalog_import_runs'::regclass,
+      'public.product_catalog_products'::regclass,
+      'public.product_catalog_import_chunks'::regclass
+    )
       and relrowsecurity
   ) = 3,
   'raw catalog tables have RLS enabled and no client policy'
@@ -53,7 +57,16 @@ select ok(
       'public.seal_product_catalog_import_batch(uuid)'::regprocedure
     )
       and prosecdef
-      and coalesce(array_to_string(proconfig, ','), '') like '%search_path=public, pg_temp%'
+      and (
+        (
+          oid = 'public.seal_product_catalog_import_batch(uuid)'::regprocedure
+          and coalesce(array_to_string(proconfig, ','), '') like '%search_path=public, extensions, pg_temp%'
+        )
+        or (
+          oid <> 'public.seal_product_catalog_import_batch(uuid)'::regprocedure
+          and coalesce(array_to_string(proconfig, ','), '') like '%search_path=public, pg_temp%'
+        )
+      )
   ) = 4,
   'catalog RPCs use SECURITY DEFINER with a fixed search path'
 );
@@ -148,7 +161,7 @@ select is(
   (
     select sum(public.seal_product_catalog_import(:'complete_import_run_id'::uuid))
     from generate_series(1, 25)
-  ),
+  )::bigint,
   25000::bigint,
   'the database seals every persisted catalog product in bounded batches before activation'
 );
