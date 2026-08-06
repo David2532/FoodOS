@@ -53,7 +53,7 @@
     {
       "id": "finance",
       "executive": "cfo",
-      "teams": ["accounting-preparation", "cash-runway", "subscription-economics", "unit-economics", "cloud-finops", "forecasting", "aeco"]
+      "teams": ["accounting-preparation", "cash-runway", "subscription-economics", "unit-economics", "cloud-finops", "financial-forecasting", "aeco"]
     },
     {
       "id": "marketing",
@@ -68,7 +68,7 @@
     {
       "id": "data-analytics-research",
       "executive": "cdao",
-      "teams": ["research", "data-quality", "kpi-semantic-layer", "product-analytics", "marketing-analytics", "experimentation", "forecasting", "attribution", "source-registry"]
+      "teams": ["research", "data-quality", "kpi-semantic-layer", "product-analytics", "marketing-analytics", "experimentation", "predictive-analytics", "attribution", "source-registry"]
     },
     {
       "id": "security-reliability",
