@@ -8,9 +8,11 @@ For agent roles, delegation, capabilities, approvals and capacity governance, us
 2. [`config/agent-company.json`](../../config/agent-company.json) — machine-readable company, department, authority, capability and state registry.
 3. [`COMPANY_AGENT_OPERATING_MODEL.md`](COMPANY_AGENT_OPERATING_MODEL.md) — company hierarchy, departments, assurance, capacity governance and dashboard direction.
 4. [`WORKER_EXECUTION_CONTRACT.md`](WORKER_EXECUTION_CONTRACT.md) — required contract for short-lived implementation, research and verification workers.
-5. [`V1_TO_V2_MIGRATION.md`](V1_TO_V2_MIGRATION.md) — explicit mapping from earlier agent concepts to Agent Operating Model v2.
-6. [`HANDOFF_TEMPLATE.md`](HANDOFF_TEMPLATE.md) — exact delivery evidence for completed work.
-7. [`REPOSITORY_HEALTH_2026-08-06.md`](REPOSITORY_HEALTH_2026-08-06.md) — dated repository maintenance assessment and prioritized follow-up.
+5. [`CODEX_EXECUTION_PLAYBOOK.md`](CODEX_EXECUTION_PLAYBOOK.md) — bounded work briefs, evidence reuse, work graphs, checkpoints, escalation and PR discipline.
+6. [`UI_AND_ASSET_AGENT_CONTRACT.md`](UI_AND_ASSET_AGENT_CONTRACT.md) — UI, brand, image generation, vector reconstruction, asset production and independent visual QA roles.
+7. [`V1_TO_V2_MIGRATION.md`](V1_TO_V2_MIGRATION.md) — explicit mapping from earlier agent concepts to Agent Operating Model v2.
+8. [`HANDOFF_TEMPLATE.md`](HANDOFF_TEMPLATE.md) — exact delivery evidence for completed work.
+9. [`REPOSITORY_HEALTH_2026-08-06.md`](REPOSITORY_HEALTH_2026-08-06.md) — dated repository maintenance assessment and prioritized follow-up.
 
 `CODEX_PROMPT.md`, old issue descriptions, chat-derived diagrams and older plans may add product context but do not redefine the company hierarchy or grant capabilities.
 
@@ -33,7 +35,8 @@ For approved consumer Slices 1–6:
 - CDAO owns metric definitions and evidence quality;
 - CISO, Privacy/DPO Operations and Food Safety/Claims independently review relevant risk;
 - AECO may optimize context, model routing, CI and provider cost around the feature, but may not weaken scope, usability, accessibility, safety or evidence gates;
-- short-lived workers follow `WORKER_EXECUTION_CONTRACT.md`, use scoped context and produce reproducible handoff evidence.
+- short-lived workers follow `WORKER_EXECUTION_CONTRACT.md`, use scoped context and produce reproducible handoff evidence;
+- UI and asset work uses the dedicated role chain rather than one agent generating and approving its own visuals.
 
 Legacy Chief-of-Staff, master-agent or unrestricted super-agent structures are not valid for product work.
 
@@ -42,6 +45,8 @@ Legacy Chief-of-Staff, master-agent or unrestricted super-agent structures are n
 For normal repository work, start with `npm run agent:context -- <scope>`. Load the company operating model only when the task changes agent governance, work routing, approvals, capacity, company dashboards or cross-department ownership. Do not add the entire company model to every coding prompt.
 
 For work that materially changes purchase capture, Today, inventory correction, recipes, nutrition, shopping return flow or assistive AI, the parent work item must explicitly cite the master plan, Product North Star and experience implementation plan before workers are assigned.
+
+For material UI, logo, illustration, onboarding, campaign, App Store or generated-image work, the parent work item must cite `UI_AND_ASSET_AGENT_CONTRACT.md`, include an asset brief when a new asset is actually needed and name a verifier separate from the creator.
 
 ## Validation rule
 
