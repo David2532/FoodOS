@@ -22,6 +22,7 @@ The detailed simplicity contract lives in `plans/PRODUCT_NORTH_STAR.md`. The int
 | Product promise and simplicity bar | `plans/PRODUCT_NORTH_STAR.md` |
 | Ordered consumer implementation | `plans/PRODUCT_EXPERIENCE_IMPLEMENTATION_PLAN.md` |
 | Stable user-flow IDs and safety behavior | `plans/USER_FLOWS.md` |
+| Consumer UI, navigation, tokens and visual acceptance | `design.md` |
 | Architecture | `plans/ARCHITECTURE_PLAN.md` |
 | Food safety, recalls and data quality | `plans/FOOD_SAFETY_RECALLS_AND_DATA_QUALITY.md` |
 | Offline and conflict semantics | `plans/OFFLINE_SYNC_AND_DATA_INTEGRITY.md` |
@@ -30,7 +31,8 @@ The detailed simplicity contract lives in `plans/PRODUCT_NORTH_STAR.md`. The int
 | Agent organisation and authority | `config/agent-company.json`, `docs/agent/COMPANY_AGENT_OPERATING_MODEL.md` |
 | Worker execution | `docs/agent/WORKER_EXECUTION_CONTRACT.md` |
 | Codex delivery workflow | `docs/agent/CODEX_EXECUTION_PLAYBOOK.md` |
-| UI, brand and asset agents | `docs/agent/UI_AND_ASSET_AGENT_CONTRACT.md` |
+| Native Codex UI-agent runtime and tool policy | `docs/agent/CODEX_UI_AGENT_ARCHITECTURE.md`, `.codex/agents/`, `.agents/skills/` |
+| UI, brand and asset authority | `docs/agent/UI_AND_ASSET_AGENT_CONTRACT.md` |
 | Brand and naming | `docs/brand/BRAND_SYSTEM.md`, `docs/brand/NAMING_DECISION.md` |
 | Assets | `docs/brand/ASSET_MANIFEST.md` |
 | Founder dashboard | `plans/CEO_CONTROL_CENTER.md`, `design-ceo.md` |
@@ -132,14 +134,14 @@ Every recommendation explains why it appears. Deterministic code calculates ingr
 
 ## 8. Information architecture
 
-Consumer navigation should remain at four primary destinations:
+Consumer navigation remains at four primary destinations:
 
 - **Heute** — What can I eat now, use soon, key safety notices, compact nutrition state.
 - **Erfassen** — continuous purchase scan, receipt import and correction queue.
 - **Vorrat** — fridge/freezer/pantry with quick correction.
 - **Planen** — recipes, week and shopping.
 
-Account, privacy, integrations and detailed analytics live under profile/more. The scanner opens as a focused task surface rather than another dashboard tab full of controls.
+Account, privacy, integrations and detailed analytics live under profile/more. The scanner opens as a focused task surface rather than another dashboard tab full of controls. `design.md` is the detailed visual and interaction contract for these destinations.
 
 ## 9. Delivery roadmap
 
@@ -194,9 +196,9 @@ Founder intent
 
 CPO owns simplicity and consumer outcome. CTO owns architecture and implementation quality. CDAO owns data/provenance/measurement. CISO and Legal/Privacy can stop unsafe or unlawful release. Food Safety owns date, allergen, recall and nutrition communication boundaries. AECO optimizes context, models, CI and provider cost but may not remove scope, weaken tests or degrade the core loop without the documented approval chain.
 
-Codex-led work must use bounded briefs, evidence reuse, checkpoints, stop conditions and one coherent PR story as specified in `docs/agent/CODEX_EXECUTION_PLAYBOOK.md`.
+Codex-led work uses bounded briefs, evidence reuse, checkpoints, stop conditions and one coherent PR story as specified in `docs/agent/CODEX_EXECUTION_PLAYBOOK.md`.
 
-Material UI and brand work uses separate UX, UI system, art direction, generation/production, accessibility and visual QA roles. Generated visuals remain concepts until reconstructed, integrated and independently verified.
+Material UI work uses the native project chain from `docs/agent/CODEX_UI_AGENT_ARCHITECTURE.md`: real-code exploration, optional bounded reference research, UX flow, UI-system architecture, implementation and independent browser/accessibility verification. Generated visuals remain concepts until reconstructed, integrated and independently verified under `docs/agent/UI_AND_ASSET_AGENT_CONTRACT.md`.
 
 ## 11. Current priority order
 
@@ -209,4 +211,4 @@ Material UI and brand work uses separate UX, UI system, art direction, generatio
 
 ## 12. Definition of done for plan changes
 
-A planning change is complete only when canonical ownership is clear, links resolve, contradictions are removed or marked historical, agent governance validation passes, applicable Markdown/JSON/SVG checks pass, the exact diff is reviewed and the handoff names remaining external decisions. Documentation never claims product usability, legal clearance, trademark availability or production readiness without corresponding evidence.
+A planning change is complete only when canonical ownership is clear, links resolve, contradictions are removed or marked historical, agent governance validation passes, applicable Markdown/JSON/TOML/SVG checks pass, the exact diff is reviewed and the handoff names remaining external decisions. Documentation never claims product usability, legal clearance, trademark availability or production readiness without corresponding evidence.
