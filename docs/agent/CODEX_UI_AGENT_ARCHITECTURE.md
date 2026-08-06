@@ -15,7 +15,7 @@ A role listed only in a company diagram or JSON registry is not enough to make C
 
 ## Why this structure
 
-OpenAI's Codex documentation supports project-scoped custom agents under `.codex/agents/`. Each agent requires a name, description and developer instructions, and the strongest definitions are narrow and opinionated with a tool/sandbox surface that matches the job. Subagents are useful for independent exploration, verification and implementation work, but they consume additional tokens and should not be spawned as an always-on swarm.
+OpenAI's Codex documentation supports project-scoped custom agent config files and project-scoped agent declarations. Each specialist needs a clear name, description and developer instructions; the strongest definitions are narrow and opinionated with a tool/sandbox surface that matches the job. Subagents are useful for independent exploration, verification and implementation work, but they consume additional tokens and should not be spawned as an always-on swarm.
 
 OpenAI's skill system uses progressive disclosure: Codex initially sees only each skill's name, description and path, then loads the full `SKILL.md` only when selected. Repo-scoped skills live under `.agents/skills`. This makes a small set of focused UI procedures more efficient than adding the full design manual to every prompt.
 
