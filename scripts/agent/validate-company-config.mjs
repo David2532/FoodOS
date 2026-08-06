@@ -121,7 +121,7 @@ function parseSkillFrontmatter(source, expectedName) {
   const name = frontmatter.match(/^name:\s*(.+)$/m)?.[1]?.trim().replace(/^['"]|['"]$/g, "");
   const description = frontmatter.match(/^description:\s*(.+)$/m)?.[1]?.trim().replace(/^['"]|['"]$/g, "");
   if (name !== expectedName) fail(`skill directory ${expectedName} declares name ${name ?? "<missing>"}`);
-  if (!description || description.length < 60 || !/^Use when\b/.test(description)) {
+  if (!description || description.length < 60 || !/^Use\s+(?:when|after|for)\b/i.test(description)) {
     fail(`skill ${expectedName} needs a concise trigger-first description`);
   }
   if (normalized.split("\n").length > 500) fail(`skill ${expectedName} exceeds the 500-line budget`);
