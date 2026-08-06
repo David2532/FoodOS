@@ -217,8 +217,15 @@ describe("ScanView camera", () => {
     expect(onSaved).not.toHaveBeenCalled();
     const operationId = outbox.submitDurableRpc.mock.calls[0]?.[0].operationId;
 
+    await waitFor(() => {
+      expect(outbox.subscribeToOperationOutcome).toHaveBeenCalledWith(operationId, expect.any(Function));
+      expect(resolveOperation).toBeTypeOf("function");
+    });
+    const listener = resolveOperation;
+    if (!listener) throw new Error("Operation outcome listener was not registered.");
+
     await act(async () => {
-      resolveOperation?.({
+      listener({
         operationId,
         status: "acked",
         data: { batch_id: "11111111-1111-4111-8111-111111111111", remaining_amount: 450, idempotent_replay: false }
