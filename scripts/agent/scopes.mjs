@@ -143,12 +143,20 @@ export const SCOPES = Object.freeze({
   }),
   ui: defineScope({
     risk: "medium",
-    docs: ["design.md", "plans/UI_UX_PERFORMANCE_PLAN.md", "plans/USER_FLOWS.md"],
-    code: ["src/components/**", "src/features/**", "src/app/**", "src/app/globals.css"],
+    docs: [
+      "plans/PRODUCT_NORTH_STAR.md",
+      "plans/PRODUCT_EXPERIENCE_IMPLEMENTATION_PLAN.md",
+      "plans/USER_FLOWS.md",
+      "design.md",
+      "plans/UI_UX_PERFORMANCE_PLAN.md",
+      "docs/agent/CODEX_UI_AGENT_ARCHITECTURE.md",
+      "docs/agent/UI_AND_ASSET_AGENT_CONTRACT.md",
+    ],
+    code: ["src/components/**", "src/features/**", "src/app/**", "src/app/globals.css", "public/assets/**"],
     tests: ["src/**/*.test.tsx", "e2e/**"],
     checks: ["npm run test:unit:changed", "npm run lint", "npm run typecheck", "npm run test:e2e"],
     gates: { migrationOrRls: false, uiE2e: true, productionBuild: true },
-    fullVerifyWhen: ["root layout, navigation, global styles or critical responsive flow changes"],
+    fullVerifyWhen: ["root layout, navigation, global styles, design tokens or critical responsive flow changes"],
   }),
   deployment: defineScope({
     risk: "critical",
