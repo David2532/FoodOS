@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">FoodOS working brand mark</title>
+  <desc id="desc">A rounded continuous household food loop with a central state point.</desc>
+  <rect width="128" height="128" rx="30" fill="#0B100D"/>
+  <path d="M39 30h36c13.3 0 24 10.7 24 24v20c0 13.3-10.7 24-24 24H53c-13.3 0-24-10.7-24-24V54c0-13.3 10.7-24 24-24" fill="none" stroke="#B8F34A" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M82 30h17v17" fill="none" stroke="#F3F7F4" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="64" cy="64" r="11" fill="#F3F7F4"/>
+</svg>
