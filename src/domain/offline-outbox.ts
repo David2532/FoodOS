@@ -1,5 +1,6 @@
 export const OFFLINE_OPERATION_KINDS = [
   "inventory.add_batch",
+  "inventory.commit_purchase",
   "inventory.consume_batch",
   "plan.add_product",
   "plan.add_product_v2",
@@ -7,12 +8,13 @@ export const OFFLINE_OPERATION_KINDS = [
 ] as const;
 
 export type OfflineOperationKind = (typeof OFFLINE_OPERATION_KINDS)[number];
-export type OfflineOperationState = "QUEUED" | "SENDING" | "REJECTED";
+export type OfflineOperationState = "QUEUED" | "SENDING" | "REJECTED" | "UNCERTAIN";
 
 export const OFFLINE_QUEUE_CAP = 100;
 
 const allowedRpcByKind: Record<OfflineOperationKind, string> = {
   "inventory.add_batch": "add_inventory_batch",
+  "inventory.commit_purchase": "commit_purchase_capture",
   "inventory.consume_batch": "consume_inventory_batch_v2",
   "plan.add_product": "plan_product",
   "plan.add_product_v2": "plan_product_v2",

@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(102);
+select plan(126);
 
 select has_function(
   'public',
@@ -15,6 +15,12 @@ select has_function(
   'add_inventory_batch',
   array['uuid', 'jsonb', 'jsonb', 'uuid'],
   'inventory intake RPC exists'
+);
+select has_function(
+  'public',
+  'commit_purchase_capture',
+  array['uuid', 'jsonb', 'uuid'],
+  'atomic multi-item purchase capture RPC exists'
 );
 select has_function(
   'public',
@@ -1078,12 +1084,614 @@ select lives_ok(
       "lot_number":null,
       "serial_number":null,
       "purchase_price_cents":null,
-      "date_source":"manual_confirmed",
+      "date_source":null,
       "personal_risk_confirmed":false
     }',
     '10000000-0000-4000-8000-000000000021'
   ),
   'Q-SCAN-RPC-DB-021: the serialized authenticated E2E scan payload remains accepted'
+);
+
+select ok(
+  not exists (
+    select 1
+    from public.inventory_batches as batch
+    join public.inventory_events as event on event.batch_id = batch.id
+    where event.client_mutation_id = '10000000-0000-4000-8000-000000000021'::uuid
+      and (batch.date_source is not null or batch.date_confidence is not null)
+  ),
+  'Q-SCAN-RPC-DB-022: a dateless direct intake persists no invented provenance'
+);
+select throws_ok(
+  format(
+    'select public.add_inventory_batch(%L::uuid, %L::jsonb, %L::jsonb, %L::uuid)',
+    :'owner_household',
+    '{"barcode":"96385074","name":"False provenance","source":"manual","confidence":1,"retrievedAt":"2026-08-06T10:00:00Z"}',
+    '{"amount":1,"unit":"piece","location":"pantry","date_source":"manual_confirmed"}',
+    '10000000-0000-4000-8000-000000000022'
+  ),
+  '22023',
+  'Date source requires a confirmed date',
+  'Q-SCAN-RPC-DB-023: direct intake rejects explicit date provenance without a date'
+);
+
+select (public.add_inventory_batch(
+  :'owner_household'::uuid,
+  '{"barcode":"1234567890128","name":"Capture Sechserpack","source":"manual","retrievedAt":"2026-08-06T10:00:00Z","confidence":1}'::jsonb,
+  '{"amount":6,"unit":"piece","location":"pantry","best_before_date":"2027-06-30","date_source":"manual_confirmed"}'::jsonb,
+  'ca100000-0000-4000-8000-000000000090'::uuid
+) ->> 'product_id') as known_package_product_id \gset
+select (public.add_inventory_batch(
+  :'owner_household'::uuid,
+  '{"barcode":"4006381333979","name":"Capture 450g-Packung","source":"manual","retrievedAt":"2026-08-06T10:00:00Z","confidence":1}'::jsonb,
+  '{"amount":450,"unit":"g","location":"pantry"}'::jsonb,
+  'ca100000-0000-4000-8000-000000000089'::uuid
+) ->> 'product_id') as known_weight_package_product_id \gset
+
+select count(*)::bigint as purchase_capture_batch_before
+from public.inventory_batches \gset
+select count(*)::bigint as purchase_capture_event_before
+from public.inventory_events
+where event_type = 'purchase' \gset
+select count(*)::bigint as purchase_capture_receipt_before
+from public.mutation_receipts \gset
+
+select pg_catalog.jsonb_build_array(
+  pg_catalog.jsonb_build_object(
+    'item_mutation_id', 'ca100000-0000-4000-8000-000000000001',
+    'product_payload', pg_catalog.jsonb_build_object(
+      'barcode', '5901234123457',
+      'name', 'Capture Haferdrink',
+      'source', 'manual',
+      'retrievedAt', '2026-08-06T10:00:00Z',
+      'confidence', 1
+    ),
+    'batch_payload', pg_catalog.jsonb_build_object(
+      'amount', 2,
+      'unit', 'piece',
+      'location', 'pantry',
+      'lot_number', 'CAPTURE-A'
+    )
+  ),
+  pg_catalog.jsonb_build_object(
+    'item_mutation_id', 'ca100000-0000-4000-8000-000000000002',
+    'product_payload', pg_catalog.jsonb_build_object(
+      'barcode', '5901234123457',
+      'name', 'Capture Haferdrink',
+      'source', 'manual',
+      'retrievedAt', '2026-08-06T10:00:00Z',
+      'confidence', 1
+    ),
+    'batch_payload', pg_catalog.jsonb_build_object(
+      'amount', 1,
+      'unit', 'piece',
+      'location', 'pantry',
+      'lot_number', 'CAPTURE-B'
+    )
+  )
+)::text as purchase_capture_items \gset
+
+reset role;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal1","session_id":"aaaaaaaa-1111-4111-8111-111111111111"}',
+  true
+);
+set local role authenticated;
+select throws_ok(
+  format(
+    'select public.commit_purchase_capture(%L::uuid, %L::jsonb, %L::uuid)',
+    :'owner_household', :'purchase_capture_items',
+    'ca200000-0000-4000-8000-000000000001'
+  ),
+  '42501',
+  'AAL2 required',
+  'purchase capture rejects an AAL1 session'
+);
+
+reset role;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-4222-8222-222222222222","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-2222-4222-8222-222222222222"}',
+  true
+);
+set local role authenticated;
+select throws_ok(
+  format(
+    'select public.commit_purchase_capture(%L::uuid, %L::jsonb, %L::uuid)',
+    :'owner_household', :'purchase_capture_items',
+    'ca200000-0000-4000-8000-000000000002'
+  ),
+  '42501',
+  'Household access denied',
+  'purchase capture rejects a different household member'
+);
+
+reset role;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-1111-4111-8111-222222222222"}',
+  true
+);
+set local role authenticated;
+
+select public.commit_purchase_capture(
+  :'owner_household'::uuid,
+  :'purchase_capture_items'::jsonb,
+  'ca200000-0000-4000-8000-000000000003'::uuid
+) as purchase_capture_result \gset
+
+select ok(
+  (:'purchase_capture_result'::jsonb ->> 'item_count')::integer = 2
+    and (:'purchase_capture_result'::jsonb ->> 'idempotent_replay')::boolean is false
+    and pg_catalog.jsonb_array_length(:'purchase_capture_result'::jsonb -> 'batch_ids') = 2
+    and pg_catalog.jsonb_array_length(:'purchase_capture_result'::jsonb -> 'product_ids') = 2
+    and ((:'purchase_capture_result'::jsonb -> 'batch_ids' ->> 0)::uuid is not null)
+    and ((:'purchase_capture_result'::jsonb -> 'batch_ids' ->> 1)::uuid is not null)
+    and ((:'purchase_capture_result'::jsonb -> 'product_ids' ->> 0)::uuid is not null)
+    and ((:'purchase_capture_result'::jsonb -> 'product_ids' ->> 1)::uuid is not null),
+  'a two-item purchase returns both persisted batch and product identities'
+);
+select ok(
+  (select count(*)::bigint from public.inventory_batches)
+      = :'purchase_capture_batch_before'::bigint + 2
+    and (select count(*)::bigint from public.inventory_events where event_type = 'purchase')
+      = :'purchase_capture_event_before'::bigint + 2,
+  'a two-item purchase creates exactly two batches and two purchase events'
+);
+select ok(
+  (:'purchase_capture_result'::jsonb -> 'product_ids' ->> 0)
+      = (:'purchase_capture_result'::jsonb -> 'product_ids' ->> 1)
+    and exists (
+      select 1
+      from public.inventory_batches as batch
+      join public.products as product on product.id = batch.product_id
+      where batch.id = (:'purchase_capture_result'::jsonb -> 'batch_ids' ->> 0)::uuid
+        and batch.initial_amount = 2
+        and batch.remaining_amount = 2
+        and batch.unit = 'piece'
+        and product.household_id = :'owner_household'::uuid
+        and product.package_amount = 1
+        and product.package_unit = 'piece'
+    ),
+  'duplicate quantity remains batch amount two while one product package stays one piece'
+);
+select ok(
+  not exists (
+    select 1
+    from public.inventory_batches
+    where id in (
+      (:'purchase_capture_result'::jsonb -> 'batch_ids' ->> 0)::uuid,
+      (:'purchase_capture_result'::jsonb -> 'batch_ids' ->> 1)::uuid
+    )
+      and (date_source is not null or date_confidence is not null)
+  ),
+  'batches without a confirmed date retain no invented date source or confidence'
+);
+
+select is(
+  (
+    public.commit_purchase_capture(
+      :'owner_household'::uuid,
+      :'purchase_capture_items'::jsonb,
+      'ca200000-0000-4000-8000-000000000003'::uuid
+    ) ->> 'idempotent_replay'
+  )::boolean,
+  true,
+  'an identical purchase capture replays the completed result'
+);
+select ok(
+  (select count(*)::bigint from public.inventory_batches)
+      = :'purchase_capture_batch_before'::bigint + 2
+    and (select count(*)::bigint from public.inventory_events where event_type = 'purchase')
+      = :'purchase_capture_event_before'::bigint + 2
+    and (select count(*)::bigint from public.mutation_receipts)
+      = :'purchase_capture_receipt_before'::bigint + 3,
+  'an idempotent replay creates no additional batch, event, or mutation receipt'
+);
+
+select pg_catalog.jsonb_build_array(
+  pg_catalog.jsonb_build_object(
+    'item_mutation_id', 'ca100000-0000-4000-8000-000000000060',
+    'product_payload', pg_catalog.jsonb_build_object(
+      'barcode', '7613034626844',
+      'name', 'Capture Mutable Risk Replay',
+      'allergens', pg_catalog.jsonb_build_array('en:sesame'),
+      'source', 'manual',
+      'retrievedAt', '2026-08-06T10:00:00Z',
+      'confidence', 1
+    ),
+    'batch_payload', pg_catalog.jsonb_build_object(
+      'amount', 1,
+      'unit', 'piece',
+      'location', 'pantry',
+      'personal_risk_confirmed', false
+    )
+  )
+)::text as mutable_risk_capture_items \gset
+select count(*)::bigint as mutable_risk_batch_before
+from public.inventory_batches \gset
+select count(*)::bigint as mutable_risk_event_before
+from public.inventory_events
+where event_type = 'purchase' \gset
+select count(*)::bigint as mutable_risk_receipt_before
+from public.mutation_receipts \gset
+select public.commit_purchase_capture(
+  :'owner_household'::uuid,
+  :'mutable_risk_capture_items'::jsonb,
+  'ca200000-0000-4000-8000-000000000060'::uuid
+) as mutable_risk_first_result \gset
+insert into public.user_food_risk_profiles (user_id, canonical_key, kind, severity)
+values ('11111111-1111-4111-8111-111111111111', 'sesame', 'allergen', 'avoid');
+select public.commit_purchase_capture(
+  :'owner_household'::uuid,
+  :'mutable_risk_capture_items'::jsonb,
+  'ca200000-0000-4000-8000-000000000060'::uuid
+) as mutable_risk_replay_result \gset
+select ok(
+  (:'mutable_risk_replay_result'::jsonb ->> 'idempotent_replay')::boolean
+    and (:'mutable_risk_replay_result'::jsonb -> 'batch_ids')
+      = (:'mutable_risk_first_result'::jsonb -> 'batch_ids')
+    and (select count(*)::bigint from public.inventory_batches)
+      = :'mutable_risk_batch_before'::bigint + 1
+    and (select count(*)::bigint from public.inventory_events where event_type = 'purchase')
+      = :'mutable_risk_event_before'::bigint + 1
+    and (select count(*)::bigint from public.mutation_receipts)
+      = :'mutable_risk_receipt_before'::bigint + 2,
+  'a completed exact capture replays unchanged after a new matching avoid risk is added'
+);
+
+select pg_catalog.jsonb_set(
+  :'purchase_capture_items'::jsonb,
+  '{0,batch_payload,date_source}',
+  pg_catalog.to_jsonb('manual_confirmed'::text)
+)::text as purchase_capture_source_without_date \gset
+select throws_ok(
+  format(
+    'select public.commit_purchase_capture(%L::uuid, %L::jsonb, %L::uuid)',
+    :'owner_household', :'purchase_capture_source_without_date',
+    'ca200000-0000-4000-8000-000000000006'
+  ),
+  '22023',
+  'Date source requires a confirmed date',
+  'a direct RPC caller cannot claim a confirmed date source without a date'
+);
+
+select pg_catalog.jsonb_set(
+  :'purchase_capture_items'::jsonb,
+  '{0,batch_payload,unit}',
+  pg_catalog.to_jsonb('g'::text)
+)::text as purchase_capture_non_package_unit \gset
+select throws_ok(
+  format(
+    'select public.commit_purchase_capture(%L::uuid, %L::jsonb, %L::uuid)',
+    :'owner_household', :'purchase_capture_non_package_unit',
+    'ca200000-0000-4000-8000-000000000010'
+  ),
+  '22023',
+  'Capture unit must be piece',
+  'capture input is package count only and rejects a physical mass unit'
+);
+select pg_catalog.jsonb_set(
+  :'purchase_capture_items'::jsonb,
+  '{0,batch_payload,amount}',
+  '1.5'::jsonb
+)::text as purchase_capture_fractional_count \gset
+select throws_ok(
+  format(
+    'select public.commit_purchase_capture(%L::uuid, %L::jsonb, %L::uuid)',
+    :'owner_household', :'purchase_capture_fractional_count',
+    'ca200000-0000-4000-8000-000000000011'
+  ),
+  '22023',
+  'Capture package count out of bounds',
+  'capture input rejects a fractional package count'
+);
+select pg_catalog.jsonb_set(
+  :'purchase_capture_items'::jsonb,
+  '{0,batch_payload,amount}',
+  '1000'::jsonb
+)::text as purchase_capture_excessive_count \gset
+select throws_ok(
+  format(
+    'select public.commit_purchase_capture(%L::uuid, %L::jsonb, %L::uuid)',
+    :'owner_household', :'purchase_capture_excessive_count',
+    'ca200000-0000-4000-8000-000000000012'
+  ),
+  '22023',
+  'Capture package count out of bounds',
+  'capture input rejects package count one thousand above the server boundary'
+);
+
+select pg_catalog.jsonb_set(
+  :'purchase_capture_items'::jsonb,
+  '{0,batch_payload,amount}',
+  '3'::jsonb
+)::text as purchase_capture_conflict \gset
+select throws_ok(
+  format(
+    'select public.commit_purchase_capture(%L::uuid, %L::jsonb, %L::uuid)',
+    :'owner_household', :'purchase_capture_conflict',
+    'ca200000-0000-4000-8000-000000000003'
+  ),
+  '23505',
+  'Mutation ID payload conflict',
+  'a purchase mutation ID cannot be reused with a different payload'
+);
+
+select pg_catalog.jsonb_set(
+  pg_catalog.jsonb_set(
+    :'purchase_capture_items'::jsonb,
+    '{0,item_mutation_id}',
+    pg_catalog.to_jsonb('ca100000-0000-4000-8000-000000000010'::text)
+  ),
+  '{1,item_mutation_id}',
+  pg_catalog.to_jsonb('ca100000-0000-4000-8000-000000000010'::text)
+)::text as purchase_capture_duplicate_item \gset
+select throws_ok(
+  format(
+    'select public.commit_purchase_capture(%L::uuid, %L::jsonb, %L::uuid)',
+    :'owner_household', :'purchase_capture_duplicate_item',
+    'ca200000-0000-4000-8000-000000000004'
+  ),
+  '22023',
+  'Duplicate item mutation ID',
+  'a purchase rejects duplicate item mutation IDs before persistence'
+);
+
+select count(*)::bigint as invalid_second_batch_before
+from public.inventory_batches \gset
+select count(*)::bigint as invalid_second_event_before
+from public.inventory_events
+where event_type = 'purchase' \gset
+select count(*)::bigint as invalid_second_receipt_before
+from public.mutation_receipts \gset
+select pg_catalog.jsonb_set(
+  pg_catalog.jsonb_set(
+    pg_catalog.jsonb_set(
+      :'purchase_capture_items'::jsonb,
+      '{0,item_mutation_id}',
+      pg_catalog.to_jsonb('ca100000-0000-4000-8000-000000000011'::text)
+    ),
+    '{1,item_mutation_id}',
+    pg_catalog.to_jsonb('ca100000-0000-4000-8000-000000000012'::text)
+  ),
+  '{1,batch_payload,amount}',
+  '0'::jsonb
+)::text as purchase_capture_invalid_second \gset
+select throws_ok(
+  format(
+    'select public.commit_purchase_capture(%L::uuid, %L::jsonb, %L::uuid)',
+    :'owner_household', :'purchase_capture_invalid_second',
+    'ca200000-0000-4000-8000-000000000005'
+  ),
+  '22023',
+  'Invalid batch payload numeric bounds',
+  'an invalid second item rejects the complete purchase'
+);
+select ok(
+  (select count(*)::bigint from public.inventory_batches)
+      = :'invalid_second_batch_before'::bigint
+    and (select count(*)::bigint from public.inventory_events where event_type = 'purchase')
+      = :'invalid_second_event_before'::bigint
+    and (select count(*)::bigint from public.mutation_receipts)
+      = :'invalid_second_receipt_before'::bigint
+    and not exists (
+      select 1
+      from public.mutation_receipts
+      where mutation_id in (
+        'ca100000-0000-4000-8000-000000000011'::uuid,
+        'ca100000-0000-4000-8000-000000000012'::uuid,
+        'ca200000-0000-4000-8000-000000000005'::uuid
+      )
+    ),
+  'an invalid later item leaves no partial batch, event, or mutation receipt'
+);
+
+-- Both items pass envelope validation. Item one reaches the write loop, while item
+-- two reuses a pre-existing inner receipt with a different payload and fails there.
+-- The outer statement must roll item one and the outer receipt back completely.
+select public.add_inventory_batch(
+  :'owner_household'::uuid,
+  '{"barcode":"5012345678900","name":"Capture Receipt Conflict","source":"manual","retrievedAt":"2026-08-06T10:00:00Z","confidence":1}'::jsonb,
+  '{"amount":1,"unit":"piece","location":"pantry","lot_number":"ORIGINAL"}'::jsonb,
+  'ca100000-0000-4000-8000-000000000080'::uuid
+) as purchase_capture_preexisting_conflict;
+select count(*)::bigint as post_write_batch_before
+from public.inventory_batches \gset
+select count(*)::bigint as post_write_event_before
+from public.inventory_events
+where event_type = 'purchase' \gset
+select count(*)::bigint as post_write_receipt_before
+from public.mutation_receipts \gset
+select pg_catalog.jsonb_build_array(
+  pg_catalog.jsonb_build_object(
+    'item_mutation_id', 'ca100000-0000-4000-8000-000000000081',
+    'product_payload', pg_catalog.jsonb_build_object(
+      'barcode', '4006381333986',
+      'name', 'Capture Must Roll Back',
+      'source', 'manual',
+      'retrievedAt', '2026-08-06T10:00:00Z',
+      'confidence', 1
+    ),
+    'batch_payload', pg_catalog.jsonb_build_object(
+      'amount', 1,
+      'unit', 'piece',
+      'location', 'pantry'
+    )
+  ),
+  pg_catalog.jsonb_build_object(
+    'item_mutation_id', 'ca100000-0000-4000-8000-000000000080',
+    'product_payload', pg_catalog.jsonb_build_object(
+      'barcode', '5012345678900',
+      'name', 'Capture Receipt Conflict',
+      'source', 'manual',
+      'retrievedAt', '2026-08-06T10:00:00Z',
+      'confidence', 1
+    ),
+    'batch_payload', pg_catalog.jsonb_build_object(
+      'amount', 2,
+      'unit', 'piece',
+      'location', 'pantry',
+      'lot_number', 'CONFLICTING'
+    )
+  )
+)::text as purchase_capture_post_write_failure \gset
+select throws_ok(
+  format(
+    'select public.commit_purchase_capture(%L::uuid, %L::jsonb, %L::uuid)',
+    :'owner_household', :'purchase_capture_post_write_failure',
+    'ca200000-0000-4000-8000-000000000080'
+  ),
+  '23505',
+  'Mutation ID payload conflict',
+  'a conflicting second inner receipt fails only after item one enters the write loop'
+);
+select ok(
+  (select count(*)::bigint from public.inventory_batches)
+      = :'post_write_batch_before'::bigint
+    and (select count(*)::bigint from public.inventory_events where event_type = 'purchase')
+      = :'post_write_event_before'::bigint
+    and (select count(*)::bigint from public.mutation_receipts)
+      = :'post_write_receipt_before'::bigint
+    and not exists (
+      select 1
+      from public.products
+      where household_id = :'owner_household'::uuid
+        and gtin = '4006381333986'
+    )
+    and not exists (
+      select 1
+      from public.mutation_receipts
+      where mutation_id in (
+        'ca100000-0000-4000-8000-000000000081'::uuid,
+        'ca200000-0000-4000-8000-000000000080'::uuid
+      )
+    )
+    and exists (
+      select 1
+      from public.mutation_receipts
+      where mutation_id = 'ca100000-0000-4000-8000-000000000080'::uuid
+        and operation = 'add_inventory_batch'
+    ),
+  'a post-first-write failure rolls back item one, its event, and both new receipts'
+);
+
+select count(*)::bigint as known_package_batch_before
+from public.inventory_batches \gset
+select count(*)::bigint as known_package_event_before
+from public.inventory_events
+where event_type = 'purchase' \gset
+select count(*)::bigint as known_package_receipt_before
+from public.mutation_receipts \gset
+select pg_catalog.jsonb_build_array(
+  pg_catalog.jsonb_build_object(
+    'item_mutation_id', 'ca100000-0000-4000-8000-000000000091',
+    'product_payload', pg_catalog.jsonb_build_object(
+      'barcode', '1234567890128',
+      'name', 'Capture Sechserpack',
+      'source', 'manual',
+      'retrievedAt', '2026-08-06T10:00:00Z',
+      'confidence', 1
+    ),
+    'batch_payload', pg_catalog.jsonb_build_object(
+      'amount', 2,
+      'unit', 'piece',
+      'location', 'pantry'
+    )
+  ),
+  pg_catalog.jsonb_build_object(
+    'item_mutation_id', 'ca100000-0000-4000-8000-000000000092',
+    'product_payload', pg_catalog.jsonb_build_object(
+      'barcode', '4006381333979',
+      'name', 'Capture 450g-Packung',
+      'source', 'manual',
+      'retrievedAt', '2026-08-06T10:00:00Z',
+      'confidence', 1
+    ),
+    'batch_payload', pg_catalog.jsonb_build_object(
+      'amount', 2,
+      'unit', 'piece',
+      'location', 'pantry'
+    )
+  )
+)::text as known_package_capture_items \gset
+select public.commit_purchase_capture(
+  :'owner_household'::uuid,
+  :'known_package_capture_items'::jsonb,
+  'ca200000-0000-4000-8000-000000000007'::uuid
+) as known_package_capture_result \gset
+select public.commit_purchase_capture(
+  :'owner_household'::uuid,
+  :'known_package_capture_items'::jsonb,
+  'ca200000-0000-4000-8000-000000000007'::uuid
+) as known_package_capture_replay \gset
+select ok(
+  (:'known_package_capture_replay'::jsonb ->> 'idempotent_replay')::boolean
+    and (select package_amount = 6 and package_unit = 'piece'
+      from public.products
+      where id = :'known_package_product_id'::uuid)
+    and (select package_amount = 450 and package_unit = 'g'
+      from public.products
+      where id = :'known_weight_package_product_id'::uuid)
+    and (select initial_amount = 12 and remaining_amount = 12 and unit = 'piece'
+      from public.inventory_batches
+      where id = (:'known_package_capture_result'::jsonb -> 'batch_ids' ->> 0)::uuid)
+    and (select initial_amount = 900 and remaining_amount = 900 and unit = 'g'
+      from public.inventory_batches
+      where id = (:'known_package_capture_result'::jsonb -> 'batch_ids' ->> 1)::uuid)
+    and (select count(*)::bigint from public.inventory_batches)
+      = :'known_package_batch_before'::bigint + 2
+    and (select count(*)::bigint from public.inventory_events where event_type = 'purchase')
+      = :'known_package_event_before'::bigint + 2
+    and (select count(*)::bigint from public.mutation_receipts)
+      = :'known_package_receipt_before'::bigint + 3,
+  'package counts expand to twelve pieces and 900g while metadata and replay stay stable'
+);
+
+select pg_catalog.jsonb_build_array(
+  pg_catalog.jsonb_build_object(
+    'item_mutation_id', 'ca100000-0000-4000-8000-000000000093',
+    'product_payload', pg_catalog.jsonb_build_object(
+      'barcode', '5901234123464',
+      'name', 'Capture Obergrenze',
+      'source', 'manual',
+      'retrievedAt', '2026-08-06T10:00:00Z',
+      'confidence', 1
+    ),
+    'batch_payload', pg_catalog.jsonb_build_object(
+      'amount', 999,
+      'unit', 'piece',
+      'location', 'pantry'
+    )
+  )
+)::text as purchase_capture_upper_boundary_items \gset
+select public.commit_purchase_capture(
+  :'owner_household'::uuid,
+  :'purchase_capture_upper_boundary_items'::jsonb,
+  'ca200000-0000-4000-8000-000000000008'::uuid
+) as purchase_capture_upper_boundary_result \gset
+select public.commit_purchase_capture(
+  :'owner_household'::uuid,
+  :'purchase_capture_upper_boundary_items'::jsonb,
+  'ca200000-0000-4000-8000-000000000008'::uuid
+) as purchase_capture_upper_boundary_replay \gset
+select ok(
+  (:'purchase_capture_upper_boundary_replay'::jsonb ->> 'idempotent_replay')::boolean
+    and exists (
+      select 1
+      from public.inventory_batches as batch
+      join public.products as product on product.id = batch.product_id
+      where batch.id = (
+          :'purchase_capture_upper_boundary_result'::jsonb -> 'batch_ids' ->> 0
+        )::uuid
+        and batch.initial_amount = 999
+        and batch.remaining_amount = 999
+        and batch.unit = 'piece'
+        and product.package_amount = 1
+        and product.package_unit = 'piece'
+    ),
+  'package count 999 is accepted once, replays safely, and keeps new packaging at one piece'
 );
 
 reset role;

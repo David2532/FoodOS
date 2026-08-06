@@ -42,10 +42,17 @@ export function SignOutButton({ variant = "icon" }: { variant?: "icon" | "settin
           return;
         }
         const pending = summary.queued + summary.sending;
-        const confirmation = pending === 0 || window.confirm(
+        if (summary.uncertain > 0) {
+          const confirmation = window.confirm(
+            `${summary.uncertain} Einkauf${summary.uncertain === 1 ? " kann" : "svorgänge können"} bereits auf dem Server gebucht worden sein, aber die Bestätigung ist unvollständig. FoodOS darf ${summary.uncertain === 1 ? "diesen Vorgang" : "diese Vorgänge"} weder erneut senden noch als abgelehnt verwerfen.${pending > 0 ? ` Zusätzlich ${pending === 1 ? "wartet 1 bestätigte Änderung" : `warten ${pending} bestätigte Änderungen`} noch auf Synchronisierung.` : ""} Beim sicheren Abmelden müssen die verschlüsselten lokalen Daten entfernt werden; danach ist kein automatischer Abgleich mehr möglich. Trotzdem sicher abmelden?`
+          );
+          if (!confirmation) return;
+        } else {
+          const confirmation = pending === 0 || window.confirm(
           `${pending} bestätigte Änderung${pending === 1 ? " ist" : "en sind"} noch nicht mit dem Server synchronisiert. FoodOS setzt die Abmeldung erst fort, wenn ihre lokalen Daten sicher entfernt wurden. Trotzdem abmelden?`
-        );
-        if (!confirmation) return;
+          );
+          if (!confirmation) return;
+        }
       }
 
       let cleanup: OfflineDataCleanupResult;

@@ -9,15 +9,18 @@ import {
   type OfflineOperationKind,
   type OfflineOperationState
 } from "@/domain/offline-outbox";
+import { purchaseCaptureResultSchema } from "@/contracts/purchase-capture";
 import { isHouseholdAccessDenied } from "@/domain/household-membership";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 const DB_NAME = "foodos-device-v1";
-const DB_VERSION = 1;
+export const OFFLINE_OUTBOX_DB_VERSION = 2;
 const OPERATIONS = "operations";
 const METADATA = "metadata";
 const OUTBOX_EVENT = "foodos:outbox-change";
 export const OUTBOX_OPERATION_RESULT_EVENT = "foodos:outbox-operation-result";
+const OUTBOX_BROADCAST_CHANNEL = "foodos:outbox-change-v1";
+const OUTBOX_CLAIM_LEASE_MS = 120_000;
 const OFFLINE_DATA_STATE_EVENT = "foodos:offline-data-state";
 const OFFLINE_DATA_PURGED_KEY = "foodos:offline-data-purged-v1";
 const OFFLINE_DATA_CLEANUP_OBSERVATION_MS = 1_500;
@@ -36,6 +39,7 @@ interface OfflineDataCleanupAttempt {
 
 let offlineDataStorageStateInThisTab: OfflineDataStorageState = "available";
 let activeOfflineDataCleanup: OfflineDataCleanupAttempt | null = null;
+let outboxBroadcastChannel: BroadcastChannel | null = null;
 
 interface StoredOperation {
   id: string;
@@ -48,6 +52,8 @@ interface StoredOperation {
   iv: ArrayBuffer;
   ciphertext: ArrayBuffer;
   safeError?: string;
+  claimId?: string;
+  claimExpiresAt?: number;
 }
 
 interface OperationSecret {
@@ -64,6 +70,7 @@ export interface OutboxSummary {
   queued: number;
   sending: number;
   rejected: number;
+  uncertain: number;
 }
 
 export interface HouseholdScopedOfflinePurgeResult {
@@ -80,6 +87,7 @@ export type DurableMutationResult<T> =
   | { status: "rejected"; message: string; reason: DurableMutationRejectionReason };
 
 export type DurableMutationRejectionReason =
+  | "acknowledgement_unknown"
   | "precondition"
   | "payload_conflict"
   | "operation_rejected"
@@ -88,6 +96,151 @@ export type DurableMutationRejectionReason =
 export type DurableOperationOutcome<T> =
   | { operationId: string; status: "acked"; data: T }
   | { operationId: string; status: "rejected"; message: string; reason: DurableMutationRejectionReason };
+
+export type SanitizedDurableOperationOutcome = DurableOperationOutcome<unknown>;
+
+export type OutboxBroadcastMessage =
+  | "change"
+  | { type: "operation-outcome"; outcome: SanitizedDurableOperationOutcome };
+
+export type DurableOperationStatus =
+  | { status: "absent" }
+  | { status: "queued" | "sending"; safeReason?: string }
+  | { status: "uncertain"; safeReason: "acknowledgement_unknown" }
+  | { status: "rejected"; safeReason: string };
+
+type SuccessfulRpcAcknowledgement<T> =
+  | { disposition: "delete"; result: { status: "acked"; data: T } }
+  | {
+    disposition: "retain_uncertain";
+    result: {
+      status: "rejected";
+      message: string;
+      reason: "acknowledgement_unknown";
+    };
+  };
+
+const acknowledgementUnknownMessage = "Die Serverbestätigung ist unvollständig. Der Einkauf kann bereits gebucht worden sein. FoodOS bewahrt den Vorgang verschlüsselt auf und sendet ihn nicht erneut, bis der Bestand abgeglichen wurde.";
+
+export function resolveSuccessfulRpcAcknowledgement<T>(
+  kind: OfflineOperationKind,
+  data: unknown,
+  requestArgs?: Record<string, unknown>
+): SuccessfulRpcAcknowledgement<T> {
+  if (kind !== "inventory.commit_purchase") {
+    return { disposition: "delete", result: { status: "acked", data: data as T } };
+  }
+  const parsed = purchaseCaptureResultSchema.safeParse(data);
+  const captureItems = requestArgs?.capture_items;
+  if (
+    parsed.success
+    && Array.isArray(captureItems)
+    && captureItems.length >= 1
+    && captureItems.length <= 100
+    && parsed.data.item_count === captureItems.length
+  ) {
+    return { disposition: "delete", result: { status: "acked", data: parsed.data as T } };
+  }
+  return {
+    disposition: "retain_uncertain",
+    result: {
+      status: "rejected",
+      message: acknowledgementUnknownMessage,
+      reason: "acknowledgement_unknown"
+    }
+  };
+}
+
+const sanitizedRejectionMessages: Record<DurableMutationRejectionReason, string> = {
+  acknowledgement_unknown: acknowledgementUnknownMessage,
+  precondition: "Die lokale \u00c4nderung konnte nicht sicher ausgef\u00fchrt werden.",
+  payload_conflict: "Die Vorgangs-ID geh\u00f6rt bereits zu einer anderen \u00c4nderung.",
+  operation_rejected: "Diese \u00c4nderung wurde bereits vom Server abgelehnt.",
+  server_rejected: "Der Server hat diese \u00c4nderung abgelehnt."
+};
+
+function sanitizedOperationId(value: unknown): string | null {
+  if (typeof value !== "string" || value.length < 1 || value.length > 128) return null;
+  return /^[a-z0-9._:-]+$/i.test(value) ? value : null;
+}
+
+/**
+ * Creates the only outcome payload allowed across tabs. Purchase acknowledgements
+ * are reduced to their strict result contract; rejection text is replaced with a
+ * fixed safe message. Encrypted args, operation secrets and raw provider errors
+ * never enter the BroadcastChannel payload.
+ */
+export function createOperationOutcomeBroadcastMessage<T>(
+  outcome: DurableOperationOutcome<T>
+): Extract<OutboxBroadcastMessage, { type: "operation-outcome" }> | null {
+  const operationId = sanitizedOperationId(outcome.operationId);
+  if (!operationId) return null;
+  if (outcome.status === "acked") {
+    const acknowledgement = purchaseCaptureResultSchema.safeParse(outcome.data);
+    if (!acknowledgement.success) return null;
+    return {
+      type: "operation-outcome",
+      outcome: { operationId, status: "acked", data: acknowledgement.data }
+    };
+  }
+  const safeMessage = Object.prototype.hasOwnProperty.call(sanitizedRejectionMessages, outcome.reason)
+    ? sanitizedRejectionMessages[outcome.reason]
+    : undefined;
+  if (!safeMessage) return null;
+  return {
+    type: "operation-outcome",
+    outcome: {
+      operationId,
+      status: "rejected",
+      reason: outcome.reason,
+      message: safeMessage
+    }
+  };
+}
+
+type OperationStateRecord = {
+  state: OfflineOperationState;
+  nextAttemptAt: number;
+  safeError?: string;
+  claimId?: string;
+  claimExpiresAt?: number;
+};
+
+export function failClosedInterruptedSendingOperation<T extends OperationStateRecord>(operation: T): T {
+  if (operation.state !== "SENDING") return operation;
+  return {
+    ...operation,
+    state: "UNCERTAIN",
+    nextAttemptAt: 0,
+    safeError: "send_interrupted",
+    claimId: undefined,
+    claimExpiresAt: undefined
+  };
+}
+
+export type OperationClaimDecision = "claim" | "not_due" | "busy" | "uncertain" | "terminal";
+
+export function operationClaimDecision(
+  operation: Pick<StoredOperation, "state" | "nextAttemptAt" | "claimExpiresAt">,
+  now = Date.now()
+): OperationClaimDecision {
+  if (operation.state === "QUEUED") return operation.nextAttemptAt <= now ? "claim" : "not_due";
+  if (operation.state === "SENDING") {
+    return !operation.claimExpiresAt || operation.claimExpiresAt <= now ? "uncertain" : "busy";
+  }
+  return "terminal";
+}
+
+export function isOperationEligibleForAutomaticSend(
+  operation: Pick<StoredOperation, "state" | "nextAttemptAt" | "claimExpiresAt">,
+  now = Date.now()
+): boolean {
+  return operationClaimDecision(operation, now) === "claim";
+}
+
+export function isOperationUserDiscardable(operation: Pick<StoredOperation, "state">): boolean {
+  return operation.state === "REJECTED";
+}
 
 function requestValue<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -107,13 +260,29 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
 async function openDatabase(): Promise<IDBDatabase> {
   if (typeof indexedDB === "undefined") throw new Error("Durable browser storage unavailable");
   if (isOfflineDataPurged()) throw new Error("Offline data has been purged for this browser session");
-  const request = indexedDB.open(DB_NAME, DB_VERSION);
-  request.onupgradeneeded = () => {
+  const request = indexedDB.open(DB_NAME, OFFLINE_OUTBOX_DB_VERSION);
+  request.onupgradeneeded = (event) => {
     const db = request.result;
     if (!db.objectStoreNames.contains(OPERATIONS)) db.createObjectStore(OPERATIONS, { keyPath: "id" });
     if (!db.objectStoreNames.contains(METADATA)) db.createObjectStore(METADATA);
+    if (event.oldVersion < 2) {
+      const store = request.transaction?.objectStore(OPERATIONS);
+      const cursorRequest = store?.openCursor();
+      if (cursorRequest) {
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          const operation = cursor.value as StoredOperation;
+          if (operation.state === "SENDING") cursor.update(failClosedInterruptedSendingOperation(operation));
+          cursor.continue();
+        };
+      }
+    }
   };
   const db = await requestValue(request);
+  // Version 2 introduces the terminal UNCERTAIN state. An old bundle opening this
+  // database with version 1 receives VersionError and therefore fails closed instead
+  // of treating an uncertain purchase as a discardable legacy record.
   // A delete/upgrade request from another FoodOS tab must not leave private data
   // locked in this tab. Every caller also closes in a finally block below.
   db.onversionchange = () => db.close();
@@ -203,12 +372,63 @@ async function decrypt(db: IDBDatabase, operation: StoredOperation): Promise<Ope
   return JSON.parse(new TextDecoder().decode(cleartext)) as OperationSecret;
 }
 
-function emitChange() {
+function dispatchLocalOutboxChange() {
   globalThis.dispatchEvent?.(new Event(OUTBOX_EVENT));
 }
 
-function emitOperationOutcome<T>(outcome: DurableOperationOutcome<T>) {
+function dispatchLocalOperationOutcome(outcome: SanitizedDurableOperationOutcome) {
   globalThis.dispatchEvent?.(new CustomEvent(OUTBOX_OPERATION_RESULT_EVENT, { detail: outcome }));
+}
+
+export function receiveOutboxBroadcastMessage(message: unknown): void {
+  if (message === "change") {
+    dispatchLocalOutboxChange();
+    return;
+  }
+  if (!message || typeof message !== "object") return;
+  const candidate = message as { type?: unknown; outcome?: unknown };
+  if (candidate.type !== "operation-outcome" || !candidate.outcome || typeof candidate.outcome !== "object") return;
+  const sanitized = createOperationOutcomeBroadcastMessage(
+    candidate.outcome as DurableOperationOutcome<unknown>
+  );
+  if (sanitized) dispatchLocalOperationOutcome(sanitized.outcome);
+}
+
+function getOutboxBroadcastChannel(): BroadcastChannel | null {
+  if (outboxBroadcastChannel) return outboxBroadcastChannel;
+  if (typeof BroadcastChannel === "undefined") return null;
+  outboxBroadcastChannel = new BroadcastChannel(OUTBOX_BROADCAST_CHANNEL);
+  outboxBroadcastChannel.addEventListener("message", (event: MessageEvent<unknown>) => {
+    receiveOutboxBroadcastMessage(event.data);
+  });
+  return outboxBroadcastChannel;
+}
+
+function emitChange() {
+  dispatchLocalOutboxChange();
+  getOutboxBroadcastChannel()?.postMessage("change");
+}
+
+function emitOperationOutcome<T>(outcome: DurableOperationOutcome<T>) {
+  dispatchLocalOperationOutcome(outcome);
+  const message = createOperationOutcomeBroadcastMessage(outcome);
+  if (message) getOutboxBroadcastChannel()?.postMessage(message);
+}
+
+export function emitSanitizedTerminalProviderRejection(
+  operationId: string,
+  providerMessage: string
+): DurableMutationResult<never> {
+  // Provider diagnostics can contain implementation details or secrets. They are
+  // deliberately accepted at this boundary only to make non-disclosure testable.
+  void providerMessage;
+  const result = {
+    status: "rejected",
+    message: sanitizedRejectionMessages.server_rejected,
+    reason: "server_rejected"
+  } as const;
+  emitOperationOutcome({ operationId, ...result });
+  return result;
 }
 
 function emitOfflineDataStorageState() {
@@ -262,26 +482,179 @@ async function allOperations(db: IDBDatabase): Promise<StoredOperation[]> {
   return requestValue(db.transaction(OPERATIONS, "readonly").objectStore(OPERATIONS).getAll());
 }
 
+async function storedOperation(db: IDBDatabase, operationId: string): Promise<StoredOperation | undefined> {
+  return requestValue(db.transaction(OPERATIONS, "readonly").objectStore(OPERATIONS).get(operationId)) as Promise<StoredOperation | undefined>;
+}
+
+async function recoverInterruptedSendingOperations(db: IDBDatabase, now = Date.now()): Promise<number> {
+  const transaction = db.transaction(OPERATIONS, "readwrite");
+  const store = transaction.objectStore(OPERATIONS);
+  const recoveredOperationIds: string[] = [];
+  const request = store.getAll();
+  request.onsuccess = () => {
+    for (const operation of request.result as StoredOperation[]) {
+      if (operationClaimDecision(operation, now) !== "uncertain") continue;
+      store.put(failClosedInterruptedSendingOperation(operation));
+      recoveredOperationIds.push(operation.id);
+    }
+  };
+  await transactionDone(transaction);
+  if (recoveredOperationIds.length > 0) {
+    emitChange();
+    for (const operationId of recoveredOperationIds) {
+      emitOperationOutcome({ operationId, ...acknowledgementUnknownResult() });
+    }
+  }
+  return recoveredOperationIds.length;
+}
+
+type EnqueueOperationResult =
+  | { status: "stored"; operation: StoredOperation }
+  | { status: "existing"; operation: StoredOperation }
+  | { status: "full" };
+
+export function operationQueueAdmission(hasExistingOperation: boolean, operationCount: number): "existing" | "store" | "full" {
+  if (hasExistingOperation) return "existing";
+  return operationCount >= OFFLINE_QUEUE_CAP ? "full" : "store";
+}
+
+async function enqueueOperationAtomically(db: IDBDatabase, candidate: StoredOperation): Promise<EnqueueOperationResult> {
+  const transaction = db.transaction(OPERATIONS, "readwrite");
+  const store = transaction.objectStore(OPERATIONS);
+  let outcome: EnqueueOperationResult | undefined;
+  const existingRequest = store.get(candidate.id);
+  existingRequest.onsuccess = () => {
+    const existing = existingRequest.result as StoredOperation | undefined;
+    if (operationQueueAdmission(Boolean(existing), 0) === "existing" && existing) {
+      outcome = { status: "existing", operation: existing };
+      return;
+    }
+    const countRequest = store.count();
+    countRequest.onsuccess = () => {
+      if (operationQueueAdmission(false, countRequest.result) === "full") {
+        outcome = { status: "full" };
+        return;
+      }
+      store.add(candidate);
+      outcome = { status: "stored", operation: candidate };
+    };
+  };
+  await transactionDone(transaction);
+  if (!outcome) throw new Error("Offline operation could not be enqueued");
+  if (outcome.status === "stored") emitChange();
+  return outcome;
+}
+
+type ClaimOperationResult =
+  | { status: "claimed"; operation: StoredOperation }
+  | { status: "absent" | "busy" | "not_due" | "uncertain" | "rejected" };
+
+async function claimOperationForSend(
+  db: IDBDatabase,
+  operationId: string,
+  now = Date.now()
+): Promise<ClaimOperationResult> {
+  const transaction = db.transaction(OPERATIONS, "readwrite");
+  const store = transaction.objectStore(OPERATIONS);
+  let outcome: ClaimOperationResult | undefined;
+  let changed = false;
+  const request = store.get(operationId);
+  request.onsuccess = () => {
+    const operation = request.result as StoredOperation | undefined;
+    if (!operation) {
+      outcome = { status: "absent" };
+      return;
+    }
+    const decision = operationClaimDecision(operation, now);
+    if (decision === "uncertain") {
+      store.put(failClosedInterruptedSendingOperation(operation));
+      changed = true;
+      outcome = { status: "uncertain" };
+      return;
+    }
+    if (decision !== "claim") {
+      outcome = {
+        status: decision === "terminal"
+          ? operation.state === "REJECTED" ? "rejected" : "uncertain"
+          : decision
+      };
+      return;
+    }
+    const claimed: StoredOperation = {
+      ...operation,
+      state: "SENDING",
+      attempts: operation.attempts + 1,
+      claimId: crypto.randomUUID(),
+      claimExpiresAt: now + OUTBOX_CLAIM_LEASE_MS
+    };
+    store.put(claimed);
+    changed = true;
+    outcome = { status: "claimed", operation: claimed };
+  };
+  await transactionDone(transaction);
+  if (!outcome) throw new Error("Offline operation could not be claimed");
+  if (changed) emitChange();
+  if (changed && outcome.status === "uncertain") {
+    emitOperationOutcome({ operationId, ...acknowledgementUnknownResult() });
+  }
+  return outcome;
+}
+
+type ClaimSettlement =
+  | { action: "delete" }
+  | {
+    action: "retain";
+    state: "QUEUED" | "REJECTED" | "UNCERTAIN";
+    nextAttemptAt: number;
+    safeError: string;
+  };
+
+async function settleClaimedOperation(
+  db: IDBDatabase,
+  claimed: StoredOperation,
+  settlement: ClaimSettlement
+): Promise<boolean> {
+  const transaction = db.transaction(OPERATIONS, "readwrite");
+  const store = transaction.objectStore(OPERATIONS);
+  let settled = false;
+  const request = store.get(claimed.id);
+  request.onsuccess = () => {
+    const current = request.result as StoredOperation | undefined;
+    if (!current || current.state !== "SENDING" || current.claimId !== claimed.claimId) return;
+    if (settlement.action === "delete") {
+      store.delete(current.id);
+    } else {
+      store.put({
+        ...current,
+        state: settlement.state,
+        nextAttemptAt: settlement.nextAttemptAt,
+        safeError: settlement.safeError,
+        claimId: undefined,
+        claimExpiresAt: undefined
+      });
+    }
+    settled = true;
+  };
+  await transactionDone(transaction);
+  if (settled) emitChange();
+  return settled;
+}
+
+function durableOperationStatus(operation: StoredOperation | undefined): DurableOperationStatus {
+  if (!operation) return { status: "absent" };
+  if (operation.state === "QUEUED") return { status: "queued", ...(operation.safeError ? { safeReason: operation.safeError } : {}) };
+  if (operation.state === "SENDING") return { status: "sending", ...(operation.safeError ? { safeReason: operation.safeError } : {}) };
+  if (operation.state === "UNCERTAIN") return { status: "uncertain", safeReason: "acknowledgement_unknown" };
+  return { status: "rejected", safeReason: operation.safeError ?? "operation_rejected" };
+}
+
 function summarizeOperations(operations: StoredOperation[]): OutboxSummary {
   return {
     queued: operations.filter((operation) => operation.state === "QUEUED").length,
     sending: operations.filter((operation) => operation.state === "SENDING").length,
-    rejected: operations.filter((operation) => operation.state === "REJECTED").length
+    rejected: operations.filter((operation) => operation.state === "REJECTED").length,
+    uncertain: operations.filter((operation) => operation.state === "UNCERTAIN").length
   };
-}
-
-async function putOperation(db: IDBDatabase, operation: StoredOperation): Promise<void> {
-  const transaction = db.transaction(OPERATIONS, "readwrite");
-  transaction.objectStore(OPERATIONS).put(operation);
-  await transactionDone(transaction);
-  emitChange();
-}
-
-async function removeOperation(db: IDBDatabase, id: string): Promise<void> {
-  const transaction = db.transaction(OPERATIONS, "readwrite");
-  transaction.objectStore(OPERATIONS).delete(id);
-  await transactionDone(transaction);
-  emitChange();
 }
 
 async function removeOperations(db: IDBDatabase, ids: string[]): Promise<void> {
@@ -366,29 +739,92 @@ async function authenticatedActor(client: SupabaseClient): Promise<string> {
   return session.data.session.user.id;
 }
 
-async function sendOperation<T>(db: IDBDatabase, operation: StoredOperation, client: SupabaseClient): Promise<DurableMutationResult<T>> {
-  const secret = await decrypt(db, operation);
-  if (!isAllowedOfflineRpc(operation.kind, secret.rpc)) {
-    await putOperation(db, { ...operation, state: "REJECTED", safeError: "unsupported_operation" });
+function acknowledgementUnknownResult<T>(): Extract<DurableMutationResult<T>, { status: "rejected" }> {
+  return { status: "rejected", message: acknowledgementUnknownMessage, reason: "acknowledgement_unknown" };
+}
+
+async function resultForCurrentOperation<T>(db: IDBDatabase, operationId: string): Promise<DurableMutationResult<T>> {
+  const status = durableOperationStatus(await storedOperation(db, operationId));
+  if (status.status === "queued" || status.status === "sending") return { status: "queued" };
+  if (status.status === "rejected") {
+    return { status: "rejected", message: "Diese Änderung wurde vom Server abgelehnt.", reason: "operation_rejected" };
+  }
+  return acknowledgementUnknownResult<T>();
+}
+
+async function attemptOperationSend<T>(
+  db: IDBDatabase,
+  operationId: string,
+  client: SupabaseClient
+): Promise<DurableMutationResult<T>> {
+  const claim = await claimOperationForSend(db, operationId);
+  if (claim.status === "busy" || claim.status === "not_due") return { status: "queued" };
+  if (claim.status === "rejected") {
+    return { status: "rejected", message: "Diese Änderung wurde vom Server abgelehnt.", reason: "operation_rejected" };
+  }
+  if (claim.status !== "claimed") return acknowledgementUnknownResult<T>();
+  try {
+    return await sendClaimedOperation<T>(db, claim.operation, client);
+  } catch {
+    const settled = await settleClaimedOperation(db, claim.operation, {
+      action: "retain",
+      state: "UNCERTAIN",
+      nextAttemptAt: 0,
+      safeError: "send_interrupted"
+    });
+    const result = settled
+      ? acknowledgementUnknownResult<T>()
+      : await resultForCurrentOperation<T>(db, operationId);
+    if (result.status === "rejected") emitOperationOutcome({ operationId, ...result });
+    return result;
+  }
+}
+
+async function sendClaimedOperation<T>(db: IDBDatabase, claimed: StoredOperation, client: SupabaseClient): Promise<DurableMutationResult<T>> {
+  const secret = await decrypt(db, claimed);
+  const operation = claimed;
+  if (!isAllowedOfflineRpc(claimed.kind, secret.rpc)) {
+    const settled = await settleClaimedOperation(db, claimed, {
+      action: "retain",
+      state: "REJECTED",
+      nextAttemptAt: 0,
+      safeError: "unsupported_operation"
+    });
+    if (!settled) return resultForCurrentOperation<T>(db, claimed.id);
     const result = { status: "rejected", message: "Diese lokale Änderung wird von dieser App-Version nicht unterstützt.", reason: "precondition" } as const;
     emitOperationOutcome({ operationId: operation.id, ...result });
     return result;
   }
   const actor = await authenticatedActor(client);
   if (actor !== secret.actorId) {
-    await putOperation(db, { ...operation, state: "REJECTED", safeError: "actor_changed" });
+    const settled = await settleClaimedOperation(db, claimed, {
+      action: "retain",
+      state: "REJECTED",
+      nextAttemptAt: 0,
+      safeError: "actor_changed"
+    });
+    if (!settled) return resultForCurrentOperation<T>(db, claimed.id);
     const result = { status: "rejected", message: "Die lokale Änderung gehört zu einer anderen Sitzung und wurde nicht gesendet.", reason: "server_rejected" } as const;
     emitOperationOutcome({ operationId: operation.id, ...result });
     return result;
   }
-  const sending = { ...operation, state: "SENDING" as const, attempts: operation.attempts + 1 };
-  await putOperation(db, sending);
   const { data, error } = await client.rpc(secret.rpc, secret.args);
   if (!error) {
-    await removeOperation(db, operation.id);
-    const result = { status: "acked", data: data as T } as const;
-    emitOperationOutcome({ operationId: operation.id, ...result });
-    return result;
+    const acknowledgement = resolveSuccessfulRpcAcknowledgement<T>(operation.kind, data, secret.args);
+    if (acknowledgement.disposition === "retain_uncertain") {
+      const settled = await settleClaimedOperation(db, claimed, {
+        action: "retain",
+        state: "UNCERTAIN",
+        nextAttemptAt: 0,
+        safeError: "acknowledgement_unknown"
+      });
+      if (!settled) return resultForCurrentOperation<T>(db, claimed.id);
+    } else {
+      const settled = await settleClaimedOperation(db, claimed, { action: "delete" });
+      if (!settled) return resultForCurrentOperation<T>(db, claimed.id);
+    }
+    emitOperationOutcome({ operationId: operation.id, ...acknowledgement.result });
+    return acknowledgement.result;
   }
   const accessDenialAction = await classifyHouseholdAccessDenial({
     providerMessage: error.message,
@@ -408,12 +844,13 @@ async function sendOperation<T>(db: IDBDatabase, operation: StoredOperation, cli
     return result;
   }
   if (accessDenialAction) {
-    await putOperation(db, {
-      ...sending,
+    const settled = await settleClaimedOperation(db, claimed, {
+      action: "retain",
       state: "REJECTED",
       nextAttemptAt: 0,
       safeError: accessDenialAction === "reject-resource" ? "resource_access_denied" : "membership_revalidation_failed"
     });
+    if (!settled) return resultForCurrentOperation<T>(db, claimed.id);
     const result = {
       status: "rejected",
       message: accessDenialAction === "reject-resource"
@@ -425,16 +862,15 @@ async function sendOperation<T>(db: IDBDatabase, operation: StoredOperation, cli
     return result;
   }
   const retryable = isRetryableTransportFailure(error.message, navigator.onLine);
-  await putOperation(db, {
-    ...sending,
+  const settled = await settleClaimedOperation(db, claimed, {
+    action: "retain",
     state: retryable ? "QUEUED" : "REJECTED",
-    nextAttemptAt: retryable ? Date.now() + nextRetryDelayMs(sending.attempts) : 0,
+    nextAttemptAt: retryable ? Date.now() + nextRetryDelayMs(claimed.attempts) : 0,
     safeError: retryable ? "transport_unavailable" : "server_rejected"
   });
+  if (!settled) return resultForCurrentOperation<T>(db, claimed.id);
   if (retryable) return { status: "queued" };
-  const result = { status: "rejected", message: error.message, reason: "server_rejected" } as const;
-  emitOperationOutcome({ operationId: operation.id, ...result });
-  return result;
+  return emitSanitizedTerminalProviderRejection(operation.id, error.message);
 }
 
 export async function submitDurableRpc<T>(input: {
@@ -452,13 +888,12 @@ export async function submitDurableRpc<T>(input: {
   }
   const db = await openDatabase();
   try {
-    const operations = await allOperations(db);
-    if (operations.length >= OFFLINE_QUEUE_CAP) return { status: "rejected", message: "Die Offline-Warteschlange ist voll. Stelle eine Verbindung her, bevor du weitere Änderungen bestätigst.", reason: "precondition" };
-    const existing = operations.find((operation) => operation.id === input.operationId);
+    const existingBeforeCapacity = await storedOperation(db, input.operationId);
+    const existing = existingBeforeCapacity;
     if (existing) {
       const secret = await decrypt(db, existing);
       const incomingHash = await outboxPayloadHash(input, existing.schemaVersion);
-      if (secret.payloadSha256 !== incomingHash) {
+      if (existing.kind !== input.kind || secret.payloadSha256 !== incomingHash) {
         return {
           status: "rejected",
           message: "Diese Vorgangs-ID gehört bereits zu einer anderen bestätigten Änderung. Die ursprüngliche Änderung bleibt erhalten.",
@@ -468,7 +903,14 @@ export async function submitDurableRpc<T>(input: {
       if (existing.state === "REJECTED") {
         return { status: "rejected", message: "Diese Änderung wurde vom Server abgelehnt.", reason: "operation_rejected" };
       }
-      return navigator.onLine ? await sendOperation<T>(db, existing, client) : { status: "queued" };
+      if (existing.state === "UNCERTAIN") {
+        return { status: "rejected", message: acknowledgementUnknownMessage, reason: "acknowledgement_unknown" };
+      }
+      if (operationClaimDecision(existing) === "uncertain") {
+        await claimOperationForSend(db, existing.id);
+        return acknowledgementUnknownResult<T>();
+      }
+      return navigator.onLine ? await attemptOperationSend<T>(db, existing.id, client) : { status: "queued" };
     }
     const secret: OperationSecret = {
       rpc: input.rpc,
@@ -489,8 +931,30 @@ export async function submitDurableRpc<T>(input: {
       nextAttemptAt: 0,
       ...(await encrypt(db, secret))
     };
-    await putOperation(db, operation);
-    return navigator.onLine ? await sendOperation<T>(db, operation, client) : { status: "queued" };
+    const enqueued = await enqueueOperationAtomically(db, operation);
+    if (enqueued.status === "full") {
+      return { status: "rejected", message: "Die Offline-Warteschlange ist voll. Stelle eine Verbindung her, bevor du weitere Änderungen bestätigst.", reason: "precondition" };
+    }
+    const stored = enqueued.operation;
+    if (enqueued.status === "existing") {
+      const storedSecret = await decrypt(db, stored);
+      const incomingHash = await outboxPayloadHash(input, stored.schemaVersion);
+      if (stored.kind !== input.kind || storedSecret.payloadSha256 !== incomingHash) {
+        return {
+          status: "rejected",
+          message: "Diese Vorgangs-ID gehört bereits zu einer anderen bestätigten Änderung. Die ursprüngliche Änderung bleibt erhalten.",
+          reason: "payload_conflict"
+        };
+      }
+      if (stored.state === "REJECTED") {
+        return { status: "rejected", message: "Diese Änderung wurde vom Server abgelehnt.", reason: "operation_rejected" };
+      }
+      if (stored.state === "UNCERTAIN" || operationClaimDecision(stored) === "uncertain") {
+        if (stored.state === "SENDING") await claimOperationForSend(db, stored.id);
+        return acknowledgementUnknownResult<T>();
+      }
+    }
+    return navigator.onLine ? await attemptOperationSend<T>(db, stored.id, client) : { status: "queued" };
   } finally {
     db.close();
   }
@@ -499,12 +963,19 @@ export async function submitDurableRpc<T>(input: {
 export async function discardRejectedOperation(operationId: string): Promise<boolean> {
   const db = await openDatabase();
   try {
-    const operation = await requestValue(
-      db.transaction(OPERATIONS, "readonly").objectStore(OPERATIONS).get(operationId)
-    ) as StoredOperation | undefined;
-    if (!operation || operation.state !== "REJECTED") return false;
-    await removeOperation(db, operationId);
-    return true;
+    const transaction = db.transaction(OPERATIONS, "readwrite");
+    const store = transaction.objectStore(OPERATIONS);
+    let discarded = false;
+    const request = store.get(operationId);
+    request.onsuccess = () => {
+      const operation = request.result as StoredOperation | undefined;
+      if (!operation || !isOperationUserDiscardable(operation)) return;
+      store.delete(operationId);
+      discarded = true;
+    };
+    await transactionDone(transaction);
+    if (discarded) emitChange();
+    return discarded;
   } finally {
     db.close();
   }
@@ -514,8 +985,9 @@ export async function flushQueuedOperations(): Promise<OutboxSummary> {
   const db = await openDatabase();
   try {
     const client = getSupabaseBrowserClient();
+    await recoverInterruptedSendingOperations(db);
     const operations = (await allOperations(db))
-      .filter((operation) => (operation.state === "QUEUED" || operation.state === "SENDING") && operation.nextAttemptAt <= Date.now())
+      .filter((operation) => isOperationEligibleForAutomaticSend(operation))
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
     for (const operation of operations) {
       if (!navigator.onLine) break;
@@ -526,15 +998,10 @@ export async function flushQueuedOperations(): Promise<OutboxSummary> {
           db.transaction(OPERATIONS, "readonly").objectStore(OPERATIONS).get(operation.id)
         ) as StoredOperation | undefined;
         if (!current) continue;
-        await sendOperation(db, current, client);
+        await attemptOperationSend(db, current.id, client);
       } catch {
-        await putOperation(db, { ...operation, state: "REJECTED", safeError: "session_revalidation_failed" });
-        emitOperationOutcome({
-          operationId: operation.id,
-          status: "rejected",
-          message: "Die Sitzung oder Zwei-Faktor-Bestätigung konnte vor der Synchronisierung nicht erneut bestätigt werden.",
-          reason: "server_rejected"
-        });
+        // Never repair a failed claim from this stale queue snapshot. The current
+        // IndexedDB record remains authoritative and cannot be overwritten here.
       }
     }
     return summarizeOperations(await allOperations(db));
@@ -584,7 +1051,20 @@ export async function reconcileOfflineHouseholdAccess(
 export async function getOutboxSummary(): Promise<OutboxSummary> {
   const db = await openDatabase();
   try {
+    await recoverInterruptedSendingOperations(db);
     return summarizeOperations(await allOperations(db));
+  } finally {
+    db.close();
+  }
+}
+
+export async function getDurableOperationStatus(operationId: string): Promise<DurableOperationStatus> {
+  const db = await openDatabase();
+  try {
+    await recoverInterruptedSendingOperations(db);
+    // "absent" is deliberately not an acknowledgement. A tab that subscribed too
+    // late must treat it as unknown unless it observed the live ACK outcome event.
+    return durableOperationStatus(await storedOperation(db, operationId));
   } finally {
     db.close();
   }
@@ -661,19 +1141,26 @@ export async function waitForOfflineDataCleanupCompletion(): Promise<OfflineData
 export async function discardRejectedOperations(): Promise<void> {
   const db = await openDatabase();
   try {
-    const rejected = (await allOperations(db)).filter((operation) => operation.state === "REJECTED");
-    if (!rejected.length) return;
     const transaction = db.transaction(OPERATIONS, "readwrite");
     const store = transaction.objectStore(OPERATIONS);
-    rejected.forEach((operation) => store.delete(operation.id));
+    let discarded = 0;
+    const request = store.getAll();
+    request.onsuccess = () => {
+      for (const operation of request.result as StoredOperation[]) {
+        if (!isOperationUserDiscardable(operation)) continue;
+        store.delete(operation.id);
+        discarded += 1;
+      }
+    };
     await transactionDone(transaction);
-    emitChange();
+    if (discarded > 0) emitChange();
   } finally {
     db.close();
   }
 }
 
 export function subscribeToOutbox(listener: () => void): () => void {
+  getOutboxBroadcastChannel();
   globalThis.addEventListener?.(OUTBOX_EVENT, listener);
   return () => globalThis.removeEventListener?.(OUTBOX_EVENT, listener);
 }
@@ -682,6 +1169,7 @@ export function subscribeToOperationOutcome<T>(
   operationId: string,
   listener: (outcome: DurableOperationOutcome<T>) => void
 ): () => void {
+  getOutboxBroadcastChannel();
   const handleOutcome = (event: Event) => {
     const outcome = (event as CustomEvent<DurableOperationOutcome<T>>).detail;
     if (outcome?.operationId === operationId) listener(outcome);

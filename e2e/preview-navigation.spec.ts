@@ -120,13 +120,16 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
     await page.goto("/?demo=1");
     await page.getByRole("button", { name: /Proteinshake auswählen/ }).click();
     await expect(page.getByRole("heading", { name: "Produkt statt Barcode suchen" })).toBeVisible();
+    await page.getByLabel("Lagerort für kommende Scans").selectOption("pantry");
 
     const firstResult = page.locator(".catalog-result").first();
     await expect(firstResult).toBeVisible({ timeout: 15_000 });
     await expect(firstResult).toContainText("Open Food Facts");
     await expect(firstResult).toContainText("371");
     await expect(firstResult).toContainText("74 g");
-    await expect(firstResult.locator("img")).toHaveAttribute("src", /images\.openfoodfacts\.org/);
+    const sourceBackedImage = firstResult.locator("img");
+    await expect(sourceBackedImage).toHaveAttribute("src", /images\.openfoodfacts\.org/);
+    await expect.poll(() => sourceBackedImage.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
     await page.addScriptTag({ content: axe.source });
     const catalogAccessibility = await page.evaluate(async () => {
       const runner = (window as typeof window & { axe: typeof axe }).axe;
@@ -144,10 +147,28 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
     });
 
     await firstResult.getByRole("button", { name: /Prüfen/ }).click();
-    await expect(page.locator(".product-hero h2")).toHaveText(productName ?? "", { timeout: 15_000 });
-    await expect(page.getByText("Open Food Facts", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Charge zum Vorrat hinzufügen/ })).toHaveCount(0);
-    await expect(page.getByText(/Preview-Modus: Produktdaten können geprüft/)).toBeVisible();
+    const capturedItem = page.locator(".capture-list li").filter({ hasText: productName ?? "" });
+    await expect(capturedItem).toBeVisible({ timeout: 15_000 });
+    await expect(capturedItem.locator("img")).toHaveAttribute("src", /images\.openfoodfacts\.org/);
+    await expect(capturedItem.locator(".capture-quantity")).toBeVisible();
+    await expect(page.getByLabel("Produktname")).toHaveCount(0);
+    await page.getByRole("button", { name: "Fertig" }).click();
+    await expect(page.getByText(/Keine zusätzlichen Formulare/)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Preview abschließen/ })).toBeVisible();
+    await page.screenshot({
+      path: `docs/evidence/screenshots/capture-review-${testInfo.project.name}.png`,
+      fullPage: true
+    });
+    for (const viewport of [
+      { width: 360, height: 800 },
+      { width: 390, height: 844 },
+      { width: 430, height: 932 }
+    ]) {
+      await page.setViewportSize(viewport);
+      await expect(page.getByRole("button", { name: /Preview abschließen/ })).toBeVisible();
+      const captureOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(captureOverflow).toBeLessThanOrEqual(1);
+    }
   });
 
   test("has no automatically detectable serious accessibility violation on Today", async ({ page }) => {
@@ -185,11 +206,14 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
     });
     await page.goto("/?demo=1");
     await page.getByRole("button", { name: "Scan", exact: true }).click();
+    await page.getByLabel("Lagerort für kommende Scans").selectOption("pantry");
     await page.getByLabel("EAN, UPC oder GS1-Code").fill("3017624010701");
     await page.getByRole("button", { name: "Prüfen", exact: true }).click();
 
-    await expect(page.getByRole("heading", { name: "Produktquelle gerade nicht erreichbar" })).toBeVisible();
-    await expect(page.getByRole("alert").filter({ hasText: "Die Suche konnte nicht" })).toContainText("manuelle Eintrag");
+    await expect(page.getByText("Unbekanntes Produkt")).toBeVisible();
+    await expect(page.locator(".capture-last.warning")).toContainText(/Verbindung fehlgeschlagen|Produktquelle nicht erreichbar/);
+    await page.getByRole("button", { name: "Fertig" }).click();
+    await expect(page.getByText(/Produktidentität unklar/)).toBeVisible();
     await expect(page.getByLabel("Produktname")).toBeVisible();
   });
 });

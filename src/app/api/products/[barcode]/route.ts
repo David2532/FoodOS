@@ -11,6 +11,7 @@ import { assessIngredientFacts, personalizeProductAssessments, type FoodRiskPref
 import { hasValidGtinCheckDigit } from "@/domain/gs1";
 import type { Product } from "@/lib/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { allowRequestInWindow, type RequestWindow } from "@/domain/request-rate-limit";
 
 const barcodeSchema = z.string().refine(
   hasValidGtinCheckDigit,
@@ -66,20 +67,9 @@ const globalCatalogRowSchema = z.object({
   image_license: z.string().nullable()
 });
 
-const lookupWindows = new Map<string, { startedAt: number; count: number }>();
+const lookupWindows = new Map<string, RequestWindow>();
 let providerFailures = 0;
 let providerOpenUntil = 0;
-
-function allowLookup(key: string, now = Date.now()): boolean {
-  const current = lookupWindows.get(key);
-  if (!current || now - current.startedAt >= 60_000) {
-    lookupWindows.set(key, { startedAt: now, count: 1 });
-    return true;
-  }
-  if (current.count >= 7) return false;
-  current.count += 1;
-  return true;
-}
 
 function retryDelay(attempt: number) {
   return new Promise((resolve) => setTimeout(resolve, 120 * 2 ** attempt));
@@ -230,7 +220,7 @@ export async function GET(request: Request, context: { params: Promise<{ barcode
 
   try {
     if (isPublicCatalogPreviewRequest(request.url)) {
-      if (!allowLookup("public-preview")) {
+      if (!allowRequestInWindow(lookupWindows, "public-preview", 7)) {
         return NextResponse.json({ error: "Zu viele Produktabfragen. Versuche es in einer Minute erneut." }, {
           status: 429,
           headers: { "Retry-After": "60", "Cache-Control": "no-store" }
@@ -259,7 +249,7 @@ export async function GET(request: Request, context: { params: Promise<{ barcode
       }
     }
     const rateKey = userResult?.data.user?.id ?? "local-preview";
-    if (!allowLookup(rateKey)) {
+    if (!allowRequestInWindow(lookupWindows, rateKey, 30)) {
       return NextResponse.json({ error: "Zu viele Produktabfragen. Versuche es in einer Minute erneut." }, {
         status: 429,
         headers: { "Retry-After": "60", "Cache-Control": "no-store" }
