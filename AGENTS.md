@@ -9,10 +9,19 @@ separation of duties, the authoritative sources are:
 2. `docs/agent/COMPANY_AGENT_OPERATING_MODEL.md` — company structure and authority;
 3. `docs/agent/WORKER_EXECUTION_CONTRACT.md` — execution rules for short-lived workers.
 
-Run `npm run agent:validate-company` whenever any of those files or agent governance
-changes. The validator is part of `npm run verify` and rejects missing required roles,
-legacy super-agent identifiers, self-approval, weakened C0/C1 protection, incomplete
-assurance or forbidden-action removal.
+The project-scoped Codex runtime is the checked-in projection of that model:
+
+- `.codex/config.toml` — concurrency and project tool defaults;
+- `.codex/agents/*.toml` — narrow custom subagents;
+- `.agents/skills/*/SKILL.md` — progressively loaded repeatable workflows;
+- `docs/agent/CODEX_UI_AGENT_ARCHITECTURE.md` — UI/asset dispatch and tool policy;
+- `docs/agent/UI_AND_ASSET_AGENT_CONTRACT.md` — separation of duties for design work.
+
+Run `npm run agent:validate-company` whenever the registry, governance, custom agents,
+repo skills or agent runtime changes. The validator is part of `npm run verify` and rejects
+missing required roles, legacy super-agent identifiers, self-approval, weakened C0/C1
+protection, incomplete assurance, invalid UI-agent files, missing skills or forbidden-
+action removal.
 
 Older prompts, diagrams, plans, issue text and chat-derived documents are contextual only.
 They do not override this governance model. In particular, `CODEX_PROMPT.md` is a
@@ -139,13 +148,31 @@ safety changes. Those C0 rules override prototype behavior and mockups.
 ## UI, accessibility and performance
 
 - Follow `design.md` and the UI scope output for intentional UI changes.
+- Preserve the four canonical consumer destinations: Heute, Erfassen, Vorrat and Planen.
 - Preserve semantic tokens and compact/medium/expanded behavior.
 - Prefer semantic HTML and native controls; custom widgets implement complete keyboard,
   focus, name/role/state and assistive-technology contracts.
 - Respect 44 pt iOS and 48 dp Android targets, large text and reduced motion.
 - Keep scanner, OCR, chart and other heavy client code lazy.
 - Use real source-backed product images; never fabricate branded product photography.
-- Mockups are visual direction, not authority for data, risk, dates or navigation.
+- Mockups, Figma and generated UI are visual inputs, not authority for data, risk, dates,
+  navigation or production code.
+
+For a material new or redesigned flow, use the narrow native chain:
+
+```text
+ui_explorer
+-> ux_flow_designer with $foodos-ui-flow-spec
+-> ui_system_architect
+-> ui_implementer with $foodos-ui-implementation
+-> visual_verifier with $foodos-visual-qa
+```
+
+Do not spawn every design agent for a tiny style fix. Do not run implementation and visual
+approval in the same agent. Asset work starts with `asset_art_director`; image generation
+is concept-only and production files follow `$foodos-asset-production` plus independent
+verification. A generated project, screenshot or image never replaces `design.md`, real
+components or browser evidence.
 
 ## Evidence and delivery
 
