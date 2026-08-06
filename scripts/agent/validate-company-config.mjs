@@ -1,6 +1,11 @@
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const CONFIG_PATH = new URL("../../config/agent-company.json", import.meta.url);
+const REPO_ROOT = new URL("../../", import.meta.url);
+const CONFIG_PATH = new URL("config/agent-company.json", REPO_ROOT);
+const CODEX_CONFIG_PATH = new URL(".codex/config.toml", REPO_ROOT);
+
 const REQUIRED_EXECUTIVES = [
   "ai-ceo",
   "orchestrator",
@@ -27,6 +32,25 @@ const REQUIRED_DEPARTMENTS = [
 ];
 const REQUIRED_AUTHORITY = ["A0", "A1", "A2", "A3"];
 const REQUIRED_CAPACITY = ["C0", "C1", "C2", "C3"];
+const REQUIRED_CAPABILITIES = [
+  "github",
+  "supabase",
+  "vercel",
+  "data-analytics",
+  "sales",
+  "ui-design",
+  "image-generation",
+  "vector-asset-production",
+];
+const REQUIRED_ASSET_STATES = [
+  "BRIEF",
+  "CONCEPT",
+  "RECONSTRUCTED",
+  "INTEGRATED",
+  "VERIFIED",
+  "REJECTED",
+  "BLOCKED",
+];
 const REQUIRED_FORBIDDEN_ACTIONS = [
   "legal-filing",
   "tax-filing",
@@ -34,8 +58,31 @@ const REQUIRED_FORBIDDEN_ACTIONS = [
   "medical-judgment",
   "food-safe-declaration",
   "irreversible-company-action",
+  "trademark-clearance-claim",
+  "unreviewed-generated-asset-release",
 ];
+const REQUIRED_DEPARTMENT_TEAMS = {
+  product: ["product-experience-direction", "ux-flow", "ui-system", "accessibility-visual-qa"],
+  engineering: ["frontend-integration", "visual-integration-qa"],
+  marketing: ["brand-direction", "asset-art-direction", "image-generation", "vector-reconstruction", "asset-production"],
+};
 const LEGACY_EXECUTIVE_IDS = new Set(["chief-of-staff", "chief_of_staff", "master-agent", "super-agent"]);
+const REQUIRED_NATIVE_AGENTS = [
+  { name: "ui_explorer", sandbox: "read-only" },
+  { name: "ux_flow_designer", sandbox: "read-only" },
+  { name: "ui_system_architect", sandbox: "read-only" },
+  { name: "ui_implementer", sandbox: "workspace-write" },
+  { name: "visual_verifier", sandbox: "workspace-write" },
+  { name: "asset_art_director", sandbox: "read-only" },
+  { name: "image_concept_artist", sandbox: "workspace-write" },
+  { name: "asset_producer", sandbox: "workspace-write" },
+];
+const REQUIRED_SKILLS = [
+  "foodos-ui-flow-spec",
+  "foodos-ui-implementation",
+  "foodos-visual-qa",
+  "foodos-asset-production",
+];
 
 function fail(message) {
   throw new Error(`Invalid FoodOS company agent registry: ${message}`);
@@ -55,8 +102,35 @@ function requireMembers(actual, required, label) {
   }
 }
 
+function tomlString(source, key) {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return source.match(new RegExp(`^\\s*${escaped}\\s*=\\s*"([^"]+)"\\s*$`, "m"))?.[1];
+}
+
+function tomlMultiline(source, key) {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return source.match(new RegExp(`${escaped}\\s*=\\s*"""([\\s\\S]*?)"""`, "m"))?.[1]?.trim();
+}
+
+function parseSkillFrontmatter(source, expectedName) {
+  const normalized = source.replaceAll("\r\n", "\n");
+  if (!normalized.startsWith("---\n")) fail(`skill ${expectedName} is missing YAML frontmatter`);
+  const end = normalized.indexOf("\n---\n", 4);
+  if (end === -1) fail(`skill ${expectedName} has an unterminated YAML frontmatter block`);
+  const frontmatter = normalized.slice(4, end);
+  const name = frontmatter.match(/^name:\s*(.+)$/m)?.[1]?.trim().replace(/^['"]|['"]$/g, "");
+  const description = frontmatter.match(/^description:\s*(.+)$/m)?.[1]?.trim().replace(/^['"]|['"]$/g, "");
+  if (name !== expectedName) fail(`skill directory ${expectedName} declares name ${name ?? "<missing>"}`);
+  if (!description || description.length < 60 || !/^Use when\b/.test(description)) {
+    fail(`skill ${expectedName} needs a concise trigger-first description`);
+  }
+  if (normalized.split("\n").length > 500) fail(`skill ${expectedName} exceeds the 500-line budget`);
+  if (normalized.slice(end + 5).trim().length < 250) fail(`skill ${expectedName} instructions are incomplete`);
+  return { name, description };
+}
+
 export function validateCompanyConfig(config) {
-  if (config?.schemaVersion !== 1) fail("schemaVersion must be 1");
+  if (config?.schemaVersion !== 2) fail("schemaVersion must be 2");
   if (config?.principles?.separationOfDuties !== true) fail("separationOfDuties must stay enabled");
   if (config?.principles?.selfApprovalForbidden !== true) fail("selfApprovalForbidden must stay enabled");
   if (config?.principles?.missingEvidenceNeverPasses !== true) fail("missingEvidenceNeverPasses must stay enabled");
@@ -82,10 +156,16 @@ export function validateCompanyConfig(config) {
 
   const departmentIds = uniqueIds(config.departments, "departments");
   requireMembers(departmentIds, REQUIRED_DEPARTMENTS, "departments");
+  const allTeams = new Set();
   for (const department of config.departments) {
     if (!executiveIds.has(department.executive)) fail(`${department.id} references unknown executive ${department.executive}`);
     if (!Array.isArray(department.teams) || department.teams.length === 0) fail(`${department.id} must contain teams`);
     if (new Set(department.teams).size !== department.teams.length) fail(`${department.id} contains duplicate teams`);
+    for (const team of department.teams) {
+      if (allTeams.has(team)) fail(`team ${team} is assigned to more than one department`);
+      allTeams.add(team);
+    }
+    requireMembers(new Set(department.teams), REQUIRED_DEPARTMENT_TEAMS[department.id] ?? [], `${department.id} teams`);
   }
 
   const authorityIds = uniqueIds(config.authorityLevels, "authorityLevels");
@@ -101,10 +181,11 @@ export function validateCompanyConfig(config) {
   }
 
   if (config?.assurance?.reportsToHumanOwner !== true) fail("assurance must retain its independent route to the human owner");
-  if (!Array.isArray(config?.assurance?.agents) || config.assurance.agents.length < 5) fail("assurance agents are incomplete");
+  if (!Array.isArray(config?.assurance?.agents) || config.assurance.agents.length < 8) fail("assurance agents are incomplete");
+  if (!config.assurance.agents.includes("accessibility-visual-auditor")) fail("assurance is missing accessibility-visual-auditor");
 
   const capabilityIds = uniqueIds(config.capabilities, "capabilities");
-  requireMembers(capabilityIds, ["github", "supabase", "vercel", "data-analytics", "sales"], "capabilities");
+  requireMembers(capabilityIds, REQUIRED_CAPABILITIES, "capabilities");
   for (const capability of config.capabilities) {
     if (!departmentIds.has(capability.owner)) fail(`${capability.id} references unknown owner ${capability.owner}`);
   }
@@ -113,17 +194,64 @@ export function validateCompanyConfig(config) {
     fail("workItemStates must include CAPACITY_EXCEPTION_PENDING");
   }
 
+  const assetStates = new Set(config.assetStates ?? []);
+  requireMembers(assetStates, REQUIRED_ASSET_STATES, "assetStates");
+
   const forbidden = new Set(config.forbiddenAutonomousActions ?? []);
   requireMembers(forbidden, REQUIRED_FORBIDDEN_ACTIONS, "forbiddenAutonomousActions");
   return config;
 }
 
-export async function loadAndValidateCompanyConfig() {
-  const source = await readFile(CONFIG_PATH, "utf8");
-  return validateCompanyConfig(JSON.parse(source));
+export async function validateNativeAgentRuntime(options = {}) {
+  const read = options.readFile ?? readFile;
+  const codexConfig = await read(CODEX_CONFIG_PATH, "utf8");
+  if (!/^\s*\[agents\]\s*$/m.test(codexConfig)) fail(".codex/config.toml is missing [agents]");
+  if (!/^\s*enabled\s*=\s*true\s*$/m.test(codexConfig)) fail("project subagents must stay enabled");
+  const concurrency = Number(codexConfig.match(/^\s*max_concurrent_threads_per_session\s*=\s*(\d+)\s*$/m)?.[1]);
+  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4) {
+    fail("max_concurrent_threads_per_session must stay between 1 and 4");
+  }
+
+  const agentNames = new Set();
+  for (const expected of REQUIRED_NATIVE_AGENTS) {
+    const path = new URL(`.codex/agents/${expected.name}.toml`, REPO_ROOT);
+    const source = await read(path, "utf8");
+    const name = tomlString(source, "name");
+    const description = tomlString(source, "description");
+    const sandbox = tomlString(source, "sandbox_mode");
+    const instructions = tomlMultiline(source, "developer_instructions");
+    if (name !== expected.name) fail(`custom agent ${expected.name} declares name ${name ?? "<missing>"}`);
+    if (agentNames.has(name)) fail(`custom agent name ${name} is duplicated`);
+    agentNames.add(name);
+    if (!description || description.length < 70) fail(`custom agent ${name} has an incomplete description`);
+    if (sandbox !== expected.sandbox) fail(`custom agent ${name} must use sandbox ${expected.sandbox}`);
+    if (!instructions || instructions.length < 300 || !/FoodOS/i.test(instructions)) {
+      fail(`custom agent ${name} has incomplete FoodOS developer instructions`);
+    }
+    if ([...LEGACY_EXECUTIVE_IDS].some((legacy) => name.includes(legacy))) fail(`custom agent ${name} uses a legacy super-agent identity`);
+  }
+
+  const skillNames = new Set();
+  for (const expectedName of REQUIRED_SKILLS) {
+    const path = new URL(`.agents/skills/${expectedName}/SKILL.md`, REPO_ROOT);
+    const source = await read(path, "utf8");
+    const skill = parseSkillFrontmatter(source, expectedName);
+    if (skillNames.has(skill.name)) fail(`skill ${skill.name} is duplicated`);
+    skillNames.add(skill.name);
+  }
+
+  return { concurrency, agents: [...agentNames], skills: [...skillNames] };
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+export async function loadAndValidateCompanyConfig(options = {}) {
+  const read = options.readFile ?? readFile;
+  const source = await read(CONFIG_PATH, "utf8");
+  const config = validateCompanyConfig(JSON.parse(source));
+  await validateNativeAgentRuntime({ readFile: read });
+  return config;
+}
+
+if (process.argv[1] && resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])) {
   await loadAndValidateCompanyConfig();
-  console.log("FoodOS company agent registry: PASS");
+  console.log("FoodOS company agent registry and native Codex runtime: PASS");
 }
