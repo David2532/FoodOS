@@ -11,6 +11,14 @@ const isUi = (file) => /^(?:src\/(?:app|components|features)\/)/.test(file);
 const isDomain = (file) => /^src\/(?:domain|lib|contracts)\//.test(file);
 const isDatabase = (file) => /^supabase\/(?:migrations|tests)\//.test(file);
 const isE2e = (file) => /^(?:e2e|e2e-auth)\//.test(file);
+const isAgentGovernance = (file) =>
+  file === "AGENTS.md" ||
+  file === "config/agent-company.json" ||
+  file === ".codex/config.toml" ||
+  /^\.codex\/agents\/[^/]+\.toml$/.test(file) ||
+  /^\.agents\/skills\/[^/]+\//.test(file) ||
+  /^docs\/agent\/(?:COMPANY_AGENT_OPERATING_MODEL|WORKER_EXECUTION_CONTRACT|UI_AND_ASSET_AGENT_CONTRACT|CODEX_EXECUTION_PLAYBOOK|CODEX_UI_AGENT_ARCHITECTURE|V1_TO_V2_MIGRATION)\.md$/.test(file) ||
+  /^scripts\/agent\/(?:validate-company-config|agent-company\.test)\.mjs$/.test(file);
 const isCentralBuild = (file) =>
   /^(?:package(?:-lock)?\.json|next\.config\.[cm]?[jt]s|tsconfig\.json|vercel\.json)$/.test(file) ||
   /^src\/app\/(?:layout\.[jt]sx|globals\.css)$/.test(file);
@@ -49,6 +57,11 @@ export function buildVerificationPlan(inputFiles) {
 
   if (markdownFiles.length > 0) {
     addCommand(commands, command("markdown", "Markdown consistency", process.execPath, ["scripts/agent/check-markdown.mjs", ...markdownFiles]));
+  }
+
+  if (files.some(isAgentGovernance)) {
+    addCommand(commands, command("agent-config", "Company registry and native Codex agents", "npm", ["run", "agent:validate-company"]));
+    addCommand(commands, command("agent-tests", "Agent infrastructure tests", "npm", ["run", "test:unit", "--", "scripts/agent"]));
   }
 
   if (files.every(isMarkdown)) {
@@ -108,7 +121,8 @@ export function buildVerificationPlan(inputFiles) {
 
   const known = (file) =>
     isMarkdown(file) || isDomain(file) || isUi(file) || isDatabase(file) || isE2e(file) ||
-    isCatalog(file) || isCentralBuild(file) || file.startsWith("scripts/agent/") || file === "package.json";
+    isCatalog(file) || isAgentGovernance(file) || isCentralBuild(file) ||
+    file.startsWith("scripts/agent/") || file === "package.json";
   const unknownCode = files.filter((file) => !known(file) && /\.(?:[cm]?[jt]sx?|sql|json|ya?ml)$/i.test(file));
 
   if (unknownCode.some(isSecurityCriticalUnknown)) {
