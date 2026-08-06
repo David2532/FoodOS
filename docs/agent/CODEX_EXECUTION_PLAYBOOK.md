@@ -115,7 +115,7 @@ CPO outcome and simplicity budget
 -> integration and independent verification
 ```
 
-A generated image is not a final logo or UI asset by itself. Avoid unnecessary assets when typography, layout, an existing icon or CSS communicates the state better.
+A generated image is not a final logo or UI asset by itself. Avoid unnecessary assets when typography, layout, an existing icon or CSS communicates the state better. Every created asset must be entered in `docs/brand/ASSET_MANIFEST.md` with status, purpose, exact path, format, dimensions, provenance/licence state, target surface and verifier.
 
 ## 8. Verification strategy
 
