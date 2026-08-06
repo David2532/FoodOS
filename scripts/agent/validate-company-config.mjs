@@ -1,10 +1,12 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = new URL("../../", import.meta.url);
 const CONFIG_PATH = new URL("config/agent-company.json", REPO_ROOT);
 const CODEX_CONFIG_PATH = new URL(".codex/config.toml", REPO_ROOT);
+const CODEX_AGENTS_PATH = new URL(".codex/agents/", REPO_ROOT);
+const REPO_SKILLS_PATH = new URL(".agents/skills/", REPO_ROOT);
 
 const REQUIRED_EXECUTIVES = [
   "ai-ceo",
@@ -69,6 +71,7 @@ const REQUIRED_DEPARTMENT_TEAMS = {
 const LEGACY_EXECUTIVE_IDS = new Set(["chief-of-staff", "chief_of_staff", "master-agent", "super-agent"]);
 const REQUIRED_NATIVE_AGENTS = [
   { name: "ui_explorer", sandbox: "read-only" },
+  { name: "design_reference_researcher", sandbox: "read-only" },
   { name: "ux_flow_designer", sandbox: "read-only" },
   { name: "ui_system_architect", sandbox: "read-only" },
   { name: "ui_implementer", sandbox: "workspace-write" },
@@ -83,6 +86,7 @@ const REQUIRED_SKILLS = [
   "foodos-visual-qa",
   "foodos-asset-production",
 ];
+const ALLOWED_SANDBOX_MODES = new Set(["read-only", "workspace-write"]);
 
 function fail(message) {
   throw new Error(`Invalid FoodOS company agent registry: ${message}`);
@@ -204,6 +208,7 @@ export function validateCompanyConfig(config) {
 
 export async function validateNativeAgentRuntime(options = {}) {
   const read = options.readFile ?? readFile;
+  const list = options.readdir ?? readdir;
   const codexConfig = await read(CODEX_CONFIG_PATH, "utf8");
   if (!/^\s*\[agents\]\s*$/m.test(codexConfig)) fail(".codex/config.toml is missing [agents]");
   if (!/^\s*enabled\s*=\s*true\s*$/m.test(codexConfig)) fail("project subagents must stay enabled");
@@ -212,42 +217,57 @@ export async function validateNativeAgentRuntime(options = {}) {
     fail("max_concurrent_threads_per_session must stay between 1 and 4");
   }
 
+  const expectedAgents = new Map(REQUIRED_NATIVE_AGENTS.map((agent) => [agent.name, agent]));
+  const agentFiles = (await list(CODEX_AGENTS_PATH, { withFileTypes: true }))
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".toml"))
+    .map((entry) => entry.name)
+    .sort();
+  if (agentFiles.length === 0) fail(".codex/agents contains no custom agents");
+
   const agentNames = new Set();
-  for (const expected of REQUIRED_NATIVE_AGENTS) {
-    const path = new URL(`.codex/agents/${expected.name}.toml`, REPO_ROOT);
-    const source = await read(path, "utf8");
+  for (const filename of agentFiles) {
+    const source = await read(new URL(filename, CODEX_AGENTS_PATH), "utf8");
     const name = tomlString(source, "name");
     const description = tomlString(source, "description");
     const sandbox = tomlString(source, "sandbox_mode");
     const instructions = tomlMultiline(source, "developer_instructions");
-    if (name !== expected.name) fail(`custom agent ${expected.name} declares name ${name ?? "<missing>"}`);
+    if (!name) fail(`custom agent file ${filename} is missing name`);
     if (agentNames.has(name)) fail(`custom agent name ${name} is duplicated`);
     agentNames.add(name);
     if (!description || description.length < 70) fail(`custom agent ${name} has an incomplete description`);
-    if (sandbox !== expected.sandbox) fail(`custom agent ${name} must use sandbox ${expected.sandbox}`);
+    if (!ALLOWED_SANDBOX_MODES.has(sandbox)) fail(`custom agent ${name} has unsupported sandbox ${sandbox ?? "<missing>"}`);
+    const expected = expectedAgents.get(name);
+    if (expected && sandbox !== expected.sandbox) fail(`custom agent ${name} must use sandbox ${expected.sandbox}`);
     if (!instructions || instructions.length < 300 || !/FoodOS/i.test(instructions)) {
       fail(`custom agent ${name} has incomplete FoodOS developer instructions`);
     }
     if ([...LEGACY_EXECUTIVE_IDS].some((legacy) => name.includes(legacy))) fail(`custom agent ${name} uses a legacy super-agent identity`);
   }
+  requireMembers(agentNames, REQUIRED_NATIVE_AGENTS.map((agent) => agent.name), "native custom agents");
+
+  const skillDirectories = (await list(REPO_SKILLS_PATH, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+  if (skillDirectories.length === 0) fail(".agents/skills contains no repo skills");
 
   const skillNames = new Set();
-  for (const expectedName of REQUIRED_SKILLS) {
-    const path = new URL(`.agents/skills/${expectedName}/SKILL.md`, REPO_ROOT);
-    const source = await read(path, "utf8");
-    const skill = parseSkillFrontmatter(source, expectedName);
+  for (const directory of skillDirectories) {
+    const source = await read(new URL(`${directory}/SKILL.md`, REPO_SKILLS_PATH), "utf8");
+    const skill = parseSkillFrontmatter(source, directory);
     if (skillNames.has(skill.name)) fail(`skill ${skill.name} is duplicated`);
     skillNames.add(skill.name);
   }
+  requireMembers(skillNames, REQUIRED_SKILLS, "repo skills");
 
-  return { concurrency, agents: [...agentNames], skills: [...skillNames] };
+  return { concurrency, agents: [...agentNames].sort(), skills: [...skillNames].sort() };
 }
 
 export async function loadAndValidateCompanyConfig(options = {}) {
   const read = options.readFile ?? readFile;
   const source = await read(CONFIG_PATH, "utf8");
   const config = validateCompanyConfig(JSON.parse(source));
-  await validateNativeAgentRuntime({ readFile: read });
+  await validateNativeAgentRuntime({ readFile: read, readdir: options.readdir });
   return config;
 }
 
