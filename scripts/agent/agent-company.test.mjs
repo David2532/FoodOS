@@ -19,8 +19,19 @@ describe("FoodOS company agent registry", () => {
     await expect(loadAndValidateCompanyConfig()).resolves.toBeDefined();
     const runtime = await validateNativeAgentRuntime();
     expect(runtime.concurrency).toBe(4);
-    expect(runtime.agents).toEqual(expect.arrayContaining(["ui_explorer", "ui_implementer", "visual_verifier", "asset_producer"]));
-    expect(runtime.skills).toEqual(expect.arrayContaining(["foodos-ui-flow-spec", "foodos-ui-implementation", "foodos-visual-qa", "foodos-asset-production"]));
+    expect(runtime.agents).toEqual(expect.arrayContaining([
+      "ui_explorer",
+      "design_reference_researcher",
+      "ui_implementer",
+      "visual_verifier",
+      "asset_producer",
+    ]));
+    expect(runtime.skills).toEqual(expect.arrayContaining([
+      "foodos-ui-flow-spec",
+      "foodos-ui-implementation",
+      "foodos-visual-qa",
+      "foodos-asset-production",
+    ]));
   });
 
   it("rejects the obsolete schema v1 contract", async () => {
