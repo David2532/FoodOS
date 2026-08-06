@@ -1,5 +1,38 @@
 # FoodOS repository instructions
 
+## Agent governance and precedence
+
+For agent roles, departments, delegation, capabilities, capacity classes, approvals and
+separation of duties, the authoritative sources are:
+
+1. `config/agent-company.json` — machine-readable governance registry;
+2. `docs/agent/COMPANY_AGENT_OPERATING_MODEL.md` — company structure and authority;
+3. `docs/agent/WORKER_EXECUTION_CONTRACT.md` — execution rules for short-lived workers.
+
+Run `npm run agent:validate-company` whenever any of those files or agent governance
+changes. The validator is part of `npm run verify` and rejects missing required roles,
+legacy super-agent identifiers, self-approval, weakened C0/C1 protection, incomplete
+assurance or forbidden-action removal.
+
+Older prompts, diagrams, plans, issue text and chat-derived documents are contextual only.
+They do not override this governance model. In particular, `CODEX_PROMPT.md` is a
+multi-stage product build brief, not an authority or organisation definition. Do not
+reintroduce a Chief-of-Staff, master-agent or super-agent above the AI CEO, and do not make
+the Executive Orchestrator an implementer or self-approver.
+
+Precedence is:
+
+1. law, explicit human authorization and platform permissions;
+2. repository security, privacy, food-safety and evidence invariants in this file and the
+   specialist documents selected by the active scope;
+3. the company agent governance sources listed above;
+4. scope-specific implementation plans and design documents;
+5. legacy prompts, mockups and informal diagrams.
+
+Load the company operating model only for governance, cross-department routing, approval,
+capacity, agent-operation or Company Command Center work. Normal bounded coding tasks still
+start with the selected repository scope to avoid wasting context.
+
 ## Start and scope routing
 
 FoodOS is a Germany-first food inventory product handling private household and
@@ -24,6 +57,7 @@ explicitly requests the complete multi-stage build; it is not required for norma
 - Develop: `npm run dev`
 - List scopes: `npm run agent:context -- --list`
 - Scope context: `npm run agent:context -- <scope>`
+- Validate company-agent governance: `npm run agent:validate-company`
 - Changed verification: `npm run verify:changed -- --base=<ref>`
 - Unit tests: `npm run test:unit`
 - Related unit tests: `npm run test:unit:changed -- <files...>`
