@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "name": "FoodOS Company",
+  "humanOwner": "David Paul",
+  "principles": {
+    "separationOfDuties": true,
+    "selfApprovalForbidden": true,
+    "missingEvidenceNeverPasses": true,
+    "featureScopeProtectedFromSoftLimits": true,
+    "productionWritesDefaultDenied": true
+  },
+  "authorityLevels": [
+    { "id": "A0", "name": "observe", "requiresHumanApproval": false },
+    { "id": "A1", "name": "route", "requiresHumanApproval": false },
+    { "id": "A2", "name": "protect", "requiresHumanApproval": false, "constraints": ["predefined", "bounded", "reversible", "audited", "expires"] },
+    { "id": "A3", "name": "approve", "requiresHumanApproval": true }
+  ],
+  "capacityClasses": [
+    { "id": "C0", "name": "critical", "softLimitMayStop": false },
+    { "id": "C1", "name": "core", "softLimitMayStop": false },
+    { "id": "C2", "name": "roadmap", "softLimitMayStop": true },
+    { "id": "C3", "name": "experimental", "softLimitMayStop": true }
+  ],
+  "executives": [
+    { "id": "ai-ceo", "title": "AI CEO", "owns": ["strategy", "priorities", "budget-envelope", "conflict-resolution"] },
+    { "id": "orchestrator", "title": "Executive Orchestrator", "reportsTo": "ai-ceo", "owns": ["planning", "routing", "dependencies", "replanning"], "mayApproveOwnWork": false, "normallyImplementsProductCode": false },
+    { "id": "cpo", "title": "CPO", "reportsTo": "ai-ceo" },
+    { "id": "cto", "title": "CTO", "reportsTo": "ai-ceo" },
+    { "id": "coo", "title": "COO", "reportsTo": "ai-ceo" },
+    { "id": "cfo", "title": "CFO", "reportsTo": "ai-ceo" },
+    { "id": "cmo", "title": "CMO", "reportsTo": "ai-ceo" },
+    { "id": "cro", "title": "CRO", "reportsTo": "ai-ceo" },
+    { "id": "cdao", "title": "CDAO", "reportsTo": "ai-ceo" },
+    { "id": "ciso", "title": "CISO", "reportsTo": "ai-ceo" },
+    { "id": "clo", "title": "CLO", "reportsTo": "ai-ceo" }
+  ],
+  "departments": [
+    {
+      "id": "product",
+      "executive": "cpo",
+      "teams": ["product-strategy", "ux-research", "scanner-gs1", "inventory-dates", "nutrition", "meal-planning", "shopping", "recalls", "mobile-product"]
+    },
+    {
+      "id": "engineering",
+      "executive": "cto",
+      "teams": ["architecture", "web-pwa", "mobile-engineering", "backend-api", "ai-automation", "developer-platform", "data-platform", "cloud-reliability"]
+    },
+    {
+      "id": "operations",
+      "executive": "coo",
+      "teams": ["program-operations", "work-queue", "release-coordination", "support-operations", "vendor-operations", "corporate-calendar", "continuity"]
+    },
+    {
+      "id": "finance",
+      "executive": "cfo",
+      "teams": ["accounting-preparation", "cash-runway", "subscription-economics", "unit-economics", "cloud-finops", "forecasting", "aeco"]
+    },
+    {
+      "id": "marketing",
+      "executive": "cmo",
+      "teams": ["brand-positioning", "market-intelligence", "content-seo", "app-store-optimization", "lifecycle", "growth-experiments", "creator-community", "pr-reputation", "marketing-operations"]
+    },
+    {
+      "id": "sales-partnerships",
+      "executive": "cro",
+      "teams": ["retail-brand-partnerships", "product-data-partnerships", "recall-source-partnerships", "technology-partnerships", "future-b2b-api", "sales-operations", "business-cases"]
+    },
+    {
+      "id": "data-analytics-research",
+      "executive": "cdao",
+      "teams": ["research", "data-quality", "kpi-semantic-layer", "product-analytics", "marketing-analytics", "experimentation", "forecasting", "attribution", "source-registry"]
+    },
+    {
+      "id": "security-reliability",
+      "executive": "ciso",
+      "teams": ["iam", "secrets", "application-security", "database-security", "threat-modeling", "incident-response", "supply-chain", "security-verification"]
+    },
+    {
+      "id": "legal-ip-compliance",
+      "executive": "clo",
+      "teams": ["trademark-brand", "contracts", "licensing", "consumer-law", "food-claims", "ai-governance", "corporate-deadlines", "regulatory-monitoring"]
+    }
+  ],
+  "assurance": {
+    "reportsToHumanOwner": true,
+    "agents": ["release-assurance", "security-auditor", "privacy-dpo-operations", "food-safety-claims", "data-quality-auditor", "financial-controller", "agent-behavior-auditor"]
+  },
+  "capabilities": [
+    { "id": "web", "owner": "data-analytics-research", "default": "read" },
+    { "id": "github", "owner": "engineering", "default": "read", "writeRule": "task-branch-and-pr" },
+    { "id": "supabase", "owner": "engineering", "default": "read", "writeRule": "forward-only-migration" },
+    { "id": "vercel", "owner": "engineering", "default": "read", "writeRule": "approved-production-mutation" },
+    { "id": "data-analytics", "owner": "data-analytics-research", "default": "analyze" },
+    { "id": "sales", "owner": "sales-partnerships", "default": "research" },
+    { "id": "gmail", "owner": "operations", "default": "read", "writeRule": "separate-send-capability" },
+    { "id": "calendar", "owner": "operations", "default": "read", "writeRule": "separate-scheduling-capability" },
+    { "id": "documents", "owner": "operations", "default": "least-privilege" }
+  ],
+  "workItemStates": ["PROPOSED", "TRIAGED", "APPROVED", "PLANNED", "IN_PROGRESS", "VERIFYING", "AWAITING_APPROVAL", "ACCEPTED", "RELEASED", "MEASURED", "BLOCKED", "FAILED", "CANCELLED", "CAPACITY_EXCEPTION_PENDING"],
+  "forbiddenAutonomousActions": ["legal-filing", "tax-filing", "evidence-deletion", "medical-judgment", "food-safe-declaration", "irreversible-company-action"]
+}
