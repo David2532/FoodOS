@@ -29,6 +29,8 @@ The detailed simplicity contract lives in `plans/PRODUCT_NORTH_STAR.md`. The int
 | Quality and release evidence | `plans/QUALITY_ENGINEERING_PLAN.md`, `plans/TEST_TRACEABILITY_MATRIX.md` |
 | Agent organisation and authority | `config/agent-company.json`, `docs/agent/COMPANY_AGENT_OPERATING_MODEL.md` |
 | Worker execution | `docs/agent/WORKER_EXECUTION_CONTRACT.md` |
+| Codex delivery workflow | `docs/agent/CODEX_EXECUTION_PLAYBOOK.md` |
+| UI, brand and asset agents | `docs/agent/UI_AND_ASSET_AGENT_CONTRACT.md` |
 | Brand and naming | `docs/brand/BRAND_SYSTEM.md`, `docs/brand/NAMING_DECISION.md` |
 | Assets | `docs/brand/ASSET_MANIFEST.md` |
 | Founder dashboard | `plans/CEO_CONTROL_CENTER.md`, `design-ceo.md` |
@@ -45,6 +47,7 @@ Older master-like documents remain specialist evidence or historical context. Th
 5. **The free core is genuinely useful.** Inventory, basic capture, safety, basic recipes and essential nutrition are not crippled.
 6. **One primary action per screen.** Complexity is progressively disclosed and corrections are always reversible.
 7. **No feature outranks recurring household use.** Internal dashboards and agent infrastructure support the consumer loop; they do not displace it.
+8. **Visual quality is a delivery discipline.** Material UI and assets require an approved purpose, dedicated production path and independent visual/accessibility QA.
 
 ## 4. Core journeys
 
@@ -180,16 +183,20 @@ Standard delivery chain:
 ```text
 Founder intent
 -> AI CEO priority and operating envelope
--> Executive Orchestrator work graph
+-> Executive Orchestrator bounded work brief and work graph
 -> accountable C-level and department lead
 -> bounded worker(s)
 -> independent verifier / assurance where required
--> Chief-of-Staff consistency check
+-> consistency review
 -> CEO decision
 -> David approval for material irreversible, legal, strategic or high-cost actions
 ```
 
 CPO owns simplicity and consumer outcome. CTO owns architecture and implementation quality. CDAO owns data/provenance/measurement. CISO and Legal/Privacy can stop unsafe or unlawful release. Food Safety owns date, allergen, recall and nutrition communication boundaries. AECO optimizes context, models, CI and provider cost but may not remove scope, weaken tests or degrade the core loop without the documented approval chain.
+
+Codex-led work must use bounded briefs, evidence reuse, checkpoints, stop conditions and one coherent PR story as specified in `docs/agent/CODEX_EXECUTION_PLAYBOOK.md`.
+
+Material UI and brand work uses separate UX, UI system, art direction, generation/production, accessibility and visual QA roles. Generated visuals remain concepts until reconstructed, integrated and independently verified.
 
 ## 11. Current priority order
 
