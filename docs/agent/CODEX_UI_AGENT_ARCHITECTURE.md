@@ -8,14 +8,14 @@ Research date: **2026-08-06**.
 FoodOS uses three complementary layers instead of one giant design prompt:
 
 1. **`design.md`** — durable FoodOS design contract: hierarchy, navigation, tokens, component recipes, states, accessibility, asset direction and acceptance gates.
-2. **Project custom agents in `.codex/agents/`** — narrow roles with different read/write boundaries for exploration, UX, system design, implementation, assets and independent verification.
+2. **Project custom agents in `.codex/agents/`** — narrow roles with different read/write boundaries for evidence, reference research, UX, system design, implementation, assets and independent verification.
 3. **Repo skills in `.agents/skills/`** — reusable procedures that Codex loads only when their description matches or the user invokes them explicitly.
 
 A role listed only in a company diagram or JSON registry is not enough to make Codex behave as that specialist. The native runtime files make the intended roles discoverable and enforceable in local Codex sessions.
 
 ## Why this structure
 
-OpenAI's Codex documentation recommends project-scoped custom agents under `.codex/agents/`. Each agent requires a name, description and developer instructions, and the strongest definitions are narrow and opinionated with a tool/sandbox surface that matches the job. Subagents are useful for independent exploration, verification and implementation work, but they consume additional tokens and should not be spawned as an always-on swarm.
+OpenAI's Codex documentation supports project-scoped custom agents under `.codex/agents/`. Each agent requires a name, description and developer instructions, and the strongest definitions are narrow and opinionated with a tool/sandbox surface that matches the job. Subagents are useful for independent exploration, verification and implementation work, but they consume additional tokens and should not be spawned as an always-on swarm.
 
 OpenAI's skill system uses progressive disclosure: Codex initially sees only each skill's name, description and path, then loads the full `SKILL.md` only when selected. Repo-scoped skills live under `.agents/skills`. This makes a small set of focused UI procedures more efficient than adding the full design manual to every prompt.
 
@@ -30,6 +30,7 @@ Official references:
 | Agent | Write access | Primary job | Must not do |
 |---|---|---|---|
 | `ui_explorer` | read-only | map real code, tokens, states, tests and contradictions | design or edit |
+| `design_reference_researcher` | read-only | verify current platform/design-system patterns and bounded competitive evidence | copy visuals, choose scope or edit |
 | `ux_flow_designer` | read-only | produce minimal state-complete interaction brief | write code or styling |
 | `ui_system_architect` | read-only | map components, tokens, responsive composition and boundaries | create a second design system |
 | `ui_implementer` | workspace write | implement the smallest approved complete slice | approve its own work or broaden scope |
@@ -38,7 +39,19 @@ Official references:
 | `image_concept_artist` | workspace write | produce original illustrative concepts from an approved brief | create final logos/icons or product photos |
 | `asset_producer` | workspace write | reconstruct/export clean production vectors and update manifest | self-verify or claim legal clearance |
 
-Project concurrency is capped at four spawned threads. This is enough for independent mapping, UX, documentation research or verification while limiting conflicting writes and unnecessary usage.
+Project concurrency is capped at four spawned threads. This is enough for independent mapping, bounded reference research, UX or verification while limiting conflicting writes and unnecessary usage.
+
+## Reference research policy
+
+`design_reference_researcher` is **optional**, not a permanent step. Invoke it only when a concrete decision needs current external evidence, for example:
+
+- iOS camera/permission behavior;
+- Android Material navigation or bottom-sheet behavior;
+- WCAG or platform accessibility requirements;
+- Figma/Code Connect, shadcn, v0, Storybook or Playwright workflow choices;
+- a current market convention that materially affects comprehension or adoption.
+
+It prefers primary and official sources, records publication/update date when available and separates observation, inference and recommendation. Competitor products may be studied for interaction burden, terminology and state handling, but their layout, copy, assets and distinctive brand treatment are never copied. A reference board is evidence for a FoodOS decision, not a substitute for `design.md`, code, safety rules or user testing.
 
 ## Repo skills
 
@@ -57,6 +70,7 @@ Skills are procedural and narrow. They do not duplicate the full product plan or
 
 ```text
 ui_explorer
++ optional design_reference_researcher for one bounded open question
 -> ux_flow_designer using $foodos-ui-flow-spec
 -> CPO accepts the flow direction
 -> ui_system_architect
@@ -65,7 +79,7 @@ ui_explorer
 -> CPO + relevant assurance/release approval
 ```
 
-Mapping and UX may run in parallel only when neither depends on the other's output. UI architecture follows the accepted flow. Implementation and visual verification remain sequential and independent.
+Mapping and bounded external research may run in parallel when neither mutates state and the question is already clear. UI architecture follows the accepted flow. Implementation and visual verification remain sequential and independent.
 
 ### Small visual defect with unchanged behavior
 
@@ -75,7 +89,7 @@ ui_explorer or existing reproduction
 -> visual_verifier
 ```
 
-Do not invoke every design agent for a two-line spacing fix.
+Do not invoke every design agent or external research for a two-line spacing fix.
 
 ### New illustration or brand asset
 
@@ -93,7 +107,7 @@ A generated image is never a final logo or UI icon by itself.
 
 ## `design.md` contract
 
-`design.md` is not a long role prompt and not a screenshot gallery. It should remain the canonical design decision file for the repository and contain:
+`design.md` is not a long role prompt and not a screenshot gallery. It remains the canonical design decision file for the repository and contains:
 
 - product feeling and hierarchy;
 - canonical information architecture;
@@ -160,6 +174,7 @@ A good design agent does not merely output prettier JSX. The complete loop is:
 ```text
 product outcome
 -> current-state evidence
+-> optional bounded external evidence
 -> interaction hypothesis
 -> component/token system
 -> bounded implementation
@@ -173,5 +188,5 @@ Visual quality is measured by task clarity, consistency, state completeness, acc
 ## Example parent prompt
 
 ```text
-Use ui_explorer to map the current purchase-capture flow and its reusable components. In parallel, have ux_flow_designer prepare a minimal flow brief using $foodos-ui-flow-spec. Reconcile their findings, then have ui_system_architect define the component/token plan. Only after the flow is accepted, use ui_implementer for the bounded slice. Finish with visual_verifier using $foodos-visual-qa. Do not create an asset unless asset_art_director first proves it is needed.
+Use ui_explorer to map the current purchase-capture flow and its reusable components. Ask design_reference_researcher only to verify current iOS/Android continuous-scanner and permission patterns. Have ux_flow_designer prepare a minimal flow brief using $foodos-ui-flow-spec. Reconcile evidence, then have ui_system_architect define the component/token plan. Only after the flow is accepted, use ui_implementer for the bounded slice. Finish with visual_verifier using $foodos-visual-qa. Do not create an asset unless asset_art_director first proves it is needed.
 ```
