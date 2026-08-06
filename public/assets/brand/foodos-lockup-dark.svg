@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 128" role="img" aria-labelledby="title desc">
+  <title id="title">FoodOS working horizontal logo</title>
+  <desc id="desc">FoodOS wordmark with the rounded household food loop symbol.</desc>
+  <rect width="520" height="128" rx="24" fill="#0B100D"/>
+  <g transform="translate(18 0)">
+    <path d="M39 30h36c13.3 0 24 10.7 24 24v20c0 13.3-10.7 24-24 24H53c-13.3 0-24-10.7-24-24V54c0-13.3 10.7-24 24-24" fill="none" stroke="#B8F34A" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M82 30h17v17" fill="none" stroke="#F3F7F4" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="64" cy="64" r="11" fill="#F3F7F4"/>
+  </g>
+  <text x="146" y="78" fill="#F3F7F4" font-family="Geist, Inter, Arial, sans-serif" font-size="56" font-weight="650" letter-spacing="-2">Food<tspan fill="#B8F34A">OS</tspan></text>
+  <text x="148" y="103" fill="#A8B4AC" font-family="Geist, Inter, Arial, sans-serif" font-size="16" font-weight="500" letter-spacing="0.5">EINKAUF REIN. ESSEN KLAR.</text>
+</svg>
