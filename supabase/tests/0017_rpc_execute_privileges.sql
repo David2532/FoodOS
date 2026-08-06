@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(4);
+select plan(7);
 
 select ok(
   not exists (
@@ -19,6 +19,7 @@ select ok(
 select ok(
   has_function_privilege('authenticated', 'public.onboard_household(text,text,integer,numeric)'::regprocedure, 'execute')
   and has_function_privilege('authenticated', 'public.add_inventory_batch(uuid,jsonb,jsonb,uuid)'::regprocedure, 'execute')
+  and has_function_privilege('authenticated', 'public.commit_purchase_capture(uuid,jsonb,uuid)'::regprocedure, 'execute')
   and has_function_privilege('authenticated', 'public.consume_inventory_batch_v2(uuid,numeric,uuid,boolean,boolean)'::regprocedure, 'execute')
   and has_function_privilege('authenticated', 'public.record_privacy_choices(text,boolean,boolean,boolean,boolean,boolean,boolean,boolean,boolean,uuid)'::regprocedure, 'execute')
   and has_function_privilege('authenticated', 'public.search_global_catalog_products(text,integer)'::regprocedure, 'execute')
@@ -44,6 +45,79 @@ select ok(
       and has_function_privilege('authenticated', procedure.oid, 'execute')
   ),
   'Q-SEC-RPC-DB-004: authenticated clients cannot invoke inventory payload validators directly'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_proc as procedure
+    join pg_namespace as namespace on namespace.oid = procedure.pronamespace
+    where procedure.oid = 'public.commit_purchase_capture(uuid,jsonb,uuid)'::regprocedure
+      and namespace.nspname = 'public'
+      and procedure.prosecdef
+      and procedure.proowner = 'postgres'::regrole
+      and coalesce(pg_catalog.array_to_string(procedure.proconfig, ','), '')
+        like '%search_path=""%'
+      and has_function_privilege(
+        'authenticated',
+        'public.commit_purchase_capture(uuid,jsonb,uuid)'::regprocedure,
+        'execute'
+      )
+      and not has_function_privilege(
+        'anon',
+        'public.commit_purchase_capture(uuid,jsonb,uuid)'::regprocedure,
+        'execute'
+      )
+      and not has_function_privilege(
+        'service_role',
+        'public.commit_purchase_capture(uuid,jsonb,uuid)'::regprocedure,
+        'execute'
+      )
+  ),
+  'Q-SEC-RPC-DB-005: purchase capture is a pinned security-definer boundary'
+);
+
+select ok(
+  (
+    select
+      pg_catalog.strpos(definition.body, 'from public.household_membership_state as state') > 0
+      and pg_catalog.strpos(definition.body, 'from public.household_members as member')
+        > pg_catalog.strpos(definition.body, 'from public.household_membership_state as state')
+      and pg_catalog.strpos(definition.body, 'for share;')
+        > pg_catalog.strpos(definition.body, 'from public.household_members as member')
+      and pg_catalog.strpos(definition.body, 'pg_catalog.pg_advisory_xact_lock')
+        > pg_catalog.strpos(definition.body, 'for share;')
+    from (
+      select pg_catalog.lower(pg_catalog.pg_get_functiondef(
+        'public.commit_purchase_capture(uuid,jsonb,uuid)'::regprocedure
+      )) as body
+    ) as definition
+  ),
+  'Q-SEC-RPC-DB-006: purchase capture holds the canonical lifecycle lock before final membership recheck'
+);
+
+select ok(
+  (
+    select
+      pg_catalog.strpos(definition.body, 'select distinct item.value') > 0
+      and pg_catalog.strpos(definition.body, 'order by gtin')
+        > pg_catalog.strpos(definition.body, 'select distinct item.value')
+      and pg_catalog.strpos(definition.body, 'pg_catalog.pg_advisory_xact_lock')
+        > pg_catalog.strpos(definition.body, 'order by gtin')
+      and pg_catalog.strpos(
+        pg_catalog.substr(
+          definition.body,
+          pg_catalog.strpos(definition.body, 'from public.products as product')
+        ),
+        'for update;'
+      ) > 0
+    from (
+      select pg_catalog.lower(pg_catalog.pg_get_functiondef(
+        'public.commit_purchase_capture(uuid,jsonb,uuid)'::regprocedure
+      )) as body
+    ) as definition
+  ),
+  'Q-SEC-RPC-DB-007: unique GTIN locks are sorted before each matching product row lock'
 );
 
 select * from finish();

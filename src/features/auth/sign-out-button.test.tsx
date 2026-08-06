@@ -45,7 +45,7 @@ import { SignOutButton } from "./sign-out-button";
 describe("SignOutButton", () => {
   beforeEach(() => {
     state.getOfflineDataStorageState.mockReturnValue("available");
-    state.getOutboxSummary.mockResolvedValue({ queued: 0, sending: 0, rejected: 0 });
+    state.getOutboxSummary.mockResolvedValue({ queued: 0, sending: 0, rejected: 0, uncertain: 0 });
     state.signOut.mockResolvedValue({ error: null });
     state.deleteSelection.mockResolvedValue(new Response(JSON.stringify({ cleared: true }), { status: 200 }));
     vi.stubGlobal("fetch", state.deleteSelection);
@@ -104,5 +104,20 @@ describe("SignOutButton", () => {
     expect(alert.textContent).toContain("Haushaltsauswahl konnte nicht sicher entfernt werden");
     expect(state.signOut).not.toHaveBeenCalled();
     expect(state.refresh).not.toHaveBeenCalled();
+  });
+
+  it("warns honestly and keeps the session when an uncertain purchase acknowledgement is not discarded", async () => {
+    const confirmation = vi.fn<(message: string) => boolean>(() => false);
+    vi.stubGlobal("confirm", confirmation);
+    state.getOutboxSummary.mockResolvedValue({ queued: 0, sending: 0, rejected: 0, uncertain: 1 });
+    render(<SignOutButton variant="settings" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Sicher abmelden/ }));
+
+    await waitFor(() => expect(confirmation).toHaveBeenCalledOnce());
+    expect(confirmation.mock.calls[0]?.[0]).toContain("bereits auf dem Server gebucht worden sein");
+    expect(confirmation.mock.calls[0]?.[0]).toContain("weder erneut senden noch als abgelehnt verwerfen");
+    expect(state.clearOfflineData).not.toHaveBeenCalled();
+    expect(state.signOut).not.toHaveBeenCalled();
   });
 });

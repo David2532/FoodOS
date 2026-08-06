@@ -88,7 +88,7 @@ export function FoodOsApp({
           )}
         </header>
 
-        <div className="view-scroll" key={view}>
+        <div className="view-scroll">
           {preview && (
             <aside className="preview-banner" aria-label="Preview-Modus">
               <p role="status">Preview-Modus · Beispieldaten werden nicht gespeichert</p>
@@ -98,7 +98,17 @@ export function FoodOsApp({
           {authenticated && <OutboxStatus activeHouseholdIds={activeHouseholdIds} />}
           {view === "today" && <TodayView onNavigate={setView} onOpenCatalog={openCatalog} snapshot={initialSnapshot} />}
           {view === "inventory" && <InventoryView householdId={initialSnapshot?.household.id} onScan={() => setView("scan")} onConsumed={initialSnapshot ? () => router.refresh() : undefined} items={initialSnapshot?.inventory} />}
-          {view === "scan" && <ScanView householdId={initialSnapshot?.household.id} initialCatalogQuery={scanCatalogQuery} onSaved={() => router.refresh()} onOpenInventory={() => setView("inventory")} preview={preview} />}
+          <div hidden={view !== "scan"}>
+            <ScanView
+              active={view === "scan"}
+              householdId={initialSnapshot?.household.id}
+              initialCatalogQuery={scanCatalogQuery}
+              onSaved={() => router.refresh()}
+              onOpenInventory={() => setView("inventory")}
+              onOpenToday={() => setView("today")}
+              preview={preview}
+            />
+          </div>
           {view === "plan" && <PlanView snapshot={initialSnapshot} onChanged={initialSnapshot ? () => router.refresh() : undefined} />}
           {view === "shopping" && <ShoppingView snapshot={initialSnapshot} onChanged={initialSnapshot ? () => router.refresh() : undefined} />}
           {view === "settings" && authenticated && initialSnapshot && <AccountSettingsView accountEmail={accountEmail} billingLabAvailable={billingLabAvailable} initialPrivacyChoices={initialPrivacyChoices} snapshot={initialSnapshot} onDataChanged={() => router.refresh()} onClose={() => setView("today")} />}

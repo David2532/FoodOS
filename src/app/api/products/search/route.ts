@@ -6,6 +6,7 @@ import { searchOpenFoodFacts } from "@/lib/open-food-facts-search";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { allowRequestInWindow, type RequestWindow } from "@/domain/request-rate-limit";
 
 const catalogNutritionNumber = z.coerce.number().finite().nonnegative();
 const nutritionPer100gSchema = z.object({
@@ -46,19 +47,8 @@ const globalCatalogRowSchema = z.object({
   image_license: z.string().nullable()
 });
 
-const searchWindows = new Map<string, { startedAt: number; count: number }>();
+const searchWindows = new Map<string, RequestWindow>();
 const PAGE_SIZE = 12;
-
-function allowSearch(key: string, now = Date.now()): boolean {
-  const current = searchWindows.get(key);
-  if (!current || now - current.startedAt >= 60_000) {
-    searchWindows.set(key, { startedAt: now, count: 1 });
-    return true;
-  }
-  if (current.count >= 8) return false;
-  current.count += 1;
-  return true;
-}
 
 function nutritionSummary(value: z.infer<typeof nutritionPer100gSchema>): CatalogSearchItem["nutrition"] {
   return {
@@ -147,7 +137,7 @@ export async function GET(request: Request) {
   }
 
   if (isPublicCatalogPreviewRequest(request.url)) {
-    if (!allowSearch("public-preview")) {
+    if (!allowRequestInWindow(searchWindows, "public-preview", 7)) {
       return NextResponse.json({ error: "Zu viele Katalogsuchen. Warte bitte eine Minute." }, {
         status: 429,
         headers: { "Retry-After": "60", "Cache-Control": "no-store" }
@@ -189,7 +179,7 @@ export async function GET(request: Request) {
   }
 
   const rateKey = userResult?.data.user?.id ?? "local-preview";
-  if (!allowSearch(rateKey)) {
+  if (!allowRequestInWindow(searchWindows, rateKey, 30)) {
     return NextResponse.json({ error: "Zu viele Katalogsuchen. Warte bitte eine Minute." }, {
       status: 429,
       headers: { "Retry-After": "60", "Cache-Control": "no-store" }

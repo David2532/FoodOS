@@ -162,22 +162,20 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
     });
   });
   await page.getByRole("button", { name: "Scan", exact: true }).click();
+  await page.getByLabel("Lagerort für kommende Scans").selectOption("pantry");
   await page.getByPlaceholder("EAN / UPC / GS1 eingeben").fill("3017624010701");
   await page.getByRole("button", { name: "Prüfen" }).click();
-  await expect(page.getByRole("button", { name: /Charge zum Vorrat hinzufügen/ })).toBeVisible();
-  await expect(page.getByRole("img", { name: "Nutella E2E-Testprodukt" })).toHaveAttribute("src", /front_de\.1\.400\.jpg/);
-  await page.getByLabel("MHD").check();
-  await page.getByLabel("Mindestens haltbar bis").fill("2027-06-30");
-  await page.getByLabel("Menge").fill("450");
-  await page.getByLabel("Einheit").selectOption("g");
-  await page.getByLabel("Lagerort").selectOption("fridge");
-  await page.getByLabel("Charge · optional").fill("LOT-42");
+  const capturedPurchaseItem = page.locator(".capture-list li").filter({ hasText: "Nutella E2E-Testprodukt" });
+  await expect(capturedPurchaseItem).toBeVisible();
+  await expect(capturedPurchaseItem.locator("img")).toHaveAttribute("src", /front_de\.1\.400\.jpg/);
+  await expect(page.getByLabel("Menge")).toHaveCount(0);
+  await page.getByRole("button", { name: "Fertig" }).click();
+  await expect(page.getByText(/Keine zusätzlichen Formulare/)).toBeVisible();
 
   await page.context().setOffline(true);
   await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(false);
-  await page.getByRole("button", { name: /Charge zum Vorrat hinzufügen/ }).click();
-  await expect(page.getByText(/auf diesem Gerät verschlüsselt gespeichert/i)).toBeVisible();
-  await expect(page.getByText("450 g · Kühlschrank · MHD 30.6.2027 · Charge LOT-42")).toBeVisible();
+  await page.getByRole("button", { name: /Einkauf übernehmen/ }).click();
+  await expect(page.getByText("Auf diesem Gerät gespeichert")).toBeVisible();
   await expect(page.getByText(/Offline · auf diesem Gerät gespeichert/)).toBeVisible();
   const persistedOutbox = await page.evaluate(async () => {
     const request = indexedDB.open("foodos-device-v1");
@@ -213,23 +211,19 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
   await page.context().setOffline(false);
   await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(true);
   await expect(page.getByText(/Offline · auf diesem Gerät gespeichert/)).not.toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText("Vom Server bestätigt")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/1 Packung im Vorrat/)).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Vorrat ansehen" }).click();
   const persistedBatch = page.getByRole("button", { name: /Nutella E2E-Testprodukt/ });
   await expect(persistedBatch).toBeVisible();
-  await expect(persistedBatch).toContainText("FoodOS Testquelle · 450 g · Charge LOT-42");
-  await expect(persistedBatch).toContainText("Kühlschrank");
-  await expect(persistedBatch).toContainText("MHD");
-  await expect(persistedBatch).toContainText("30.06.");
+  await expect(persistedBatch).toContainText("FoodOS Testquelle · 1 Stück");
+  await expect(persistedBatch).toContainText("Vorrat");
   await expect(persistedBatch.locator("img")).toHaveAttribute("src", /front_de\.1\.400\.jpg/);
 
   await page.reload();
   await page.getByRole("button", { name: "Vorrat", exact: true }).click();
   const reloadedBatch = page.getByRole("button", { name: /Nutella E2E-Testprodukt/ });
-  await expect(reloadedBatch).toContainText("FoodOS Testquelle · 450 g · Charge LOT-42");
-  await expect(reloadedBatch).toContainText("Kühlschrank");
-  await expect(reloadedBatch).toContainText("MHD");
-  await expect(reloadedBatch).toContainText("30.06.");
+  await expect(reloadedBatch).toContainText("FoodOS Testquelle · 1 Stück");
+  await expect(reloadedBatch).toContainText("Vorrat");
   await expect(reloadedBatch.locator("img")).toHaveAttribute("src", /front_de\.1\.400\.jpg/);
 
   const exportResponse = await page.request.get("/api/account/export");
@@ -242,12 +236,12 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
   expect(exportPayload.data.households).toHaveLength(1);
   expect(exportPayload.data.inventoryBatches).toHaveLength(1);
   expect(exportPayload.data.inventoryBatches[0]).toEqual(expect.objectContaining({
-    initial_amount: 450,
-    remaining_amount: 450,
-    unit: "g",
-    location: "fridge",
-    best_before_date: "2027-06-30",
-    lot_number: "LOT-42"
+    initial_amount: 1,
+    remaining_amount: 1,
+    unit: "piece",
+    location: "pantry",
+    best_before_date: null,
+    lot_number: null
   }));
   expect(exportPayload.data.products[0].name).toMatch(/Nutella/i);
   expect(exportPayload.data.privacyChoiceEvents).toHaveLength(3);
