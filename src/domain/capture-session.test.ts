@@ -9,6 +9,7 @@ import {
   captureNeedsReviewCard,
   CAPTURE_LIMIT_MESSAGE,
   captureUnitCount,
+  confirmSuggestedBestBefore,
   confirmCaptureException,
   resolveCaptureIdentity,
   updateCaptureGs1,
@@ -107,6 +108,61 @@ describe("continuous capture session", () => {
     entries = updateCaptureGs1(entries, entries[0]!.itemMutationId, { ...entries[0]!.gs1!, bestBeforeDate: "" });
     expect(entries[0]?.gs1?.bestBeforeDate).toBeUndefined();
     expect(entries[0]?.gs1DateEdited).toBe(true);
+  });
+
+  it("turns a reviewed suggestion into a manually confirmed package MHD without creating a use-by date", () => {
+    let entries = addKnownCapture([], product, null, "11111111-1111-4111-8111-111111111111", "fridge");
+    entries = confirmSuggestedBestBefore(entries, entries[0]!.itemMutationId, "2026-08-14");
+    expect(entries[0]).toMatchObject({
+      gs1: { gtin: product.barcode, bestBeforeDate: "2026-08-14" },
+      gs1DateEdited: true,
+      confirmations: { gs1: true }
+    });
+    expect(entries[0]?.gs1?.useByDate).toBeUndefined();
+    expect(captureExceptions(entries[0]!)).toEqual([]);
+  });
+
+  it("refuses invalid suggestions and never overwrites a confirmed package date", () => {
+    const useByEntries = addKnownCapture([], product, { gtin: product.barcode, useByDate: "2026-08-09" }, "11111111-1111-4111-8111-111111111111", "fridge");
+    expect(confirmSuggestedBestBefore(useByEntries, useByEntries[0]!.itemMutationId, "2026-02-30")).toBe(useByEntries);
+    expect(confirmSuggestedBestBefore(useByEntries, useByEntries[0]!.itemMutationId, "2026-08-14")).toBe(useByEntries);
+
+    const bestBeforeEntries = addKnownCapture([], product, { gtin: product.barcode, bestBeforeDate: "2026-08-20" }, "22222222-2222-4222-8222-222222222222", "fridge");
+    expect(confirmSuggestedBestBefore(bestBeforeEntries, bestBeforeEntries[0]!.itemMutationId, "2026-08-14")).toBe(bestBeforeEntries);
+  });
+
+  it("keeps unreviewed lot facts open when confirming only the package MHD", () => {
+    let entries = addKnownCapture([], product, { gtin: product.barcode, lotNumber: "LOT-42" }, "11111111-1111-4111-8111-111111111111", "fridge");
+    entries = confirmSuggestedBestBefore(entries, entries[0]!.itemMutationId, "2026-08-14");
+    expect(entries[0]).toMatchObject({
+      gs1: { bestBeforeDate: "2026-08-14", lotNumber: "LOT-42" },
+      confirmations: { gs1: false }
+    });
+    expect(captureExceptions(entries[0]!)).toContain("gs1");
+  });
+
+  it("splits an aggregated quantity so only one checked package receives the MHD", () => {
+    let entries = addKnownCapture([], product, null, "11111111-1111-4111-8111-111111111111", "fridge");
+    entries = addKnownCapture(entries, product, null, "22222222-2222-4222-8222-222222222222", "fridge");
+    const unchanged = entries;
+    expect(confirmSuggestedBestBefore(entries, entries[0]!.itemMutationId, "2026-08-14")).toBe(unchanged);
+    expect(confirmSuggestedBestBefore(entries, entries[0]!.itemMutationId, "2026-08-14", entries[0]!.itemMutationId)).toBe(unchanged);
+
+    entries = confirmSuggestedBestBefore(entries, entries[0]!.itemMutationId, "2026-08-14", "33333333-3333-4333-8333-333333333333");
+    expect(entries).toHaveLength(2);
+    expect(captureUnitCount(entries)).toBe(2);
+    expect(entries[0]).toMatchObject({
+      itemMutationId: "11111111-1111-4111-8111-111111111111",
+      quantity: 1,
+      gs1: { bestBeforeDate: "2026-08-14" },
+      confirmations: { gs1: true }
+    });
+    expect(entries[1]).toMatchObject({
+      itemMutationId: "33333333-3333-4333-8333-333333333333",
+      quantity: 1,
+      gs1: null,
+      confirmations: { gs1: true }
+    });
   });
 
   it("preserves a known identity when an edited unresolved GS1 row collides", () => {

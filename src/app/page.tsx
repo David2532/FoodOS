@@ -12,6 +12,7 @@ import { redirect } from "next/navigation";
 import { isBillingLabEnvironment } from "@/domain/entitlements";
 import { configuredApplicationOrigin } from "@/domain/request-origin";
 import { HOUSEHOLD_SELECTION_COOKIE } from "@/domain/household-selection";
+import { calendarDateInTimeZone } from "@/domain/expiry-suggestion";
 import { cookies } from "next/headers";
 
 // Authentication depends on request cookies and runtime deployment configuration.
@@ -26,10 +27,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ a
     redirect(`/auth/confirm?code=${encodeURIComponent(params.code)}`);
   }
   const demoEnabled = process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEMO_MODE_ENABLED === "true";
+  const today = calendarDateInTimeZone();
   const billingLabAvailable = isBillingLabEnvironment(process.env);
   const supabaseConfigured = isSupabaseConfigured();
-  if (demoEnabled && params.demo === "1") return <FoodOsApp preview authEntryAvailable={supabaseConfigured} billingLabAvailable={billingLabAvailable} />;
-  if (!supabaseConfigured) return <FoodOsApp preview billingLabAvailable={billingLabAvailable} />;
+  if (demoEnabled && params.demo === "1") return <FoodOsApp preview today={today} authEntryAvailable={supabaseConfigured} billingLabAvailable={billingLabAvailable} />;
+  if (!supabaseConfigured) return <FoodOsApp preview today={today} billingLabAvailable={billingLabAvailable} />;
 
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.auth.getClaims();
@@ -58,5 +60,5 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ a
     return <AuthFrame showSignOut eyebrow="Datenzugriff" title="FoodOS konnte nicht geladen werden" description={app.message}><p className="auth-message error" role="alert">Versuche es erneut. Bleibt der Fehler bestehen, nutze die sichere Referenz FOS-LOAD-PRIVATE.</p></AuthFrame>;
   }
 
-  return <FoodOsApp authenticated billingLabAvailable={billingLabAvailable} accountEmail={typeof data.claims.email === "string" ? data.claims.email : undefined} initialPrivacyChoices={privacy.choices} initialSnapshot={app.snapshot} />;
+  return <FoodOsApp authenticated today={app.snapshot.today.date} billingLabAvailable={billingLabAvailable} accountEmail={typeof data.claims.email === "string" ? data.claims.email : undefined} initialPrivacyChoices={privacy.choices} initialSnapshot={app.snapshot} />;
 }

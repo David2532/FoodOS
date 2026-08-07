@@ -967,6 +967,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .capture-session-location small { color: var(--lime); font-size: 9px; font-weight: 820; letter-spacing: .14em; }
 .capture-session-location strong { font-size: 13px; }
 .capture-session-location select, .capture-review-location select { width: 100%; min-height: 46px; border: 1px solid var(--line); border-radius: 13px; padding: 0 34px 0 11px; color: var(--ink); background: var(--field-background); font: inherit; font-size: 11px; }
+.capture-session-purchase-date { min-height: 66px; border: 1px solid var(--line); border-radius: 18px; padding: 10px 12px 10px 14px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(170px, 44%); gap: 5px 12px; align-items: center; background: var(--card-background); }
+.capture-session-purchase-date > span { display: grid; gap: 3px; }
+.capture-session-purchase-date > span small { color: var(--lime); font-size: 9px; font-weight: 820; letter-spacing: .14em; }
+.capture-session-purchase-date strong { font-size: 13px; }
+.capture-session-purchase-date input { width: 100%; min-height: 46px; border: 1px solid var(--line); border-radius: 13px; padding: 0 11px; color: var(--ink); background: var(--field-background); font: inherit; font-size: 11px; }
+.capture-session-purchase-date > small { grid-column: 1 / -1; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .capture-scanner { min-height: 260px; color: #f5f8f3; }
 .capture-scanner .scanner-empty h2 { color: #f5f8f3; }
 .capture-scanner .scanner-empty p { color: #b6c4ba; }
@@ -991,8 +997,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .capture-item-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .capture-item-copy small { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .capture-item-copy > span { width: fit-content; margin-top: 2px; display: inline-flex; align-items: center; gap: 4px; color: var(--warm); font-size: 9px; font-weight: 760; }
-.capture-quantity { min-height: 44px; border: 1px solid var(--line); border-radius: 13px; display: grid; grid-template-columns: 42px 30px 42px; align-items: center; overflow: hidden; background: var(--field-background); }
-.capture-quantity button { width: 42px; height: 44px; border: 0; display: grid; place-items: center; color: var(--ink); background: transparent; cursor: pointer; }
+.capture-item-copy > .capture-mhd-hint { color: var(--lime); }
+.capture-quantity { min-height: 48px; border: 1px solid var(--line); border-radius: 13px; display: grid; grid-template-columns: 48px 30px 48px; align-items: center; overflow: hidden; background: var(--field-background); }
+.capture-quantity button { width: 48px; height: 48px; border: 0; display: grid; place-items: center; color: var(--ink); background: transparent; cursor: pointer; }
 .capture-quantity button:hover { background: color-mix(in srgb, var(--lime) 10%, transparent); }
 .capture-quantity output { text-align: center; font-size: 12px; font-weight: 820; font-variant-numeric: tabular-nums; }
 .capture-review { display: grid; gap: 13px; }
@@ -1000,6 +1007,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .capture-review-heading h2 { margin: 4px 0 6px; font-size: clamp(23px, 6vw, 32px); letter-spacing: -.05em; }
 .capture-review-heading > span { color: var(--muted-2); font-size: 12px; line-height: 1.5; }
 .capture-exception-card { border: 1px solid color-mix(in srgb, var(--warm) 42%, var(--line)); border-radius: 19px; padding: 14px; display: grid; gap: 14px; background: var(--warm-background); }
+.capture-exception-card.is-suggestion { border-color: color-mix(in srgb, var(--lime) 42%, var(--line)); background: var(--success-background); }
 .capture-exception-card > header { min-width: 0; display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
 .capture-exception-card > header > div { min-width: 0; display: grid; gap: 3px; }
 .capture-exception-card > header strong { overflow-wrap: anywhere; font-size: 12px; }
@@ -1010,13 +1018,21 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .capture-identity-form label, .capture-confirmation > label:not(.capture-check) { display: grid; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 740; }
 .capture-identity-form input, .capture-confirmation input[type="date"], .capture-confirmation input:not([type]) { min-width: 0; min-height: 48px; border: 1px solid var(--line); border-radius: 13px; padding: 0 12px; color: var(--ink); background: var(--field-background); font: inherit; }
 .capture-confirmation legend { padding: 0 0 10px; color: var(--ink); font-size: 12px; font-weight: 800; }
+.capture-mhd-proposal { margin: 0; border: 0; border-top: 1px solid var(--line); padding: 13px 0 0; display: grid; gap: 10px; }
+.capture-mhd-proposal legend { padding: 0 0 10px; display: inline-flex; align-items: center; gap: 7px; color: color-mix(in srgb, var(--lime) 82%, var(--ink)); font-size: 12px; font-weight: 820; }
+.capture-mhd-proposal > p { margin: 0; border: 1px solid color-mix(in srgb, var(--lime) 25%, var(--line)); border-radius: 13px; padding: 11px 12px; display: grid; gap: 3px; background: var(--settings-action-background); }
+.capture-mhd-proposal > p strong { color: var(--ink); font-size: 17px; font-variant-numeric: tabular-nums; }
+.capture-mhd-proposal > p span, .capture-mhd-proposal > small { color: var(--muted-2); font-size: 10px; line-height: 1.45; }
+.capture-mhd-proposal > label { display: grid; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 740; }
+.capture-mhd-proposal input[type="date"] { min-width: 0; width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 13px; padding: 0 12px; color: var(--ink); background: var(--field-background); font: inherit; }
+.capture-mhd-proposal .secondary-button { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 .capture-check { min-height: 48px; border: 1px solid var(--line); border-radius: 13px; padding: 10px 11px; display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 9px; align-items: start; color: var(--muted-2); background: var(--settings-action-background); cursor: pointer; font-size: 11px; line-height: 1.4; }
 .capture-check input { width: 19px; height: 19px; margin: 0; accent-color: var(--lime); }
 .capture-check > span { display: grid; gap: 3px; }
 .capture-check strong { color: var(--ink); font-size: 11px; }
 .capture-check small { color: var(--muted); font-size: 9px; }
 .capture-check.is-risk { border-color: color-mix(in srgb, var(--warm) 55%, var(--line)); }
-.capture-review-actions { position: sticky; bottom: 0; z-index: 10; border: 1px solid var(--line); border-radius: 18px; padding: 10px; display: grid; gap: 8px; background: color-mix(in srgb, var(--shell-background) 96%, transparent); backdrop-filter: blur(16px); }
+.capture-review-actions { border: 1px solid var(--line); border-radius: 18px; padding: 10px; display: grid; gap: 8px; background: color-mix(in srgb, var(--shell-background) 96%, transparent); backdrop-filter: blur(16px); }
 .secondary-button.wide { width: 100%; }
 .text-button { min-height: 44px; border: 0; padding: 6px 9px; color: var(--muted-2); background: transparent; cursor: pointer; font: inherit; font-size: 10px; font-weight: 740; text-decoration: underline; text-underline-offset: 3px; }
 .capture-success { width: min(100%, 560px); min-height: 430px; margin: 5vh auto 0; border: 1px solid color-mix(in srgb, var(--lime) 48%, var(--line)); border-radius: 26px; padding: clamp(22px, 6vw, 38px); display: grid; align-content: center; justify-items: center; gap: 12px; background: var(--hero-background); box-shadow: var(--hero-shadow); text-align: center; }
@@ -1028,13 +1044,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 @media (max-width: 430px) {
   .capture-session-bar { top: -14px; grid-template-columns: minmax(0, 1fr) 42px 68px; gap: 7px; padding-left: 11px; }
   .capture-session-location { grid-template-columns: 1fr; gap: 8px; }
+  .capture-session-purchase-date { grid-template-columns: 1fr; gap: 8px; }
   .capture-list li { grid-template-columns: 44px minmax(0, 1fr); }
   .capture-list .capture-thumb { width: 44px; height: 44px; }
-  .capture-list .capture-quantity { grid-column: 1 / -1; width: 100%; grid-template-columns: 1fr 42px 1fr; }
+  .capture-list .capture-quantity { grid-column: 1 / -1; width: 100%; grid-template-columns: 1fr 48px 1fr; }
   .capture-list .capture-quantity button { width: 100%; }
   .capture-exception-card > header { grid-template-columns: 44px minmax(0, 1fr); }
   .capture-exception-card > header .capture-thumb { width: 44px; height: 44px; }
-  .capture-exception-card > header .capture-quantity { grid-column: 1 / -1; width: 100%; grid-template-columns: 1fr 42px 1fr; }
+  .capture-exception-card > header .capture-quantity { grid-column: 1 / -1; width: 100%; grid-template-columns: 1fr 48px 1fr; }
   .capture-exception-card > header .capture-quantity button { width: 100%; }
   .capture-scanner { min-height: 245px; }
 }

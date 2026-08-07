@@ -38,6 +38,7 @@ export function FoodOsApp({
   authEntryAvailable = false,
   billingLabAvailable = false,
   accountEmail,
+  today,
   initialPrivacyChoices,
   initialSnapshot
 }: {
@@ -46,6 +47,7 @@ export function FoodOsApp({
   authEntryAvailable?: boolean;
   billingLabAvailable?: boolean;
   accountEmail?: string;
+  today?: string;
   initialPrivacyChoices?: PrivacyChoices;
   initialSnapshot?: AppSnapshot;
 }) {
@@ -101,6 +103,7 @@ export function FoodOsApp({
           <div hidden={view !== "scan"}>
             <ScanView
               active={view === "scan"}
+              today={today ?? initialSnapshot?.today.date}
               householdId={initialSnapshot?.household.id}
               initialCatalogQuery={scanCatalogQuery}
               onSaved={() => router.refresh()}

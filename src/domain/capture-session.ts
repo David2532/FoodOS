@@ -1,5 +1,6 @@
 import type { Gs1Elements } from "./gs1";
 import type { Product } from "@/lib/types";
+import { isCalendarDate } from "./expiry-suggestion";
 
 export type CaptureUnresolvedReason = "not-found" | "unavailable";
 export type CaptureLocation = "fridge" | "freezer" | "pantry" | "drinks" | "other";
@@ -185,6 +186,55 @@ export function updateCaptureGs1(entries: CaptureEntry[], itemMutationId: string
   return entries
     .filter((entry) => entry.itemMutationId !== collision?.itemMutationId)
     .map((entry) => entry.itemMutationId === itemMutationId ? updated : entry);
+}
+
+export function confirmSuggestedBestBefore(
+  entries: CaptureEntry[],
+  itemMutationId: string,
+  date: string,
+  remainderItemMutationId?: string
+): CaptureEntry[] {
+  const target = entries.find((entry) => entry.itemMutationId === itemMutationId);
+  if (!target
+    || !isCalendarDate(date)
+    || target.gs1?.bestBeforeDate
+    || target.gs1?.useByDate
+    || target.gs1OriginalBestBeforeDate
+    || target.gs1OriginalUseByDate) return entries;
+
+  if (target.quantity > 1 && (
+    !remainderItemMutationId
+    || entries.length >= MAX_CAPTURE_ENTRIES
+    || entries.some((entry) => entry.itemMutationId === remainderItemMutationId)
+  )) return entries;
+
+  const gs1 = normalizeGs1Elements({
+    ...(target.gs1 ?? { gtin: target.barcode }),
+    bestBeforeDate: date,
+    useByDate: undefined
+  });
+  const hasOtherPackageFacts = Boolean(gs1.lotNumber || gs1.serialNumber);
+  const confirmedTarget: CaptureEntry = {
+    ...target,
+    signature: captureSignature(target.barcode, gs1, target.location),
+    gs1,
+    quantity: 1,
+    gs1DateEdited: true,
+    confirmations: {
+      ...target.confirmations,
+      gs1: hasOtherPackageFacts ? target.confirmations.gs1 : true
+    }
+  };
+
+  return entries.flatMap((entry) => {
+    if (entry !== target) return [entry];
+    if (target.quantity === 1) return [confirmedTarget];
+    return [confirmedTarget, {
+      ...target,
+      itemMutationId: remainderItemMutationId!,
+      quantity: target.quantity - 1
+    }];
+  });
 }
 
 export function updateCaptureLocation(entries: CaptureEntry[], itemMutationId: string, location: CaptureLocation | null): CaptureEntry[] {

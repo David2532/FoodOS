@@ -42,6 +42,16 @@ const productResponse = {
   }
 };
 
+const yogurtResponse = {
+  ...productResponse,
+  product: {
+    ...productResponse.product,
+    name: "Naturjoghurt 3,5 %",
+    brand: "FoodOS Molkerei",
+    categories: ["Milchprodukte", "Joghurts"]
+  }
+};
+
 async function scan(code = "3017624010701") {
   const location = screen.getByLabelText("Lagerort für kommende Scans") as HTMLSelectElement;
   if (!location.value) fireEvent.change(location, { target: { value: "pantry" } });
@@ -161,6 +171,142 @@ describe("continuous purchase capture", () => {
     await scan();
     expect(screen.getByText("2", { selector: "output" })).toBeTruthy();
     expect(screen.getAllByText(/Menge erh/).length).toBeGreaterThan(0);
+  });
+
+  it("uses the selected purchase day for a yogurt proposal and persists only a package-confirmed MHD", async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, status: 200, json: async () => yogurtResponse } as Response);
+    outbox.submitDurableRpc.mockResolvedValue({
+      status: "acked",
+      data: {
+        item_count: 1,
+        batch_ids: ["11111111-1111-4111-8111-111111111111"],
+        product_ids: ["22222222-2222-4222-8222-222222222222"],
+        idempotent_replay: false
+      }
+    });
+    render(<ScanView householdId="33333333-3333-4333-8333-333333333333" today="2026-08-07" />);
+    fireEvent.change(screen.getByLabelText("Einkaufstag"), { target: { value: "2026-08-05" } });
+    fireEvent.change(screen.getByLabelText("Lagerort für kommende Scans"), { target: { value: "fridge" } });
+    fireEvent.change(screen.getByPlaceholderText("EAN / UPC / GS1 eingeben"), { target: { value: "3017624010701" } });
+    fireEvent.click(screen.getByRole("button", { name: "Prüfen" }));
+
+    await screen.findByText("Naturjoghurt 3,5 %");
+    expect(screen.getByText(/MHD-Vorschlag 12\.08\.2026/)).toBeTruthy();
+    finish();
+    expect(screen.getByRole("heading", { name: "MHD-Vorschläge prüfen" })).toBeTruthy();
+    const suggestionInput = screen.getByLabelText("MHD-Vorschlag mit Packung abgleichen") as HTMLInputElement;
+    expect(suggestionInput.value).toBe("2026-08-12");
+    expect((screen.getByRole("button", { name: "Einkauf übernehmen" }) as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.change(suggestionInput, { target: { value: "2026-08-13" } });
+    fireEvent.click(screen.getByRole("button", { name: "Stimmt mit Packung überein" }));
+    const confirmation = screen.getByLabelText("Mit der Packung abgeglichen") as HTMLInputElement;
+    expect(confirmation.checked).toBe(true);
+    const confirmedDetails = screen.getByRole("group", { name: "Bestätigte Packungsangabe" });
+    await waitFor(() => expect(document.activeElement).toBe(confirmedDetails));
+    expect(screen.getByText("MHD 13.08.2026 für diese Packung übernommen.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Einkauf übernehmen" }));
+    await screen.findByText(/im Vorrat/);
+
+    const savedBatch = outbox.submitDurableRpc.mock.calls[0]?.[0].args.capture_items[0].batch_payload;
+    expect(savedBatch).toMatchObject({
+      best_before_date: "2026-08-13",
+      use_by_date: null,
+      date_source: "manual_confirmed"
+    });
+    expect(savedBatch).not.toHaveProperty("purchased_at");
+  });
+
+  it("splits an aggregated quantity so the checked MHD applies to one package only", async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, status: 200, json: async () => yogurtResponse } as Response);
+    outbox.submitDurableRpc.mockResolvedValue({
+      status: "acked",
+      data: {
+        item_count: 2,
+        batch_ids: ["11111111-1111-4111-8111-111111111111", "44444444-4444-4444-8444-444444444444"],
+        product_ids: ["22222222-2222-4222-8222-222222222222", "55555555-5555-4555-8555-555555555555"],
+        idempotent_replay: false
+      }
+    });
+    render(<ScanView householdId="33333333-3333-4333-8333-333333333333" today="2026-08-07" />);
+    fireEvent.change(screen.getByLabelText("Lagerort für kommende Scans"), { target: { value: "fridge" } });
+    const barcodeInput = screen.getByPlaceholderText("EAN / UPC / GS1 eingeben");
+    fireEvent.change(barcodeInput, { target: { value: "3017624010701" } });
+    fireEvent.click(screen.getByRole("button", { name: "Prüfen" }));
+    await screen.findByText("Naturjoghurt 3,5 %");
+    fireEvent.change(barcodeInput, { target: { value: "3017624010701" } });
+    fireEvent.click(screen.getByRole("button", { name: "Prüfen" }));
+    await waitFor(() => expect(screen.getByText("2", { selector: "output" })).toBeTruthy());
+    finish();
+
+    expect(screen.getByLabelText("MHD-Vorschlag für eine von 2 Packungen abgleichen")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Für 1 von 2 Packungen bestätigen" }));
+    expect(screen.getByText("MHD 14.08.2026 für eine Packung übernommen. 1 weitere Packung bleibt ohne MHD.")).toBeTruthy();
+    const confirmedDetails = screen.getByRole("group", { name: "Bestätigte Packungsangabe" });
+    await waitFor(() => expect(document.activeElement).toBe(confirmedDetails));
+    fireEvent.click(screen.getByRole("button", { name: "Einkauf übernehmen" }));
+    await screen.findByText(/im Vorrat/);
+
+    const savedItems = outbox.submitDurableRpc.mock.calls[0]?.[0].args.capture_items;
+    expect(savedItems).toHaveLength(2);
+    expect(savedItems[0].batch_payload).toMatchObject({
+      amount: 1,
+      best_before_date: "2026-08-14",
+      use_by_date: null,
+      date_source: "manual_confirmed"
+    });
+    expect(savedItems[1].batch_payload).toMatchObject({
+      amount: 1,
+      best_before_date: null,
+      use_by_date: null,
+      date_source: null
+    });
+    expect(savedItems[0].item_mutation_id).not.toBe(savedItems[1].item_mutation_id);
+  });
+
+  it("does not confirm an existing GS1 lot when only the proposed MHD was checked", async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, status: 200, json: async () => yogurtResponse } as Response);
+    render(<ScanView preview today="2026-08-07" />);
+    fireEvent.change(screen.getByLabelText("Lagerort für kommende Scans"), { target: { value: "fridge" } });
+    fireEvent.change(screen.getByPlaceholderText("EAN / UPC / GS1 eingeben"), { target: { value: "(01)04012345123456(10)LOT-42" } });
+    fireEvent.click(screen.getByRole("button", { name: "Prüfen" }));
+    await screen.findByText("Naturjoghurt 3,5 %");
+    finish();
+
+    fireEvent.click(screen.getByRole("button", { name: "Stimmt mit Packung überein" }));
+    expect(screen.getByRole("group", { name: "Packungsangaben prüfen" })).toBeTruthy();
+    expect((screen.getByLabelText("Mit der Packung abgeglichen") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByRole("button", { name: "Preview abschließen" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/Charge oder Seriennummer müssen noch separat geprüft werden/)).toBeTruthy();
+  });
+
+  it("keeps an ignored yogurt proposal out of the persisted expiry fields", async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, status: 200, json: async () => yogurtResponse } as Response);
+    outbox.submitDurableRpc.mockResolvedValue({
+      status: "acked",
+      data: {
+        item_count: 1,
+        batch_ids: ["11111111-1111-4111-8111-111111111111"],
+        product_ids: ["22222222-2222-4222-8222-222222222222"],
+        idempotent_replay: false
+      }
+    });
+    render(<ScanView householdId="33333333-3333-4333-8333-333333333333" today="2026-08-07" />);
+    fireEvent.change(screen.getByLabelText("Lagerort für kommende Scans"), { target: { value: "fridge" } });
+    fireEvent.change(screen.getByPlaceholderText("EAN / UPC / GS1 eingeben"), { target: { value: "3017624010701" } });
+    fireEvent.click(screen.getByRole("button", { name: "Prüfen" }));
+    await screen.findByText("Naturjoghurt 3,5 %");
+    finish();
+    fireEvent.click(screen.getByRole("button", { name: "Einkauf übernehmen" }));
+    await screen.findByText(/im Vorrat/);
+
+    const savedBatch = outbox.submitDurableRpc.mock.calls[0]?.[0].args.capture_items[0].batch_payload;
+    expect(savedBatch).toMatchObject({
+      best_before_date: null,
+      use_by_date: null,
+      date_source: null
+    });
+    expect(savedBatch).not.toHaveProperty("purchased_at");
   });
 
   it("keeps identical products in separate rows when the explicit session location changes", async () => {
