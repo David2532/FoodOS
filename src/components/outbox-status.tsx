@@ -9,6 +9,7 @@ import {
   getOfflineDataStorageState,
   getOutboxSummary,
   reconcileOfflineHouseholdAccess,
+  reconcileUncertainOperations,
   subscribeToOfflineDataStorageState,
   subscribeToOutbox,
   type OfflineDataStorageState,
@@ -24,9 +25,10 @@ export function OutboxStatus({ activeHouseholdIds }: { activeHouseholdIds?: stri
   const activeHouseholdKey = activeHouseholdIds?.join(",");
   const activeHouseholdKeyRef = useRef(activeHouseholdKey);
   const [summary, setSummary] = useState(empty);
-  const [storageState, setStorageState] = useState<OfflineDataStorageState>(() => getOfflineDataStorageState());
+  const [storageState, setStorageState] = useState<OfflineDataStorageState>("available");
   const [storageReadable, setStorageReadable] = useState(true);
-  const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
+  const [online, setOnline] = useState(true);
+  const [reconcilingUncertain, setReconcilingUncertain] = useState(false);
 
   useEffect(() => {
     routerRef.current = router;
@@ -58,7 +60,10 @@ export function OutboxStatus({ activeHouseholdIds }: { activeHouseholdIds?: stri
 
   useEffect(() => {
     const initialRefresh = window.setTimeout(() => void refresh(), 0);
-    const unsubscribe = subscribeToOutbox(() => void refresh());
+    const unsubscribe = subscribeToOutbox(() => {
+      if (navigator.onLine) routerRef.current.refresh();
+      void refresh();
+    });
     const unsubscribeOfflineDataState = subscribeToOfflineDataStorageState(() => void refresh());
     const handleOffline = () => setOnline(false);
     const handleOnline = () => {
@@ -96,6 +101,7 @@ export function OutboxStatus({ activeHouseholdIds }: { activeHouseholdIds?: stri
     window.addEventListener("offline", handleOffline);
     window.addEventListener("online", handleOnline);
     if (navigator.onLine) handleOnline();
+    else handleOffline();
     return () => {
       window.clearTimeout(initialRefresh);
       unsubscribe();
@@ -133,7 +139,20 @@ export function OutboxStatus({ activeHouseholdIds }: { activeHouseholdIds?: stri
   }
   const states: ReactNode[] = [];
   if (summary.uncertain > 0) states.push(
-    <div className="outbox-status rejected" role="alert" key="uncertain"><AlertTriangle size={16} /><span><strong>Serverbestätigung unklar</strong>{summary.uncertain} Einkauf{summary.uncertain === 1 ? "" : "svorgänge"} {summary.uncertain === 1 ? "kann" : "können"} bereits gebucht worden sein. FoodOS bewahrt {summary.uncertain === 1 ? "den verschlüsselten Vorgang" : "die verschlüsselten Vorgänge"} auf, sendet {summary.uncertain === 1 ? "ihn" : "sie"} nicht erneut und bietet kein Verwerfen an, bis der Bestand abgeglichen wurde.</span></div>
+    <div className="outbox-status rejected" role="alert" key="uncertain"><AlertTriangle size={16} /><span><strong>Serverbestätigung unklar</strong>{summary.uncertain} Änderung{summary.uncertain === 1 ? "" : "en"} {summary.uncertain === 1 ? "kann" : "können"} bereits gebucht worden sein. FoodOS sendet nichts automatisch erneut. Der sichere Abgleich prüft genau dieselben gespeicherten Änderungen und bucht bereits bestätigte Änderungen nicht doppelt.<button type="button" disabled={reconcilingUncertain} onClick={async () => {
+      if (reconcilingUncertain || !window.confirm("Unklare Änderungen jetzt sicher abgleichen? Bereits bestätigte Änderungen werden nicht doppelt gebucht.")) return;
+      setReconcilingUncertain(true);
+      try {
+        await reconcileUncertainOperations();
+        routerRef.current.refresh();
+      } catch {
+        // The refresh below keeps the unresolved count visible and exposes an
+        // unreadable local store instead of leaking an event-handler rejection.
+      } finally {
+        await refresh();
+        setReconcilingUncertain(false);
+      }
+    }}>{reconcilingUncertain ? "Unklare Änderungen werden abgeglichen …" : "Unklare Änderungen sicher abgleichen"}</button></span></div>
   );
   if (summary.rejected > 0) states.push(
     <div className="outbox-status rejected" role="alert" key="rejected"><AlertTriangle size={16} /><span><strong>Synchronisierung angehalten</strong>{summary.rejected} Änderung{summary.rejected === 1 ? "" : "en"} wurde{summary.rejected === 1 ? "" : "n"} abgelehnt. Die Serverdaten wurden nicht überschrieben.<button type="button" onClick={async () => {

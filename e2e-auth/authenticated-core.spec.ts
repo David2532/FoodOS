@@ -168,14 +168,14 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
   const capturedPurchaseItem = page.locator(".capture-list li").filter({ hasText: "Nutella E2E-Testprodukt" });
   await expect(capturedPurchaseItem).toBeVisible();
   await expect(capturedPurchaseItem.locator("img")).toHaveAttribute("src", /front_de\.1\.400\.jpg/);
-  await expect(page.getByLabel("Menge")).toHaveCount(0);
+  await expect(page.getByLabel("Menge", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Fertig" }).click();
   await expect(page.getByText(/Keine zusätzlichen Formulare/)).toBeVisible();
 
   await page.context().setOffline(true);
   await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(false);
   await page.getByRole("button", { name: /Einkauf übernehmen/ }).click();
-  await expect(page.getByText("Auf diesem Gerät gespeichert")).toBeVisible();
+  await expect(page.getByText("Auf diesem Gerät gespeichert", { exact: true })).toBeVisible();
   await expect(page.getByText(/Offline · auf diesem Gerät gespeichert/)).toBeVisible();
   const persistedOutbox = await page.evaluate(async () => {
     const request = indexedDB.open("foodos-device-v1");

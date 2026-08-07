@@ -34,4 +34,16 @@ export const consumeBatchResultSchema = z.object({
   idempotent_replay: z.boolean()
 });
 
+export const discardInputSchema = z.object({
+  batchId: z.uuid(),
+  amount: z.coerce.number().positive().max(1_000_000)
+}).strict();
+
+export const discardBatchResultSchema = z.object({
+  batch_id: z.uuid(),
+  remaining_amount: z.number().nonnegative(),
+  idempotent_replay: z.boolean()
+}).strict();
+
 export type InventoryBatchInput = z.infer<typeof inventoryBatchInputSchema>;
+export type DiscardInput = z.infer<typeof discardInputSchema>;

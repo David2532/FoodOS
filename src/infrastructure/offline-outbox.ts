@@ -9,6 +9,7 @@ import {
   type OfflineOperationKind,
   type OfflineOperationState
 } from "@/domain/offline-outbox";
+import { discardBatchResultSchema } from "@/contracts/inventory";
 import { purchaseCaptureResultSchema } from "@/contracts/purchase-capture";
 import { isHouseholdAccessDenied } from "@/domain/household-membership";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
@@ -120,26 +121,32 @@ type SuccessfulRpcAcknowledgement<T> =
     };
   };
 
-const acknowledgementUnknownMessage = "Die Serverbestätigung ist unvollständig. Der Einkauf kann bereits gebucht worden sein. FoodOS bewahrt den Vorgang verschlüsselt auf und sendet ihn nicht erneut, bis der Bestand abgeglichen wurde.";
+const acknowledgementUnknownMessage = "Die Serverbestätigung ist unvollständig. Die Änderung kann bereits gebucht worden sein. FoodOS bewahrt den Vorgang verschlüsselt auf und sendet ihn nicht erneut, bis der Bestand abgeglichen wurde.";
 
 export function resolveSuccessfulRpcAcknowledgement<T>(
   kind: OfflineOperationKind,
   data: unknown,
   requestArgs?: Record<string, unknown>
 ): SuccessfulRpcAcknowledgement<T> {
-  if (kind !== "inventory.commit_purchase") {
+  if (kind === "inventory.commit_purchase") {
+    const parsed = purchaseCaptureResultSchema.safeParse(data);
+    const captureItems = requestArgs?.capture_items;
+    if (
+      parsed.success
+      && Array.isArray(captureItems)
+      && captureItems.length >= 1
+      && captureItems.length <= 100
+      && parsed.data.item_count === captureItems.length
+    ) {
+      return { disposition: "delete", result: { status: "acked", data: parsed.data as T } };
+    }
+  } else if (kind === "inventory.discard_batch") {
+    const parsed = discardBatchResultSchema.safeParse(data);
+    if (parsed.success && parsed.data.batch_id === requestArgs?.target_batch) {
+      return { disposition: "delete", result: { status: "acked", data: parsed.data as T } };
+    }
+  } else {
     return { disposition: "delete", result: { status: "acked", data: data as T } };
-  }
-  const parsed = purchaseCaptureResultSchema.safeParse(data);
-  const captureItems = requestArgs?.capture_items;
-  if (
-    parsed.success
-    && Array.isArray(captureItems)
-    && captureItems.length >= 1
-    && captureItems.length <= 100
-    && parsed.data.item_count === captureItems.length
-  ) {
-    return { disposition: "delete", result: { status: "acked", data: parsed.data as T } };
   }
   return {
     disposition: "retain_uncertain",
@@ -165,9 +172,9 @@ function sanitizedOperationId(value: unknown): string | null {
 }
 
 /**
- * Creates the only outcome payload allowed across tabs. Purchase acknowledgements
- * are reduced to their strict result contract; rejection text is replaced with a
- * fixed safe message. Encrypted args, operation secrets and raw provider errors
+ * Creates the only outcome payload allowed across tabs. Acknowledgements are reduced
+ * to one of the strict allowlisted result contracts; rejection text is replaced with
+ * a fixed safe message. Encrypted args, operation secrets and raw provider errors
  * never enter the BroadcastChannel payload.
  */
 export function createOperationOutcomeBroadcastMessage<T>(
@@ -176,11 +183,17 @@ export function createOperationOutcomeBroadcastMessage<T>(
   const operationId = sanitizedOperationId(outcome.operationId);
   if (!operationId) return null;
   if (outcome.status === "acked") {
-    const acknowledgement = purchaseCaptureResultSchema.safeParse(outcome.data);
-    if (!acknowledgement.success) return null;
+    const purchaseAcknowledgement = purchaseCaptureResultSchema.safeParse(outcome.data);
+    const discardAcknowledgement = discardBatchResultSchema.safeParse(outcome.data);
+    const acknowledgement = purchaseAcknowledgement.success
+      ? purchaseAcknowledgement.data
+      : discardAcknowledgement.success
+        ? discardAcknowledgement.data
+        : null;
+    if (!acknowledgement) return null;
     return {
       type: "operation-outcome",
-      outcome: { operationId, status: "acked", data: acknowledgement.data }
+      outcome: { operationId, status: "acked", data: acknowledgement }
     };
   }
   const safeMessage = Object.prototype.hasOwnProperty.call(sanitizedRejectionMessages, outcome.reason)
@@ -240,6 +253,23 @@ export function isOperationEligibleForAutomaticSend(
 
 export function isOperationUserDiscardable(operation: Pick<StoredOperation, "state">): boolean {
   return operation.state === "REJECTED";
+}
+
+export function isRecoverableAal2Failure(message: string | undefined): boolean {
+  const normalized = message?.trim().toUpperCase();
+  return normalized === "AAL2 REQUIRED" || normalized === "FOODOS_AAL2_REQUIRED";
+}
+
+export function operationAfterExplicitReconciliation<T extends OperationStateRecord>(operation: T): T | null {
+  if (operation.state !== "UNCERTAIN") return null;
+  return {
+    ...operation,
+    state: "QUEUED",
+    nextAttemptAt: 0,
+    safeError: "user_reconciliation",
+    claimId: undefined,
+    claimExpiresAt: undefined
+  };
 }
 
 function requestValue<T>(request: IDBRequest<T>): Promise<T> {
@@ -612,7 +642,8 @@ type ClaimSettlement =
 async function settleClaimedOperation(
   db: IDBDatabase,
   claimed: StoredOperation,
-  settlement: ClaimSettlement
+  settlement: ClaimSettlement,
+  notifyChange = true
 ): Promise<boolean> {
   const transaction = db.transaction(OPERATIONS, "readwrite");
   const store = transaction.objectStore(OPERATIONS);
@@ -636,8 +667,49 @@ async function settleClaimedOperation(
     settled = true;
   };
   await transactionDone(transaction);
-  if (settled) emitChange();
+  if (settled && notifyChange) emitChange();
   return settled;
+}
+
+async function rejectUnreadableOperationBeforeClaim(db: IDBDatabase, operationId: string): Promise<boolean> {
+  const transaction = db.transaction(OPERATIONS, "readwrite");
+  const store = transaction.objectStore(OPERATIONS);
+  let rejected = false;
+  const request = store.get(operationId);
+  request.onsuccess = () => {
+    const current = request.result as StoredOperation | undefined;
+    if (!current || current.state !== "QUEUED") return;
+    store.put({
+      ...current,
+      state: "REJECTED",
+      nextAttemptAt: 0,
+      safeError: "encrypted_payload_unreadable",
+      claimId: undefined,
+      claimExpiresAt: undefined
+    });
+    rejected = true;
+  };
+  await transactionDone(transaction);
+  if (rejected) emitChange();
+  return rejected;
+}
+
+async function requeueUncertainOperation(db: IDBDatabase, operationId: string): Promise<boolean> {
+  const transaction = db.transaction(OPERATIONS, "readwrite");
+  const store = transaction.objectStore(OPERATIONS);
+  let requeued = false;
+  const request = store.get(operationId);
+  request.onsuccess = () => {
+    const current = request.result as StoredOperation | undefined;
+    if (!current) return;
+    const next = operationAfterExplicitReconciliation(current);
+    if (!next) return;
+    store.put(next);
+    requeued = true;
+  };
+  await transactionDone(transaction);
+  if (requeued) emitChange();
+  return requeued;
 }
 
 function durableOperationStatus(operation: StoredOperation | undefined): DurableOperationStatus {
@@ -757,6 +829,32 @@ async function attemptOperationSend<T>(
   operationId: string,
   client: SupabaseClient
 ): Promise<DurableMutationResult<T>> {
+  const candidate = await storedOperation(db, operationId);
+  if (!candidate) return acknowledgementUnknownResult<T>();
+  let secret: OperationSecret;
+  try {
+    // Decrypt before claiming. A corrupt local payload cannot possibly have reached
+    // the server and must be rejected as a local precondition, never as UNCERTAIN.
+    secret = await decrypt(db, candidate);
+  } catch {
+    const rejected = await rejectUnreadableOperationBeforeClaim(db, operationId);
+    if (!rejected) return resultForCurrentOperation<T>(db, operationId);
+    const result = {
+      status: "rejected",
+      message: "Die verschlüsselte lokale Änderung kann nicht sicher gelesen und wurde nicht gesendet.",
+      reason: "precondition"
+    } as const;
+    emitOperationOutcome({ operationId, ...result });
+    return result;
+  }
+  // Authenticate before claiming. If assurance was downgraded while this write was
+  // queued, no RPC has been attempted and the operation must remain recoverable.
+  let actorId: string;
+  try {
+    actorId = await authenticatedActor(client);
+  } catch {
+    return { status: "queued" };
+  }
   const claim = await claimOperationForSend(db, operationId);
   if (claim.status === "busy" || claim.status === "not_due") return { status: "queued" };
   if (claim.status === "rejected") {
@@ -764,7 +862,7 @@ async function attemptOperationSend<T>(
   }
   if (claim.status !== "claimed") return acknowledgementUnknownResult<T>();
   try {
-    return await sendClaimedOperation<T>(db, claim.operation, client);
+    return await sendClaimedOperation<T>(db, claim.operation, client, actorId, secret);
   } catch {
     const settled = await settleClaimedOperation(db, claim.operation, {
       action: "retain",
@@ -780,8 +878,13 @@ async function attemptOperationSend<T>(
   }
 }
 
-async function sendClaimedOperation<T>(db: IDBDatabase, claimed: StoredOperation, client: SupabaseClient): Promise<DurableMutationResult<T>> {
-  const secret = await decrypt(db, claimed);
+async function sendClaimedOperation<T>(
+  db: IDBDatabase,
+  claimed: StoredOperation,
+  client: SupabaseClient,
+  actorId: string,
+  secret: OperationSecret
+): Promise<DurableMutationResult<T>> {
   const operation = claimed;
   if (!isAllowedOfflineRpc(claimed.kind, secret.rpc)) {
     const settled = await settleClaimedOperation(db, claimed, {
@@ -795,8 +898,7 @@ async function sendClaimedOperation<T>(db: IDBDatabase, claimed: StoredOperation
     emitOperationOutcome({ operationId: operation.id, ...result });
     return result;
   }
-  const actor = await authenticatedActor(client);
-  if (actor !== secret.actorId) {
+  if (actorId !== secret.actorId) {
     const settled = await settleClaimedOperation(db, claimed, {
       action: "retain",
       state: "REJECTED",
@@ -820,11 +922,27 @@ async function sendClaimedOperation<T>(db: IDBDatabase, claimed: StoredOperation
       });
       if (!settled) return resultForCurrentOperation<T>(db, claimed.id);
     } else {
-      const settled = await settleClaimedOperation(db, claimed, { action: "delete" });
+      // The strict ACK must cross tabs before the generic "change" message. If the
+      // deletion notification wins the race, a receiver can observe an absent
+      // record and incorrectly freeze the already-confirmed mutation as uncertain.
+      const settled = await settleClaimedOperation(db, claimed, { action: "delete" }, false);
       if (!settled) return resultForCurrentOperation<T>(db, claimed.id);
+      emitOperationOutcome({ operationId: operation.id, ...acknowledgement.result });
+      emitChange();
+      return acknowledgement.result;
     }
     emitOperationOutcome({ operationId: operation.id, ...acknowledgement.result });
     return acknowledgement.result;
+  }
+  if (isRecoverableAal2Failure(error.message)) {
+    const settled = await settleClaimedOperation(db, claimed, {
+      action: "retain",
+      state: "QUEUED",
+      nextAttemptAt: 0,
+      safeError: "aal2_required"
+    });
+    if (!settled) return resultForCurrentOperation<T>(db, claimed.id);
+    return { status: "queued" };
   }
   const accessDenialAction = await classifyHouseholdAccessDenial({
     providerMessage: error.message,
@@ -976,6 +1094,36 @@ export async function discardRejectedOperation(operationId: string): Promise<boo
     await transactionDone(transaction);
     if (discarded) emitChange();
     return discarded;
+  } finally {
+    db.close();
+  }
+}
+
+export async function reconcileUncertainOperation<T>(operationId: string): Promise<DurableMutationResult<T>> {
+  const db = await openDatabase();
+  try {
+    if (!await requeueUncertainOperation(db, operationId)) {
+      return resultForCurrentOperation<T>(db, operationId);
+    }
+    return await attemptOperationSend<T>(db, operationId, getSupabaseBrowserClient());
+  } finally {
+    db.close();
+  }
+}
+
+export async function reconcileUncertainOperations(): Promise<OutboxSummary> {
+  const db = await openDatabase();
+  try {
+    const client = getSupabaseBrowserClient();
+    const operationIds = (await allOperations(db))
+      .filter((operation) => operation.state === "UNCERTAIN")
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+      .map((operation) => operation.id);
+    for (const operationId of operationIds) {
+      if (!await requeueUncertainOperation(db, operationId)) continue;
+      await attemptOperationSend(db, operationId, client);
+    }
+    return summarizeOperations(await allOperations(db));
   } finally {
     db.close();
   }

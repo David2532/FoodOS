@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(126);
+select plan(141);
 
 select has_function(
   'public',
@@ -33,6 +33,12 @@ select has_function(
   'consume_inventory_batch_v2',
   array['uuid', 'numeric', 'uuid', 'boolean', 'boolean'],
   'safety-aware consumption RPC exists'
+);
+select has_function(
+  'public',
+  'discard_inventory_batch',
+  array['uuid', 'numeric', 'uuid'],
+  'atomic inventory disposal RPC exists'
 );
 select has_table('public', 'mutation_receipts', 'payload-bound mutation receipts exist');
 select has_table('public', 'privacy_choice_events', 'append-only privacy choice ledger exists');
@@ -697,6 +703,23 @@ select id::text as owner_batch from public.inventory_batches limit 1 \gset
 reset role;
 select set_config(
   'request.jwt.claims',
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal1","session_id":"aaaaaaaa-1111-4111-8111-111111111111"}',
+  true
+);
+set local role authenticated;
+select throws_ok(
+  format(
+    'select public.discard_inventory_batch(%L::uuid, 50, %L::uuid)',
+    :'owner_batch', 'd15ca000-0000-4000-8000-000000000010'
+  ),
+  '42501',
+  'AAL2 required',
+  'Q-INV-DISCARD-DB-001: AAL1 cannot dispose private household inventory'
+);
+
+reset role;
+select set_config(
+  'request.jwt.claims',
   '{"sub":"22222222-2222-4222-8222-222222222222","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-2222-4222-8222-222222222222"}',
   true
 );
@@ -710,6 +733,15 @@ select throws_ok(
   '42501',
   'Batch access denied',
   'a second user cannot consume another household batch'
+);
+select throws_ok(
+  format(
+    'select public.discard_inventory_batch(%L::uuid, 50, %L::uuid)',
+    :'owner_batch', 'd15ca000-0000-4000-8000-000000000011'
+  ),
+  '42501',
+  'Batch access denied',
+  'Q-INV-DISCARD-DB-002: an unrelated household cannot dispose the owner batch'
 );
 
 reset role;
@@ -770,6 +802,151 @@ select throws_ok(
   '23505',
   'Mutation ID payload conflict',
   'consumption rejects a reused mutation ID with a different amount'
+);
+
+select public.discard_inventory_batch(
+  :'owner_batch'::uuid,
+  50,
+  'd15ca000-0000-4000-8000-000000000001'::uuid
+) as first_discard_result \gset
+select ok(
+  (:'first_discard_result'::jsonb ->> 'batch_id')::uuid = :'owner_batch'::uuid
+    and (:'first_discard_result'::jsonb ->> 'remaining_amount')::numeric = 300
+    and (:'first_discard_result'::jsonb ->> 'idempotent_replay')::boolean is false
+    and (select remaining_amount = 300
+      from public.inventory_batches where id = :'owner_batch'::uuid),
+  'Q-INV-DISCARD-DB-003: first disposal atomically decrements the locked batch'
+);
+select ok(
+  exists (
+    select 1
+    from public.inventory_events
+    where batch_id = :'owner_batch'::uuid
+      and user_id = '11111111-1111-4111-8111-111111111111'::uuid
+      and event_type = 'discard'
+      and amount_delta = -50
+      and client_mutation_id = 'd15ca000-0000-4000-8000-000000000001'::uuid
+  )
+    and not exists (
+      select 1
+      from public.food_log_entries
+      where client_mutation_id = 'd15ca000-0000-4000-8000-000000000001'::uuid
+    ),
+  'Q-INV-DISCARD-DB-004: disposal appends one discard event and no food log'
+);
+select is(
+  (
+    public.discard_inventory_batch(
+      :'owner_batch'::uuid,
+      50,
+      'd15ca000-0000-4000-8000-000000000001'::uuid
+    ) ->> 'idempotent_replay'
+  )::boolean,
+  true,
+  'Q-INV-DISCARD-DB-005: an exact disposal retry returns the completed receipt'
+);
+select ok(
+  (select remaining_amount = 300
+    from public.inventory_batches where id = :'owner_batch'::uuid)
+    and (
+      select count(*) = 1
+      from public.inventory_events
+      where client_mutation_id = 'd15ca000-0000-4000-8000-000000000001'::uuid
+        and event_type = 'discard'
+    )
+    and not exists (
+      select 1
+      from public.food_log_entries
+      where client_mutation_id = 'd15ca000-0000-4000-8000-000000000001'::uuid
+    ),
+  'Q-INV-DISCARD-DB-006: an exact retry has no second stock, event, or nutrition effect'
+);
+select throws_ok(
+  format(
+    'select public.discard_inventory_batch(%L::uuid, 25, %L::uuid)',
+    :'owner_batch', 'd15ca000-0000-4000-8000-000000000001'
+  ),
+  '23505',
+  'Mutation ID payload conflict',
+  'Q-INV-DISCARD-DB-007: one disposal mutation ID cannot bind a different amount'
+);
+select throws_ok(
+  format(
+    'select public.discard_inventory_batch(%L::uuid, 301, %L::uuid)',
+    :'owner_batch', 'd15ca000-0000-4000-8000-000000000003'
+  ),
+  '23514',
+  'Insufficient inventory',
+  'Q-INV-DISCARD-DB-008: disposal cannot make tracked stock negative'
+);
+select throws_ok(
+  format(
+    'select public.discard_inventory_batch(%L::uuid, 0, %L::uuid)',
+    :'owner_batch', 'd15ca000-0000-4000-8000-000000000004'
+  ),
+  '22023',
+  'Invalid disposal request',
+  'Q-INV-DISCARD-DB-009: disposal amount must be positive'
+);
+select ok(
+  (select remaining_amount = 300
+    from public.inventory_batches where id = :'owner_batch'::uuid)
+    and not exists (
+      select 1
+      from public.inventory_events
+      where client_mutation_id in (
+        'd15ca000-0000-4000-8000-000000000003'::uuid,
+        'd15ca000-0000-4000-8000-000000000004'::uuid
+      )
+    )
+    and not exists (
+      select 1
+      from public.food_log_entries
+      where client_mutation_id in (
+        'd15ca000-0000-4000-8000-000000000003'::uuid,
+        'd15ca000-0000-4000-8000-000000000004'::uuid
+      )
+    )
+    and not exists (
+      select 1
+      from public.mutation_receipts
+      where mutation_id in (
+        'd15ca000-0000-4000-8000-000000000003'::uuid,
+        'd15ca000-0000-4000-8000-000000000004'::uuid
+      )
+    ),
+  'Q-INV-DISCARD-DB-010: rejected disposal leaves stock and every ledger unchanged'
+);
+
+select (public.add_inventory_batch(
+  :'owner_household'::uuid,
+  '{"barcode":"96385074","name":"Entsorgung Stück-Test","source":"manual","confidence":1,"retrievedAt":"2026-08-06T10:00:00Z"}'::jsonb,
+  '{"amount":3,"unit":"piece","location":"pantry"}'::jsonb,
+  'd15ca100-0000-4000-8000-000000000001'::uuid
+) ->> 'batch_id') as discard_piece_batch \gset
+select throws_ok(
+  format(
+    'select public.discard_inventory_batch(%L::uuid, 1.5, %L::uuid)',
+    :'discard_piece_batch', 'd15ca000-0000-4000-8000-000000000005'
+  ),
+  '22023',
+  'Piece disposal amount must be whole',
+  'Q-INV-DISCARD-DB-011: piece inventory rejects a fractional disposal'
+);
+select ok(
+  (select remaining_amount = 3
+    from public.inventory_batches where id = :'discard_piece_batch'::uuid)
+    and not exists (
+      select 1
+      from public.inventory_events
+      where client_mutation_id = 'd15ca000-0000-4000-8000-000000000005'::uuid
+    )
+    and not exists (
+      select 1
+      from public.mutation_receipts
+      where mutation_id = 'd15ca000-0000-4000-8000-000000000005'::uuid
+    ),
+  'Q-INV-DISCARD-DB-012: fractional piece rejection preserves batch and ledgers'
 );
 
 select (public.add_inventory_batch(
@@ -1692,6 +1869,112 @@ select ok(
         and product.package_unit = 'piece'
     ),
   'package count 999 is accepted once, replays safely, and keeps new packaging at one piece'
+);
+
+-- Turn the existing unrelated live-AAL2 user into a regular member and remove it
+-- through the lifecycle RPC. The retained tombstone must prevent a stale session
+-- from flushing a disposal while leaving every affected ledger byte unchanged.
+reset role;
+insert into public.household_members (household_id, user_id, role)
+values (
+  :'owner_household'::uuid,
+  '22222222-2222-4222-8222-222222222222'::uuid,
+  'member'
+);
+select revision::text as discard_removal_revision
+from public.household_membership_state
+where household_id = :'owner_household'::uuid \gset
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-1111-4111-8111-222222222222"}',
+  true
+);
+set local role authenticated;
+select public.remove_household_member(
+  :'owner_household'::uuid,
+  '22222222-2222-4222-8222-222222222222'::uuid,
+  :'discard_removal_revision'::bigint
+);
+
+reset role;
+select pg_catalog.md5(coalesce(
+  pg_catalog.jsonb_agg(pg_catalog.to_jsonb(batch) order by batch.id)::text,
+  '[]'
+)) as removed_member_inventory_before
+from public.inventory_batches as batch \gset
+select pg_catalog.md5(coalesce(
+  pg_catalog.jsonb_agg(pg_catalog.to_jsonb(event) order by event.id)::text,
+  '[]'
+)) as removed_member_events_before
+from public.inventory_events as event \gset
+select pg_catalog.md5(coalesce(
+  pg_catalog.jsonb_agg(
+    pg_catalog.to_jsonb(receipt) order by receipt.user_id, receipt.mutation_id
+  )::text,
+  '[]'
+)) as removed_member_receipts_before
+from public.mutation_receipts as receipt \gset
+select pg_catalog.md5(coalesce(
+  pg_catalog.jsonb_agg(pg_catalog.to_jsonb(food_log) order by food_log.id)::text,
+  '[]'
+)) as removed_member_food_logs_before
+from public.food_log_entries as food_log \gset
+
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-4222-8222-222222222222","role":"authenticated","aal":"aal2","session_id":"aaaaaaaa-2222-4222-8222-222222222222"}',
+  true
+);
+set local role authenticated;
+select throws_ok(
+  format(
+    'select public.discard_inventory_batch(%L::uuid, 1, %L::uuid)',
+    :'owner_batch', 'd15ca000-0000-4000-8000-000000000012'
+  ),
+  '42501',
+  'Batch access denied',
+  'Q-INV-DISCARD-DB-013: a removed member with live AAL2 cannot dispose former household stock'
+);
+
+reset role;
+select ok(
+  exists (
+    select 1
+    from public.household_members
+    where household_id = :'owner_household'::uuid
+      and user_id = '22222222-2222-4222-8222-222222222222'::uuid
+      and removed_at is not null
+  )
+    and pg_catalog.md5(coalesce((
+      select pg_catalog.jsonb_agg(pg_catalog.to_jsonb(batch) order by batch.id)::text
+      from public.inventory_batches as batch
+    ), '[]')) = :'removed_member_inventory_before'
+    and pg_catalog.md5(coalesce((
+      select pg_catalog.jsonb_agg(pg_catalog.to_jsonb(event) order by event.id)::text
+      from public.inventory_events as event
+    ), '[]')) = :'removed_member_events_before'
+    and pg_catalog.md5(coalesce((
+      select pg_catalog.jsonb_agg(
+        pg_catalog.to_jsonb(receipt) order by receipt.user_id, receipt.mutation_id
+      )::text
+      from public.mutation_receipts as receipt
+    ), '[]')) = :'removed_member_receipts_before'
+    and pg_catalog.md5(coalesce((
+      select pg_catalog.jsonb_agg(pg_catalog.to_jsonb(food_log) order by food_log.id)::text
+      from public.food_log_entries as food_log
+    ), '[]')) = :'removed_member_food_logs_before'
+    and not exists (
+      select 1
+      from public.inventory_events
+      where client_mutation_id = 'd15ca000-0000-4000-8000-000000000012'::uuid
+    )
+    and not exists (
+      select 1
+      from public.mutation_receipts
+      where user_id = '22222222-2222-4222-8222-222222222222'::uuid
+        and mutation_id = 'd15ca000-0000-4000-8000-000000000012'::uuid
+    ),
+  'Q-INV-DISCARD-DB-014: tombstone rejection preserves inventory, events, receipts, and food logs exactly'
 );
 
 reset role;

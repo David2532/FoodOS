@@ -505,6 +505,24 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .consume-card > h2 { margin: -6px 34px 0 0; font-size: 18px; }
 .consume-card > span { color: var(--muted-2); font-size: 11px; }
 .consume-close { position: absolute; top: 12px; right: 12px; width: 44px; height: 44px; border: 0; border-radius: 13px; display: grid; place-items: center; color: var(--muted-2); background: rgba(255,255,255,.04); cursor: pointer; }
+.consume-close:disabled, .inventory-row:disabled { cursor: wait; }
+.inventory-action-switch { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.inventory-action-switch button { min-width: 0; min-height: 48px; border: 1px solid var(--line); border-radius: 14px; padding: 8px 10px; display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--muted-2); background: var(--surface-2); cursor: pointer; font-size: 11px; font-weight: 760; }
+.inventory-action-switch button.selected { border-color: color-mix(in srgb, var(--lime) 58%, var(--line)); color: var(--ink); background: color-mix(in srgb, var(--lime) 12%, var(--surface-2)); }
+.inventory-action-switch button.selected.discard { border-color: color-mix(in srgb, var(--warm) 58%, var(--line)); background: color-mix(in srgb, var(--warm) 12%, var(--surface-2)); }
+.inventory-action-switch button:disabled { cursor: not-allowed; opacity: .58; }
+.discard-amount-actions { display: grid; gap: 6px; }
+.discard-amount-actions .secondary-button { width: 100%; min-height: 48px; }
+.discard-amount-actions > span { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.discard-button { width: 100%; min-height: 49px; border: 1px solid color-mix(in srgb, var(--warm) 56%, var(--line)); border-radius: 14px; padding: 0 17px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--danger-text); background: color-mix(in srgb, var(--warm) 14%, var(--surface-2)); cursor: pointer; font-size: 12px; font-weight: 780; }
+.discard-button:disabled { cursor: wait; opacity: .62; }
+.inventory-mutation-state { border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 9px; align-items: start; color: var(--blue); background: color-mix(in srgb, var(--blue) 7%, var(--surface)); }
+.inventory-mutation-state.queued { border-color: color-mix(in srgb, var(--blue) 32%, var(--line)); }
+.inventory-mutation-state.success { border-color: color-mix(in srgb, var(--lime) 32%, var(--line)); color: var(--lime); background: color-mix(in srgb, var(--lime) 7%, var(--surface)); }
+.inventory-mutation-state.uncertain { border-color: color-mix(in srgb, var(--warm) 35%, var(--line)); color: var(--warm); background: color-mix(in srgb, var(--warm) 8%, var(--surface)); }
+.inventory-mutation-state div { min-width: 0; display: grid; gap: 3px; }
+.inventory-mutation-state strong { color: var(--ink); font-size: 11px; }
+.inventory-mutation-state p { margin: 0; color: var(--muted-2); font-size: 10px; line-height: 1.45; }
 .consume-preview { border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: grid; gap: 4px; background: rgba(0,0,0,.12); }
 .consume-preview strong { color: var(--lime); font-size: 18px; }
 .consume-preview span, .consume-preview small { color: var(--muted-2); font-size: 10px; line-height: 1.45; }
@@ -519,7 +537,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .outbox-status.rejected { border-color: rgba(255,148,122,.28); color: var(--warm); background: rgba(255,148,122,.08); }
 .outbox-status span { display: grid; gap: 2px; color: var(--muted-2); font-size: 10px; line-height: 1.4; }
 .outbox-status strong { color: var(--ink); font-size: 11px; }
-.outbox-status button { justify-self: start; min-height: 32px; border: 1px solid currentColor; border-radius: 9px; margin-top: 5px; padding: 4px 8px; color: var(--warm); background: transparent; cursor: pointer; font-size: 9px; font-weight: 700; }
+.outbox-status button { justify-self: start; min-height: 44px; border: 1px solid currentColor; border-radius: 9px; margin-top: 5px; padding: 8px 11px; color: var(--warm); background: transparent; cursor: pointer; font-size: 10px; font-weight: 700; }
+.outbox-status button:disabled { cursor: wait; opacity: .62; }
 .account-actions { margin-left: auto; display: flex; gap: 7px; }
 .account-actions .icon-button { margin-left: 0; text-decoration: none; }
 

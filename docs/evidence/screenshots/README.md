@@ -31,3 +31,12 @@ manually on 2026-08-05 from the local development-only entitlement laboratory. T
 contain deterministic Free, Plus, Family and 14-day-trial simulations only. They are
 not evidence of a live payment, store integration, Vercel Preview access control or
 Production availability.
+
+`inventory-disposal-authenticated-desktop.png` and
+`inventory-disposal-authenticated-mobile.png` were captured on 2026-08-06 from the
+strictly local Auth/TOTP flow with a synthetic household, product and expired use-by
+batch. They document the disabled-consumption explanation, explicit disposal action,
+responsive layout and encrypted offline queue state. They contain no real account,
+household or product data and are not Production, native-device or usability-study
+evidence. Exact checks and limitations are recorded in
+[`INVENTORY_DISPOSAL_LOCAL_2026-08-06.md`](../INVENTORY_DISPOSAL_LOCAL_2026-08-06.md).
