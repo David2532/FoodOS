@@ -56,7 +56,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .bottom-nav { position: fixed; z-index: 30; bottom: 0; left: 50%; transform: translateX(-50%); width: min(100%, 520px); padding: 9px 10px calc(9px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(5, 1fr); backdrop-filter: blur(24px); background: rgba(8, 18, 13, .92); border-top: 1px solid var(--line); }
 .nav-item { min-height: 52px; border: 0; background: transparent; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center; padding: 6px 2px; color: var(--muted); font-size: 10px; font-weight: 650; cursor: pointer; }
 .nav-icon { width: 34px; height: 27px; border-radius: 10px; display: grid; place-items: center; transition: .2s ease; }
-.nav-item.active { color: var(--lime); }
+.nav-item.active { color: var(--nav-active); }
 .nav-item.active .nav-icon { background: rgba(183,243,106,.1); }
 .scan-nav .nav-icon { width: 44px; height: 42px; margin-top: -16px; border-radius: 15px; color: #0a160c; background: var(--lime); box-shadow: 0 10px 30px rgba(183,243,106,.18); }
 .scan-nav.active .nav-icon { background: #caff82; }
@@ -591,6 +591,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 :root {
   color-scheme: dark;
   --on-accent: #0b170d;
+  --nav-active: var(--lime);
   --canvas-accent: #163324;
   --shell-background: linear-gradient(180deg, rgba(7, 16, 12, .68), rgba(7, 16, 12, .96));
   --topbar-background: linear-gradient(180deg, rgba(7,16,12,.96), rgba(7,16,12,.72));
@@ -619,6 +620,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 :root[data-theme="light"] {
   color-scheme: light;
   --on-accent: #ffffff;
+  --nav-active: #477319;
   --ink: #15221a;
   --muted: #587064;
   --muted-2: #40564b;
@@ -661,6 +663,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   :root[data-theme="system"] {
     color-scheme: light;
     --on-accent: #ffffff;
+    --nav-active: #477319;
     --ink: #15221a;
     --muted: #587064;
     --muted-2: #40564b;
