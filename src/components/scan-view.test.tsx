@@ -428,18 +428,20 @@ describe("continuous purchase capture", () => {
     expect(screen.getAllByText("Rühls Bestes Whey").length).toBeGreaterThan(0);
     expect((screen.getByRole("button", { name: "Menge erhöhen" }) as HTMLButtonElement).disabled).toBe(true);
     expect(onSaved).not.toHaveBeenCalled();
-    expect(order.slice(0, 3)).toEqual(["outcome-listener", "outbox-listener", "durable-read"]);
+    await waitFor(() => expect(order.slice(0, 3)).toEqual(["outcome-listener", "outbox-listener", "durable-read"]));
     const operationId = outbox.submitDurableRpc.mock.calls[0]?.[0].operationId;
 
     await waitFor(() => expect(listener).toBeTypeOf("function"));
+    const acknowledge = listener;
+    if (!acknowledge) throw new Error("Expected the durable outcome listener to be registered.");
     const acknowledgement = {
       operationId,
       status: "acked",
       data: { item_count: 1, batch_ids: ["11111111-1111-4111-8111-111111111111"], product_ids: ["22222222-2222-4222-8222-222222222222"], idempotent_replay: false }
     };
     await act(async () => {
-      listener?.(acknowledgement);
-      listener?.(acknowledgement);
+      acknowledge(acknowledgement);
+      acknowledge(acknowledgement);
     });
     expect(await screen.findByText(/im Vorrat/)).toBeTruthy();
     expect(onSaved).toHaveBeenCalledOnce();
@@ -467,7 +469,13 @@ describe("continuous purchase capture", () => {
     fireEvent.click(screen.getByRole("button", { name: /Einkauf/ }));
     await screen.findByText("Auf diesem Gerät gespeichert");
 
-    await act(async () => outboxListener?.());
+    await waitFor(() => {
+      expect(outboxListener).toBeTypeOf("function");
+      expect(outbox.getDurableOperationStatus).toHaveBeenCalledTimes(1);
+    });
+    const notifyOutbox = outboxListener;
+    if (!notifyOutbox) throw new Error("Expected the durable outbox listener to be registered.");
+    await act(async () => notifyOutbox());
     await screen.findByText("Serverbestätigung unvollständig");
     expect(screen.queryByRole("button", { name: /Erneut sicher speichern|Einkauf übernehmen/ })).toBeNull();
     expect((screen.getByRole("button", { name: "Menge erhöhen" }) as HTMLButtonElement).disabled).toBe(true);
@@ -489,7 +497,13 @@ describe("continuous purchase capture", () => {
     fireEvent.click(screen.getByRole("button", { name: /Einkauf/ }));
     await screen.findByText("Auf diesem Gerät gespeichert");
 
-    await act(async () => outboxListener?.());
+    await waitFor(() => {
+      expect(outboxListener).toBeTypeOf("function");
+      expect(outbox.getDurableOperationStatus).toHaveBeenCalledTimes(1);
+    });
+    const notifyOutbox = outboxListener;
+    if (!notifyOutbox) throw new Error("Expected the durable outbox listener to be registered.");
+    await act(async () => notifyOutbox());
     await screen.findByText("Serverbestätigung unvollständig");
     expect(outbox.submitDurableRpc).toHaveBeenCalledOnce();
   });
