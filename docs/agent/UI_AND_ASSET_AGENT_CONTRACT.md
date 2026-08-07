@@ -16,7 +16,10 @@ The company roles below are executed through project-scoped Codex agents and ski
 | UX Flow Agent | `.codex/agents/ux_flow_designer.toml` + `$foodos-ui-flow-spec` |
 | UI System Agent | `.codex/agents/ui_system_architect.toml` |
 | frontend implementation | `.codex/agents/ui_implementer.toml` + `$foodos-ui-implementation` |
-| independent visual/accessibility verification | `.codex/agents/visual_verifier.toml` + `$foodos-visual-qa` |
+| independent interaction verification | `.codex/agents/interaction_verifier.toml` |
+| independent accessibility verification | `.codex/agents/accessibility_verifier.toml` |
+| independent visual verification | `.codex/agents/visual_verifier.toml` + `$foodos-visual-qa` |
+| UI quality charter, finding routing and retest | `$foodos-ui-quality-review` |
 | Asset Art Director | `.codex/agents/asset_art_director.toml` |
 | Image Generation Agent | `.codex/agents/image_concept_artist.toml` |
 | Vector Reconstruction / Asset Production | `.codex/agents/asset_producer.toml` + `$foodos-asset-production` |
@@ -77,6 +80,20 @@ Required output:
 Builds only the accepted slice. It owns responsive code, complete states and focused tests,
 but cannot independently approve visual or release quality.
 
+### Interaction Verifier
+
+Independently proves the accepted task in the real rendered application: authoritative
+outcome, state transitions, persistence/reload, navigation, correction, retry, offline,
+permission, conflict, console/network behavior and adjacent regression. It may record
+expert flow-conformance observations but cannot represent them as user research.
+
+### Accessibility Verifier
+
+Combines automation with manual keyboard, focus, names/roles/states, status announcement,
+zoom/text, reduced-motion, target and available assistive-technology checks. An automated
+scan alone cannot pass this lane. Native VoiceOver/TalkBack or target-size claims require
+the actual supported environment; missing evidence remains `NOT_RUN` or `BLOCKED`.
+
 ### Brand Direction
 
 Owner: CMO with CPO review. Defines visual territory, brand voice, logo direction, image
@@ -124,15 +141,16 @@ Responsibilities:
 - SVG and file-size validation;
 - `docs/brand/ASSET_MANIFEST.md` update.
 
-### Visual Verifier and Accessibility QA
+### Visual Verifier
 
-Independently verifies the exact commit in real target screens. It checks runtime,
-hierarchy, overflow, state completeness, keyboard/focus/screen reader, target sizes,
-contrast, text scaling, reduced motion, asset crop/weight and whether the visual treatment
-weakens the primary action.
+Independently verifies the exact commit in real target screens. It checks hierarchy,
+responsive/adaptive composition, overflow, tokens, visual state completeness, themes,
+contrast/reflow presentation, asset crop/weight and whether the visual treatment weakens
+the primary action. It does not override findings owned by interaction or accessibility
+verifiers.
 
-The verifier records PASS, FAIL, FLAKY, BLOCKED or NOT_RUN and does not silently modify the
-application under review.
+All verifiers record PASS, FAIL, FLAKY, BLOCKED or NOT_RUN and do not silently modify the
+application under review. Their workspace-write allowance is evidence-only by contract.
 
 ## Required pipelines
 
@@ -145,7 +163,11 @@ Product outcome
 -> CPO interaction decision
 -> ui_system_architect
 -> ui_implementer / $foodos-ui-implementation
--> visual_verifier / $foodos-visual-qa
+-> $foodos-ui-quality-review dispatches required independent lanes:
+   interaction_verifier
+   accessibility_verifier
+   visual_verifier / $foodos-visual-qa
+-> structured findings -> ui_implementer fix -> originating verifier retest
 -> product + applicable assurance/release approval
 ```
 
@@ -157,7 +179,7 @@ Product/brand outcome
 -> CPO/CMO brief decision
 -> deterministic asset_producer
    OR image_concept_artist -> asset_producer reconstruction/export
--> visual_verifier + accessibility QA in intended context
+-> visual_verifier + accessibility_verifier in intended context
 -> CPO/CMO approval
 -> release verification
 ```
@@ -172,13 +194,16 @@ Safe parallel work:
 - `ui_explorer` maps the current implementation while `ux_flow_designer` studies already
   known product/safety requirements;
 - independent reference research and code mapping;
-- visual verifier prepares a test matrix before implementation completes.
+- verifiers prepare independent lane matrices before implementation completes;
+- interaction, accessibility and visual lanes inspect the same immutable artifact with
+  distinct evidence paths.
 
 Sequential work:
 
 - UI architecture follows the accepted flow;
 - implementation follows accepted architecture;
-- final visual verification follows implementation;
+- UI quality review follows implementation;
+- a finding fix follows review, and its originating-verifier retest follows the fix;
 - asset production follows an accepted brief;
 - verification and approval never run inside the producing agent.
 
@@ -200,6 +225,9 @@ Details and current source research live in `docs/agent/CODEX_UI_AGENT_ARCHITECT
 
 - Image Concept Artist cannot approve its output.
 - UI Implementer cannot be the sole visual verifier for a material screen.
+- UI Implementer cannot close a finding it fixed.
+- The Executive Orchestrator may normalize and route findings but cannot approve them.
+- One verifier cannot overwrite or average away another required lane's result.
 - Asset Producer cannot mark its asset VERIFIED.
 - Brand approval does not replace accessibility or product approval.
 - Product approval does not grant trademark clearance.
@@ -232,3 +260,10 @@ Every material UI/asset handoff records:
 - verifier and approver;
 - concept/working/final status;
 - remaining external decisions.
+
+Each UI defect additionally uses `docs/agent/UI_QUALITY_FINDING_TEMPLATE.md`: exact
+artifact/environment, route/state/viewport/input, requirement risk, severity, evidence
+status, reproduction, expected/actual result, user consequence, evidence, fix criteria,
+owner, originating verifier and exact-commit retest. `critical` or `major` findings block
+the affected gate. Scores are diagnostic only and cannot replace a missing lane or hide a
+blocker.

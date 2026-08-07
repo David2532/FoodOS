@@ -138,7 +138,11 @@ ui_explorer maps the real implementation
 -> CPO accepts the interaction direction
 -> ui_system_architect defines components/tokens/responsive states
 -> ui_implementer uses $foodos-ui-implementation
--> visual_verifier uses $foodos-visual-qa
+-> $foodos-ui-quality-review dispatches required independent lanes:
+   interaction_verifier
+   accessibility_verifier
+   visual_verifier uses $foodos-visual-qa
+-> structured findings -> ui_implementer fix -> originating-verifier retest
 -> applicable product, accessibility, safety and release approval
 ```
 
@@ -148,6 +152,9 @@ Rules:
   implementation and final verification remain sequential;
 - do not invoke the full chain for a tiny spacing/copy fix;
 - the UI implementer cannot be the sole verifier;
+- UI verifiers may write evidence only, cannot silently fix reviewed code and cannot
+  convert expert/AI critique into user-research evidence;
+- each finding returns to its originating verifier for a new exact-commit retest;
 - `design.md`, real tokens/components and the approved flow are authoritative;
 - Figma, screenshots and v0 are bounded input/prototypes, not direct production truth;
 - do not initialize or migrate shadcn or paste a generated project without explicit
@@ -163,7 +170,7 @@ asset_art_director proves an asset is needed and issues a brief
 -> asset_producer creates deterministic SVG/CSS directly
    OR image_concept_artist creates an illustration CONCEPT
       -> asset_producer reconstructs/exports production files
--> visual_verifier + accessibility QA in the intended screen/channel
+-> visual_verifier + accessibility_verifier in the intended screen/channel
 -> CPO/CMO approval and independent release verification
 ```
 

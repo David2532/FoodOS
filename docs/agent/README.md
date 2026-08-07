@@ -12,8 +12,9 @@ For agent roles, delegation, capabilities, approvals and capacity governance, us
 6. [`CODEX_UI_AGENT_ARCHITECTURE.md`](CODEX_UI_AGENT_ARCHITECTURE.md) — researched UI-agent runtime, dispatch and tool policy.
 7. [`UI_AND_ASSET_AGENT_CONTRACT.md`](UI_AND_ASSET_AGENT_CONTRACT.md) — UI, brand, image generation, vector reconstruction, asset production and independent visual QA roles.
 8. [`V1_TO_V2_MIGRATION.md`](V1_TO_V2_MIGRATION.md) — explicit mapping from earlier agent concepts to Agent Operating Model v2.
-9. [`HANDOFF_TEMPLATE.md`](HANDOFF_TEMPLATE.md) — exact delivery evidence for completed work.
-10. [`REPOSITORY_HEALTH_2026-08-06.md`](REPOSITORY_HEALTH_2026-08-06.md) — dated repository maintenance assessment and prioritized follow-up.
+9. [`UI_QUALITY_FINDING_TEMPLATE.md`](UI_QUALITY_FINDING_TEMPLATE.md) — reproducible UI defect, routing and independent retest record.
+10. [`HANDOFF_TEMPLATE.md`](HANDOFF_TEMPLATE.md) — exact delivery evidence for completed work.
+11. [`REPOSITORY_HEALTH_2026-08-06.md`](REPOSITORY_HEALTH_2026-08-06.md) — dated repository maintenance assessment and prioritized follow-up.
 
 `CODEX_PROMPT.md`, old issue descriptions, chat-derived diagrams and older plans may add product context but do not redefine the company hierarchy or grant capabilities.
 
@@ -61,12 +62,18 @@ ui_explorer
 -> ux_flow_designer with $foodos-ui-flow-spec
 -> ui_system_architect
 -> ui_implementer with $foodos-ui-implementation
--> visual_verifier with $foodos-visual-qa
+-> $foodos-ui-quality-review:
+   interaction_verifier
+   accessibility_verifier
+   visual_verifier with $foodos-visual-qa
+-> findings -> ui_implementer -> originating-verifier retest
 ```
 
 Asset work begins with `asset_art_director`; illustrative generation uses `image_concept_artist` only from an approved brief; production export uses `asset_producer` with `$foodos-asset-production`. The creator cannot be the final verifier.
 
-Do not invoke the whole chain for a tiny spacing or copy correction. Use parallel subagents only for independent evidence/research work, not overlapping writes.
+Do not invoke the whole chain for a tiny spacing or copy correction. Use only affected
+quality lanes, one shared exact artifact and distinct evidence paths. Verifiers do not
+silently edit reviewed code, and expert review never becomes fabricated user research.
 
 ## Routing rule
 

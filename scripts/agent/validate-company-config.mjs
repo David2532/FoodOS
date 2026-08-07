@@ -75,6 +75,8 @@ const REQUIRED_NATIVE_AGENTS = [
   { name: "ux_flow_designer", sandbox: "read-only" },
   { name: "ui_system_architect", sandbox: "read-only" },
   { name: "ui_implementer", sandbox: "workspace-write" },
+  { name: "interaction_verifier", sandbox: "workspace-write" },
+  { name: "accessibility_verifier", sandbox: "workspace-write" },
   { name: "visual_verifier", sandbox: "workspace-write" },
   { name: "asset_art_director", sandbox: "read-only" },
   { name: "image_concept_artist", sandbox: "workspace-write" },
@@ -83,6 +85,7 @@ const REQUIRED_NATIVE_AGENTS = [
 const REQUIRED_SKILLS = [
   "foodos-ui-flow-spec",
   "foodos-ui-implementation",
+  "foodos-ui-quality-review",
   "foodos-visual-qa",
   "foodos-asset-production",
 ];
@@ -232,6 +235,7 @@ export async function validateNativeAgentRuntime(options = {}) {
     const sandbox = tomlString(source, "sandbox_mode");
     const instructions = tomlMultiline(source, "developer_instructions");
     if (!name) fail(`custom agent file ${filename} is missing name`);
+    if (filename !== `${name}.toml`) fail(`custom agent file ${filename} must match declared name ${name}`);
     if (agentNames.has(name)) fail(`custom agent name ${name} is duplicated`);
     agentNames.add(name);
     if (!description || description.length < 70) fail(`custom agent ${name} has an incomplete description`);

@@ -107,6 +107,24 @@ The same agent may plan and execute a low-risk bounded task, but it may not inde
 approve its own material release, security, privacy, food-safety, finance or capacity
 exception.
 
+## UI quality workers
+
+A material rendered UI change uses the charter and finding format in
+`docs/agent/UI_QUALITY_FINDING_TEMPLATE.md` and the `$foodos-ui-quality-review` procedure.
+Interaction, accessibility and visual verifiers receive the same exact commit, artifact,
+fixture and accepted brief but review independently.
+
+- Verification workers may write only assigned privacy-safe evidence and reports. They
+  do not silently edit product, test, dependency, configuration or migration files.
+- Every required check keeps its own `PASS`, `FAIL`, `FLAKY`, `BLOCKED` or `NOT_RUN`
+  result; an average or score cannot hide a blocker.
+- The Executive Orchestrator normalizes and routes findings but cannot approve them.
+- The UI Implementer cannot close a finding it fixed.
+- The originating verifier repeats the exact reproduction and adjacent regression on
+  the new commit before closure.
+- Expert/AI conformance review is not a participant study and cannot satisfy a real-user
+  usability or comprehension gate.
+
 ## Capacity exceptions
 
 When expected usage exceeds the envelope:
@@ -130,6 +148,7 @@ The handoff uses `docs/agent/HANDOFF_TEMPLATE.md` and additionally records:
 - exact branch and commit;
 - changed files;
 - tests and evidence;
+- open UI-quality findings and required independent retests when applicable;
 - known limits and remaining risks;
 - verifier and required approver;
 - usage or cost when available;

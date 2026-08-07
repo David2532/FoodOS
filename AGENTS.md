@@ -165,14 +165,20 @@ ui_explorer
 -> ux_flow_designer with $foodos-ui-flow-spec
 -> ui_system_architect
 -> ui_implementer with $foodos-ui-implementation
--> visual_verifier with $foodos-visual-qa
+-> $foodos-ui-quality-review dispatches required independent lanes:
+   interaction_verifier
+   accessibility_verifier
+   visual_verifier with $foodos-visual-qa
+-> findings -> ui_implementer fix -> originating-verifier retest
 ```
 
-Do not spawn every design agent for a tiny style fix. Do not run implementation and visual
-approval in the same agent. Asset work starts with `asset_art_director`; image generation
-is concept-only and production files follow `$foodos-asset-production` plus independent
-verification. A generated project, screenshot or image never replaces `design.md`, real
-components or browser evidence.
+Do not spawn every design or quality agent for a tiny style fix. Do not run implementation
+and verification in the same agent. Verifiers may write only assigned privacy-safe
+evidence, not reviewed product/test/configuration code. The implementer cannot close its
+own finding; the originating verifier retests the new exact commit. Asset work starts with
+`asset_art_director`; image generation is concept-only and production files follow
+`$foodos-asset-production` plus independent verification. A generated project, screenshot
+or image never replaces `design.md`, real components or browser evidence.
 
 ## Evidence and delivery
 

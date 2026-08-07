@@ -1,0 +1,7 @@
+interface:
+  display_name: "FoodOS UI Quality Review"
+  short_description: "Independent UI review and retest loop"
+  default_prompt: "Use $foodos-ui-quality-review to test this exact FoodOS UI artifact, route evidence-backed findings, and coordinate an independent retest."
+
+policy:
+  allow_implicit_invocation: true

@@ -49,4 +49,7 @@ Also run the UI scope's required E2E/browser checks when visual behavior changed
 
 ## Handoff
 
-Report files changed, states implemented, tokens/components reused, checks run, visual evidence location, known limits, verifier, and required approver. The implementer cannot mark its own material visual work VERIFIED.
+Report files changed, states implemented, tokens/components reused, checks run, evidence
+location, known limits, and required approver. Material UI hands off to
+`$foodos-ui-quality-review` for independent interaction, accessibility and visual lanes.
+The implementer cannot mark its own work verified or close a finding it fixed.

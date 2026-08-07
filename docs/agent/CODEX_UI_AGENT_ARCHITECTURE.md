@@ -34,12 +34,17 @@ Official references:
 | `ux_flow_designer` | read-only | produce minimal state-complete interaction brief | write code or styling |
 | `ui_system_architect` | read-only | map components, tokens, responsive composition and boundaries | create a second design system |
 | `ui_implementer` | workspace write | implement the smallest approved complete slice | approve its own work or broaden scope |
-| `visual_verifier` | evidence write only by contract | reproduce UI, screenshots, accessibility and runtime result | silently fix reviewed code |
+| `interaction_verifier` | evidence write only by contract | prove task outcome, states, persistence, recovery and console/network behavior | edit reviewed code or claim user research |
+| `accessibility_verifier` | evidence write only by contract | prove keyboard, focus, semantics, zoom/text, motion and available assistive-technology behavior | infer native proof from web emulation or silently fix |
+| `visual_verifier` | evidence write only by contract | prove hierarchy, responsive rendering, overflow, tokens, themes, assets and visual regression | silently fix reviewed code or override peer findings |
 | `asset_art_director` | read-only | decide whether an asset is needed and issue a brief | generate or approve assets |
 | `image_concept_artist` | workspace write | produce original illustrative concepts from an approved brief | create final logos/icons or product photos |
 | `asset_producer` | workspace write | reconstruct/export clean production vectors and update manifest | self-verify or claim legal clearance |
 
-Project concurrency is capped at four spawned threads. This is enough for independent mapping, bounded reference research, UX or verification while limiting conflicting writes and unnecessary usage.
+Project concurrency is capped at four spawned threads. This is enough for bounded parallel
+evidence work or the three independent UI-quality lanes while limiting conflicting writes
+and unnecessary usage. The lanes share one exact artifact and use distinct evidence paths;
+they do not start competing servers or write to one report file.
 
 ## Reference research policy
 
@@ -59,7 +64,8 @@ It prefers primary and official sources, records publication/update date when av
 |---|---|---|
 | `$foodos-ui-flow-spec` | material new/redesigned user flow | implementation-ready UX brief |
 | `$foodos-ui-implementation` | approved FoodOS UI slice | bounded responsive code and tests |
-| `$foodos-visual-qa` | UI/asset implementation complete | reproducible browser/a11y/visual evidence |
+| `$foodos-visual-qa` | UI/asset implementation complete | reproducible rendered/visual evidence |
+| `$foodos-ui-quality-review` | material UI implementation ready for review | independent lane charter, normalized findings, fix routing and retest |
 | `$foodos-asset-production` | approved logo/icon/illustration/export need | asset files, variants and manifest update |
 
 Skills are procedural and narrow. They do not duplicate the full product plan or `design.md`.
@@ -75,11 +81,18 @@ ui_explorer
 -> CPO accepts the flow direction
 -> ui_system_architect
 -> ui_implementer using $foodos-ui-implementation
--> visual_verifier using $foodos-visual-qa
+-> $foodos-ui-quality-review dispatches the required independent lanes:
+   interaction_verifier
+   accessibility_verifier
+   visual_verifier using $foodos-visual-qa
+-> structured findings -> ui_implementer fix -> originating verifier retest
 -> CPO + relevant assurance/release approval
 ```
 
-Mapping and bounded external research may run in parallel when neither mutates state and the question is already clear. UI architecture follows the accepted flow. Implementation and visual verification remain sequential and independent.
+Mapping and bounded external research may run in parallel when neither mutates state and
+the question is already clear. UI architecture follows the accepted flow. Implementation
+precedes quality review. Required quality lanes may run in parallel against the same exact
+artifact, but fixes and originating-verifier retests remain sequential and independent.
 
 ### Small visual defect with unchanged behavior
 
@@ -89,7 +102,9 @@ ui_explorer or existing reproduction
 -> visual_verifier
 ```
 
-Do not invoke every design agent or external research for a two-line spacing fix.
+Add only the interaction or accessibility verifier when the tiny defect affects that
+contract. Do not invoke every design agent or external research for a two-line spacing
+fix.
 
 ### New illustration or brand asset
 
@@ -99,7 +114,7 @@ asset_art_director
 -> image_concept_artist when illustration exploration is justified
    OR asset_producer directly for deterministic SVG/CSS
 -> asset_producer reconstructs/exports
--> visual_verifier + accessibility review in intended context
+-> visual_verifier + accessibility_verifier in intended context
 -> CPO/CMO approval
 ```
 
@@ -178,7 +193,8 @@ product outcome
 -> interaction hypothesis
 -> component/token system
 -> bounded implementation
--> browser and accessibility evidence
+-> independent interaction, accessibility and visual evidence
+-> structured finding -> bounded fix -> originating-verifier retest
 -> user validation for material behavior
 -> reusable decision captured in code/design.md
 ```
@@ -188,5 +204,5 @@ Visual quality is measured by task clarity, consistency, state completeness, acc
 ## Example parent prompt
 
 ```text
-Use ui_explorer to map the current purchase-capture flow and its reusable components. Ask design_reference_researcher only to verify current iOS/Android continuous-scanner and permission patterns. Have ux_flow_designer prepare a minimal flow brief using $foodos-ui-flow-spec. Reconcile evidence, then have ui_system_architect define the component/token plan. Only after the flow is accepted, use ui_implementer for the bounded slice. Finish with visual_verifier using $foodos-visual-qa. Do not create an asset unless asset_art_director first proves it is needed.
+Use ui_explorer to map the current purchase-capture flow and its reusable components. Ask design_reference_researcher only to verify current iOS/Android continuous-scanner and permission patterns. Have ux_flow_designer prepare a minimal flow brief using $foodos-ui-flow-spec. Reconcile evidence, then have ui_system_architect define the component/token plan. Only after the flow is accepted, use ui_implementer for the bounded slice. Finish with $foodos-ui-quality-review: interaction_verifier, accessibility_verifier and visual_verifier independently review one exact artifact, findings return to ui_implementer, and the originating verifier retests. Do not create an asset unless asset_art_director first proves it is needed.
 ```

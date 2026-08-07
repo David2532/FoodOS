@@ -516,12 +516,17 @@ ui_explorer
 -> CPO-Richtung
 -> ui_system_architect
 -> ui_implementer + $foodos-ui-implementation
--> visual_verifier + $foodos-visual-qa
+-> $foodos-ui-quality-review:
+   interaction_verifier
+   accessibility_verifier
+   visual_verifier + $foodos-visual-qa
+-> Finding -> ui_implementer -> Retest durch den ursprünglichen Verifier
 -> erforderliche Produkt-/Safety-/Release-Freigabe
 ```
 
 Nicht jede kleine Korrektur benötigt die ganze Kette. Implementierer und Verifier bleiben
-bei materieller Arbeit getrennt.
+bei materieller Arbeit getrennt. Jede erforderliche Prüflinie behält ihren eigenen Status;
+Bewertungen oder Scores dürfen keinen Blocker und keine fehlende Evidence wegmitteln.
 
 ### Figma
 
@@ -615,6 +620,8 @@ Eine UI-Änderung ist erst abgeschlossen, wenn:
 - Assets notwendig, optimiert, dokumentiert und unabhängig geprüft sind;
 - Browser, Console/Netzwerk, Interaktion und passende Tests für den exakten Commit geprüft
   wurden;
+- materielle UI-Findings strukturiert an den Implementierer geroutet und nach dem Fix vom
+  ursprünglichen unabhängigen Verifier am neuen exakten Commit erneut geprüft wurden;
 - Status ehrlich `PASS`, `FAIL`, `FLAKY`, `BLOCKED` oder `NOT_RUN` lautet;
 - eine wesentliche neue Nutzerinteraktion echte Usability-Evidence erhält, bevor daraus
   Produkt-Markt- oder Verständlichkeitsbehauptungen entstehen.
