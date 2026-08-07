@@ -9,8 +9,10 @@ import {
   failClosedInterruptedSendingOperation,
   isOperationEligibleForAutomaticSend,
   isOperationUserDiscardable,
+  isRecoverableAal2Failure,
   OFFLINE_OUTBOX_DB_VERSION,
   operationClaimDecision,
+  operationAfterExplicitReconciliation,
   operationQueueAdmission,
   OUTBOX_OPERATION_RESULT_EVENT,
   outboxPayloadHash,
@@ -93,6 +95,32 @@ describe("offline outbox payload identity", () => {
 });
 
 describe("offline outbox operation outcomes", () => {
+  it("keeps only exact AAL2 failures recoverable before any inventory retry", () => {
+    expect(isRecoverableAal2Failure("AAL2 required")).toBe(true);
+    expect(isRecoverableAal2Failure("FOODOS_AAL2_REQUIRED")).toBe(true);
+    expect(isRecoverableAal2Failure("AAL2 required after inventory mutation")).toBe(false);
+    expect(isRecoverableAal2Failure("server rejected")).toBe(false);
+  });
+
+  it("requeues an uncertain operation only after explicit mutation-bound reconciliation", () => {
+    const uncertain = {
+      state: "UNCERTAIN" as const,
+      nextAttemptAt: 0,
+      safeError: "acknowledgement_unknown",
+      claimId: undefined,
+      claimExpiresAt: undefined
+    };
+    expect(operationAfterExplicitReconciliation(uncertain)).toEqual({
+      state: "QUEUED",
+      nextAttemptAt: 0,
+      safeError: "user_reconciliation",
+      claimId: undefined,
+      claimExpiresAt: undefined
+    });
+    expect(operationAfterExplicitReconciliation({ ...uncertain, state: "REJECTED" as const })).toBeNull();
+    expect(operationAfterExplicitReconciliation({ ...uncertain, state: "QUEUED" as const })).toBeNull();
+  });
+
   it("retains a malformed purchase acknowledgement as terminal and non-discardable", () => {
     const acknowledgement = resolveSuccessfulRpcAcknowledgement(
       "inventory.commit_purchase",
@@ -149,6 +177,47 @@ describe("offline outbox operation outcomes", () => {
     expect(acknowledgement).toMatchObject({
       disposition: "retain_uncertain",
       result: { reason: "acknowledgement_unknown" }
+    });
+  });
+
+  it("deletes a discard operation only after a strict matching acknowledgement", () => {
+    const acknowledgement = resolveSuccessfulRpcAcknowledgement(
+      "inventory.discard_batch",
+      {
+        batch_id: "11111111-1111-4111-8111-111111111111",
+        remaining_amount: 325,
+        idempotent_replay: false
+      },
+      { target_batch: "11111111-1111-4111-8111-111111111111" }
+    );
+
+    expect(acknowledgement).toEqual({
+      disposition: "delete",
+      result: {
+        status: "acked",
+        data: {
+          batch_id: "11111111-1111-4111-8111-111111111111",
+          remaining_amount: 325,
+          idempotent_replay: false
+        }
+      }
+    });
+  });
+
+  it.each([
+    [{ batch_id: "11111111-1111-4111-8111-111111111111", remaining_amount: 325, idempotent_replay: false, secret: "no" }],
+    [{ batch_id: "22222222-2222-4222-8222-222222222222", remaining_amount: 325, idempotent_replay: false }],
+    [{ batch_id: "11111111-1111-4111-8111-111111111111", remaining_amount: null, idempotent_replay: false }],
+    [{ batch_id: "11111111-1111-4111-8111-111111111111", remaining_amount: false, idempotent_replay: false }],
+    [{ batch_id: "11111111-1111-4111-8111-111111111111", remaining_amount: "325", idempotent_replay: false }]
+  ])("retains an untrusted or mismatched discard acknowledgement", (data) => {
+    expect(resolveSuccessfulRpcAcknowledgement(
+      "inventory.discard_batch",
+      data,
+      { target_batch: "11111111-1111-4111-8111-111111111111" }
+    )).toMatchObject({
+      disposition: "retain_uncertain",
+      result: { status: "rejected", reason: "acknowledgement_unknown" }
     });
   });
 
@@ -268,6 +337,40 @@ describe("offline outbox operation outcomes", () => {
     unsubscribe();
   });
 
+  it("forwards a strict discard ACK across tabs without operation secrets", () => {
+    const operationId = "44444444-4444-4444-8444-444444444444";
+    const message = createOperationOutcomeBroadcastMessage({
+      operationId,
+      status: "acked",
+      data: {
+        batch_id: "11111111-1111-4111-8111-111111111111",
+        remaining_amount: 325,
+        idempotent_replay: false
+      }
+    });
+    const listener = vi.fn();
+    const unsubscribe = subscribeToOperationOutcome(operationId, listener);
+
+    expect(message).toEqual({
+      type: "operation-outcome",
+      outcome: {
+        operationId,
+        status: "acked",
+        data: {
+          batch_id: "11111111-1111-4111-8111-111111111111",
+          remaining_amount: 325,
+          idempotent_replay: false
+        }
+      }
+    });
+    expect(JSON.stringify(message)).not.toMatch(/target_batch|discarded_amount|ciphertext|payloadSha256|secret/i);
+
+    FakeBroadcastChannel.latest?.emitFromOtherTab(message);
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener).toHaveBeenCalledWith(message?.outcome);
+    unsubscribe();
+  });
+
   it("drops secret-bearing ACK data and replaces remote rejection text", () => {
     const operationId = "11111111-1111-4111-8111-111111111111";
     expect(createOperationOutcomeBroadcastMessage({
@@ -279,6 +382,17 @@ describe("offline outbox operation outcomes", () => {
         product_ids: ["33333333-3333-4333-8333-333333333333"],
         idempotent_replay: false,
         capture_items: [{ secret: "must-not-cross-tabs" }]
+      }
+    })).toBeNull();
+
+    expect(createOperationOutcomeBroadcastMessage({
+      operationId,
+      status: "acked",
+      data: {
+        batch_id: "22222222-2222-4222-8222-222222222222",
+        remaining_amount: 0,
+        idempotent_replay: false,
+        discarded_amount: 450
       }
     })).toBeNull();
 

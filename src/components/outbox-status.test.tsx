@@ -1,10 +1,15 @@
 /** @vitest-environment jsdom */
 
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const navigation = vi.hoisted(() => ({ refresh: vi.fn() }));
 
 const outbox = vi.hoisted(() => {
   let lifecycleListener: ((state: string) => void) | undefined;
+  let outboxListener: (() => void) | undefined;
   return {
     discardRejectedOperations: vi.fn(async () => undefined),
     flushQueuedOperations: vi.fn(async () => ({ queued: 0, sending: 0, rejected: 0, uncertain: 0 })),
@@ -12,22 +17,28 @@ const outbox = vi.hoisted(() => {
     getOutboxSummary: vi.fn(async () => ({ queued: 0, sending: 0, rejected: 0, uncertain: 0 })),
     reconcileOfflineHouseholdAccess: vi.fn<(householdIds: string[]) => Promise<{ purged: number; preserved: number; unreadable: number }>>()
       .mockResolvedValue({ purged: 0, preserved: 0, unreadable: 0 }),
-    subscribeToOutbox: vi.fn(() => () => undefined),
+    reconcileUncertainOperations: vi.fn(async () => ({ queued: 0, sending: 0, rejected: 0, uncertain: 0 })),
+    subscribeToOutbox: vi.fn((listener: () => void) => {
+      outboxListener = listener;
+      return () => undefined;
+    }),
     subscribeToOfflineDataStorageState: vi.fn((listener: (state: string) => void) => {
       lifecycleListener = listener;
       return () => undefined;
     }),
-    notifyLifecycle: (state: string) => lifecycleListener?.(state)
+    notifyLifecycle: (state: string) => lifecycleListener?.(state),
+    notifyOutbox: () => outboxListener?.()
   };
 });
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: navigation.refresh }) }));
 vi.mock("@/infrastructure/offline-outbox", () => outbox);
 
 import { OutboxStatus } from "./outbox-status";
 
 describe("OutboxStatus", () => {
   beforeEach(() => {
+    navigation.refresh.mockReset();
     outbox.getOfflineDataStorageState.mockReturnValue("available");
     outbox.flushQueuedOperations.mockResolvedValue({ queued: 0, sending: 0, rejected: 0, uncertain: 0 });
     outbox.getOutboxSummary.mockResolvedValue({ queued: 0, sending: 0, rejected: 0, uncertain: 0 });
@@ -36,6 +47,7 @@ describe("OutboxStatus", () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -49,6 +61,50 @@ describe("OutboxStatus", () => {
     expect(alert.textContent).toContain("weder eine leere Warteschlange noch eine erfolgreiche Löschung angenommen");
   });
 
+  it("hydrates before reading a browser-only offline-data marker", async () => {
+    let clientMounted = false;
+    outbox.getOfflineDataStorageState.mockImplementation(() => clientMounted ? "cleared" : "available");
+    const markup = renderToString(<OutboxStatus />);
+    clientMounted = true;
+    const container = document.createElement("div");
+    container.innerHTML = markup;
+    document.body.append(container);
+    const recoverableErrors: unknown[] = [];
+    const root = hydrateRoot(container, <OutboxStatus />, {
+      onRecoverableError: (error) => recoverableErrors.push(error)
+    });
+    try {
+      await waitFor(() => expect(container.textContent).toContain("Lokale Offline-Daten bestätigt entfernt"));
+      expect(recoverableErrors).toEqual([]);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("hydrates before applying the browser's offline state", async () => {
+    const onlineDescriptor = Object.getOwnPropertyDescriptor(navigator, "onLine");
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
+    const markup = renderToString(<OutboxStatus />);
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+    const container = document.createElement("div");
+    container.innerHTML = markup;
+    document.body.append(container);
+    const recoverableErrors: unknown[] = [];
+    const root = hydrateRoot(container, <OutboxStatus />, {
+      onRecoverableError: (error) => recoverableErrors.push(error)
+    });
+    try {
+      await waitFor(() => expect(container.textContent).toContain("Offline · Serverstand nicht aktualisierbar"));
+      expect(recoverableErrors).toEqual([]);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+      if (onlineDescriptor) Object.defineProperty(navigator, "onLine", onlineDescriptor);
+      else Reflect.deleteProperty(navigator, "onLine");
+    }
+  });
+
   it("renders the pending cleanup state when another tab reports it", async () => {
     render(<OutboxStatus />);
     await waitFor(() => expect(outbox.subscribeToOfflineDataStorageState).toHaveBeenCalledOnce());
@@ -59,6 +115,36 @@ describe("OutboxStatus", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Lokale Offline-Daten werden noch entfernt");
     expect(alert.textContent).toContain("Löschung ist noch nicht bestätigt");
+  });
+
+  it("refreshes the authoritative server snapshot when an outbox outcome changes", async () => {
+    render(<OutboxStatus />);
+    await waitFor(() => expect(outbox.flushQueuedOperations).toHaveBeenCalledOnce());
+    navigation.refresh.mockClear();
+
+    act(() => outbox.notifyOutbox());
+
+    await waitFor(() => expect(navigation.refresh).toHaveBeenCalledOnce());
+  });
+
+  it("keeps the queued local status visible without requesting a server snapshot while offline", async () => {
+    const onlineDescriptor = Object.getOwnPropertyDescriptor(navigator, "onLine");
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+    try {
+      outbox.getOutboxSummary.mockResolvedValue({ queued: 1, sending: 0, rejected: 0, uncertain: 0 });
+      render(<OutboxStatus />);
+      await screen.findByText("Offline · auf diesem Gerät gespeichert");
+      navigation.refresh.mockClear();
+
+      act(() => outbox.notifyOutbox());
+
+      await waitFor(() => expect(outbox.getOutboxSummary).toHaveBeenCalled());
+      expect(navigation.refresh).not.toHaveBeenCalled();
+      expect(screen.getByText("Offline · auf diesem Gerät gespeichert")).toBeTruthy();
+    } finally {
+      if (onlineDescriptor) Object.defineProperty(navigator, "onLine", onlineDescriptor);
+      else Reflect.deleteProperty(navigator, "onLine");
+    }
   });
 
   it("reconciles the server-authorized household set before flushing", async () => {
@@ -82,10 +168,37 @@ describe("OutboxStatus", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Serverbestätigung unklar");
+    expect(alert.textContent).toContain("1 Änderung kann bereits gebucht worden sein");
     expect(alert.textContent).toContain("kann bereits gebucht worden sein");
-    expect(alert.textContent).toContain("sendet ihn nicht erneut");
+    expect(alert.textContent).toContain("sendet nichts automatisch erneut");
+    expect(alert.textContent).toContain("nicht doppelt");
     expect(screen.queryByRole("button", { name: /verwerfen/i })).toBeNull();
     expect(outbox.discardRejectedOperations).not.toHaveBeenCalled();
+    expect(outbox.reconcileUncertainOperations).not.toHaveBeenCalled();
+
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Unklare Änderungen sicher abgleichen" }));
+    await waitFor(() => expect(outbox.reconcileUncertainOperations).toHaveBeenCalledOnce());
+  });
+
+  it("prevents duplicate reconciliation while an uncertain batch is still being checked", async () => {
+    let finishReconciliation: ((summary: { queued: number; sending: number; rejected: number; uncertain: number }) => void) | undefined;
+    outbox.getOutboxSummary.mockResolvedValue({ queued: 0, sending: 0, rejected: 0, uncertain: 1 });
+    outbox.reconcileUncertainOperations.mockImplementationOnce(() => new Promise((resolve) => {
+      finishReconciliation = resolve;
+    }));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<OutboxStatus />);
+
+    const button = await screen.findByRole("button", { name: "Unklare Änderungen sicher abgleichen" });
+    fireEvent.click(button);
+    const pendingButton = await screen.findByRole("button", { name: "Unklare Änderungen werden abgeglichen …" });
+    expect((pendingButton as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(pendingButton);
+    expect(outbox.reconcileUncertainOperations).toHaveBeenCalledOnce();
+
+    await act(async () => finishReconciliation?.({ queued: 0, sending: 0, rejected: 0, uncertain: 1 }));
+    await screen.findByRole("button", { name: "Unklare Änderungen sicher abgleichen" });
   });
 
   it("keeps uncertain, rejected, sending, and queued states visible together", async () => {

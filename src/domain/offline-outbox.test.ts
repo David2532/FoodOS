@@ -7,6 +7,8 @@ describe("offline outbox policy", () => {
     expect(isAllowedOfflineRpc("inventory.commit_purchase", "commit_purchase_capture")).toBe(true);
     expect(isAllowedOfflineRpc("inventory.commit_purchase", "add_inventory_batch")).toBe(false);
     expect(isAllowedOfflineRpc("inventory.add_batch", "consume_inventory_batch_v2")).toBe(false);
+    expect(isAllowedOfflineRpc("inventory.discard_batch", "discard_inventory_batch")).toBe(true);
+    expect(isAllowedOfflineRpc("inventory.discard_batch", "consume_inventory_batch_v2")).toBe(false);
     expect(isAllowedOfflineRpc("plan.add_product_v2", "plan_product_v2")).toBe(true);
     expect(isAllowedOfflineRpc("plan.add_product_v2", "plan_product")).toBe(false);
     expect(isAllowedOfflineRpc("shopping.add_manual", "set_shopping_item_checked")).toBe(false);

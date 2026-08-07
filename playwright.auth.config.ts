@@ -15,7 +15,7 @@ export default defineConfig({
   },
   projects: [{ name: "authenticated-chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "node scripts/start-e2e.mjs",
+    command: "node scripts/start-auth-e2e.mjs",
     url: "http://127.0.0.1:3101",
     timeout: 120_000,
     env: {
