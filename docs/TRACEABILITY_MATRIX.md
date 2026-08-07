@@ -1,9 +1,10 @@
 # FoodOS production-beta traceability matrix
 
-Status: **living audit for Draft PR #5** · the historical CI artifact
-`7f2e8c6bc3f067eca239fdd3220e080ef7d26fd6` / [run 30883156141](https://github.com/David2532/FoodOS/actions/runs/30883156141)
-does **not** cover the current `0015`/`0016` catalog integrity slice. It is retained as
-history only; final CI evidence must name the later exact commit and run.
+Status: **living audit for Draft PR #8** · implementation commit
+`e9d0ad4f5763de2f80ad9c5742f1c760fda854df` passed [GitHub Actions run
+31180951840](https://github.com/David2532/FoodOS/actions/runs/31180951840), including
+fresh migrations, 478 pgTAP/RLS assertions, seven authenticated browser flows, preview
+navigation/axe smoke, lint, types, unit tests, and the Production build.
 
 This matrix separates code, test and external evidence. `CI_VERIFIED` is used only when
 the exact artifact was exercised by GitHub Actions; `TESTED` means a named local test
@@ -17,7 +18,7 @@ converted to an evidence-backed state before the technical audit can close.
 
 | Requirement / gate | Flow / risk | Status | Implementation evidence | Test / CI evidence and remaining gap |
 |---|---|---|---|---|
-| Locked install, lint, types, unit tests and production build | Stage 0 | `TESTED` | `package.json`, `.nvmrc`, `.github/workflows/ci.yml` | Current Node-22 local evidence is recorded in [`PUBLIC_CATALOG_INTEGRITY_LOCAL_2026-08-04.md`](evidence/PUBLIC_CATALOG_INTEGRITY_LOCAL_2026-08-04.md): locked install, verify, coverage, fresh DB/RLS, deterministic preview E2E and local Auth E2E all passed. The historical CI run is stale; the exact publication commit still must pass GitHub Actions before `CI_VERIFIED`. |
+| Locked install, lint, types, unit tests and production build | Stage 0 | `CI_VERIFIED` | `package.json`, `.nvmrc`, `.github/workflows/ci.yml` | Exact implementation commit `e9d0ad4f5763de2f80ad9c5742f1c760fda854df` passed [run 31180951840](https://github.com/David2532/FoodOS/actions/runs/31180951840): lint, types, unit tests, Production build, preview navigation/axe, fresh migrations, pgTAP/RLS and Auth E2E. |
 | Collapsed email auth or Apple/Google OAuth/OIDC with PKCE, SSR session refresh and TOTP AAL2 gate | F01 / C0 | `TESTED` | `src/features/auth/`, `src/domain/auth-redirect.ts`, `src/lib/supabase/`, `src/proxy.ts`, migration `0002` | Local browser E2E proves Apple and Google PKCE/S256, minimal scopes, exact same-origin callback, sanitized provider errors and the real email/TOTP onboarding path; recovery codes, factor replacement and all-device session revocation remain `NOT_IMPLEMENTED`. |
 | Transactional household onboarding | F01 / C1 | `TESTED` | migration `0003`, `src/features/auth/onboarding-screen.tsx` | pgTAP and real local Auth/TOTP E2E passed. |
 | AAL1 denial and household isolation | F01 / C0 | `TESTED` | migrations `0001`–`0005` | `supabase/tests/0001_mvp_security_and_transactions.sql` proves AAL1 denial and a second unrelated user; removed-member matrix is not yet covered. |
@@ -25,7 +26,7 @@ converted to an evidence-backed state before the technical audit can close.
 | Cache-first shared catalog, Open Food Facts fallback and provenance | F02 / C1 | `TESTED` | product/search APIs, OFF/cache/search normalizers, migrations `0014`–`0016`, AAL2, bounded rate windows and staged importer | Unit/API contracts plus pgTAP/RLS prove the AAL2 cache → global generation → provider/manual order, no raw-table access, server-sealed product/generation hashes and failed-staging protection. Preview E2E uses deterministic provider-shaped fixtures; it is not live-provider evidence. Managed bulk import and distributed provider quota evidence remain external/`NOT_RUN`. |
 | Manual OCR fallback never fabricates a result | F02 / C0 | `TESTED` | `src/infrastructure/expiry-ocr-adapter.ts` | Unit test passes; no approved OCR model/provider is configured. |
 | Past use-by cannot be consumed through UI, API or RPC | F02/F04 / C0 | `TESTED` | migration `0008`, `inventory-view.tsx`, expiry domain | pgTAP proves the RPC block; authenticated disposal E2E proves the disabled consumption action, visible safety reason and explicit disposal alternative. |
-| Atomic inventory disposal preserves ledger and nutrition truth | F04/F08 / C0 | `TESTED` | migration `20260806174159_discard_inventory_batch.sql`, strict inventory contract, disposal UI and encrypted outbox | [`INVENTORY_DISPOSAL_LOCAL_2026-08-06.md`](evidence/INVENTORY_DISPOSAL_LOCAL_2026-08-06.md) records 478 pgTAP assertions and two real Auth/TOTP browser tests: partial/full bounds, AAL1 and removed-member denial, exact receipt replay, one discard event, no food log, offline reconnect and lost-ACK reconciliation. A true two-session overlap is `BLOCKED`/`NOT_RUN`. |
+| Atomic inventory disposal preserves ledger and nutrition truth | F04/F08 / C0 | `CI_VERIFIED` | migration `20260806174159_discard_inventory_batch.sql`, strict inventory contract, disposal UI and encrypted outbox | [`INVENTORY_DISPOSAL_LOCAL_2026-08-06.md`](evidence/INVENTORY_DISPOSAL_LOCAL_2026-08-06.md) and [run 31180951840](https://github.com/David2532/FoodOS/actions/runs/31180951840) prove fresh migrations, 478 pgTAP assertions and two real Auth/TOTP disposal flows: bounds, AAL1 and removed-member denial, exact receipt replay, one discard event, no food log, offline reconnect and lost-ACK reconciliation. A true two-session overlap is `BLOCKED`/`NOT_RUN`. |
 | Past MHD requires warning and deliberate confirmation | F02/F04 / C0 | `TESTED` | migration `0008`, `inventory-view.tsx` | pgTAP proves reject-without/accept-with-confirmation; authenticated browser E2E remains to add. |
 | Exact recall blocks affected batch consumption and planning | F07 / C0 | `TESTED` | migrations `0008`/`0009`, repository recall projection, inventory UI | pgTAP proves approved exact GTIN+lot blocks consumption and plan allocation; live ingestion/E2E remains absent. |
 | Possible, stale, unavailable and false-positive recall states expose provenance | F07 / C0 | `IMPLEMENTED` | `src/domain/recall.ts`, repository projection, inventory/Today warnings | Unit rules pass; correction chain and authenticated integration/E2E remain absent. |

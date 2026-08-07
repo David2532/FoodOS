@@ -44,6 +44,15 @@ coverage, or a true two-session database overlap.
 | authenticated reload runtime retest | **PASS** — 3/3 HTTP 200; 0 page errors, 0 console errors, 0 HTTP responses >=400 |
 | independent final code review | **PASS** — no functional or security findings |
 
+## Remote CI evidence
+
+- Exact implementation commit `e9d0ad4f5763de2f80ad9c5742f1c760fda854df` passed
+  [GitHub Actions run 31180951840](https://github.com/David2532/FoodOS/actions/runs/31180951840):
+  lint/types/unit/build, preview navigation and axe smoke, plus fresh migrations, 478
+  pgTAP/RLS assertions and all seven authenticated browser flows.
+- The [Vercel preview deployment](https://vercel.com/davidpaul6278-7438s-projects/foodos/2F4az5mtahbezR3GBxvXwFyTMeWk)
+  completed successfully. It is preview evidence, not a Production deployment claim.
+
 The first disposal E2E proves offline encrypted queueing, reconnect, deletion of the
 durable operation, one discard event, remaining amount `0`, no food log, and persistence
 after reload. The second deliberately withholds the first successful RPC response from
