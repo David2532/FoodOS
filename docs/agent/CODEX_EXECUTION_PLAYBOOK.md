@@ -64,6 +64,8 @@ Use a specialist only when it adds distinct expertise or independent verificatio
 
 - UX Flow Agent before a material interaction redesign;
 - UI System Agent for reusable component and token decisions;
+- separate interaction, accessibility and visual verifiers after material UI
+  implementation;
 - Asset Art Director and Image Generation Agent only after an approved asset brief;
 - Vector Reconstruction and Visual QA before generated concepts become production assets;
 - database/security workers for RLS or migration boundaries;
@@ -116,6 +118,11 @@ CPO outcome and simplicity budget
 ```
 
 A generated image is not a final logo or UI asset by itself. Avoid unnecessary assets when typography, layout, an existing icon or CSS communicates the state better. Every created asset must be entered in `docs/brand/ASSET_MANIFEST.md` with status, purpose, exact path, format, dimensions, provenance/licence state, target surface and verifier.
+
+For a material implemented UI, use `$foodos-ui-quality-review` to dispatch the required
+interaction, accessibility and visual lanes against one exact artifact. Route structured
+findings to the UI Implementer, then return each finding to its originating verifier for
+an exact-commit retest. The Orchestrator may synthesize but not approve the result.
 
 ## 8. Verification strategy
 

@@ -47,7 +47,8 @@ David Paul — Founder and human owner
     +-- Food Safety and Claims
     +-- Data Quality Auditor
     +-- Financial Controller
-    `-- Agent Evaluation and Behavior Auditor
+    +-- Agent Evaluation and Behavior Auditor
+    `-- Accessibility and Visual Auditor
 ```
 
 The title of an agent is an internal responsibility boundary. It is not a legal office or
@@ -78,6 +79,8 @@ when their files, state and acceptance criteria are independent.
 
 - Product Strategy
 - UX and Customer Research
+- Product Experience Direction, UX Flow and UI System
+- Accessibility and Visual Quality
 - Scanner, Barcode and GS1
 - Inventory and Date Management
 - Nutrition Intelligence
@@ -85,6 +88,29 @@ when their files, state and acceptance criteria are independent.
 - Shopping Intelligence
 - Recall Intelligence
 - Mobile Product
+
+### Cross-functional UI Quality Cell
+
+The UI Quality Cell is a bounded worker pattern, not a new executive layer. It maps to
+Product's `accessibility-visual-qa` and `product-experience-direction` teams,
+Engineering's `visual-integration-qa` team and the independent Accessibility and Visual
+Auditor.
+
+For material UI work, three independent runtime specialists review one exact artifact:
+
+- `interaction_verifier` proves task outcome, state recovery, persistence and
+  console/network behavior and may record expert flow-conformance observations;
+- `accessibility_verifier` combines automated checks with keyboard, focus, semantics,
+  zoom/text, motion and available assistive-technology evidence;
+- `visual_verifier` proves hierarchy, responsive/adaptive rendering, overflow, tokens,
+  themes, assets and visual regression.
+
+The Executive Orchestrator creates the charter, deduplicates only identical findings and
+routes them to the appropriate owner. It does not act as a QA director, edit the UI or
+approve the synthesized result. The UI Implementer fixes routed defects. The originating
+verifier retests the new exact commit, and CPO plus applicable assurance/release owners
+make the final decision. Small defects invoke only relevant lanes; specialist count is
+not evidence of quality.
 
 ### CTO — Engineering and Technology
 

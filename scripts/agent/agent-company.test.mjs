@@ -23,12 +23,15 @@ describe("FoodOS company agent registry", () => {
       "ui_explorer",
       "design_reference_researcher",
       "ui_implementer",
+      "interaction_verifier",
+      "accessibility_verifier",
       "visual_verifier",
       "asset_producer",
     ]));
     expect(runtime.skills).toEqual(expect.arrayContaining([
       "foodos-ui-flow-spec",
       "foodos-ui-implementation",
+      "foodos-ui-quality-review",
       "foodos-visual-qa",
       "foodos-asset-production",
     ]));
@@ -71,7 +74,7 @@ describe("agent-governance verification routing", () => {
   });
 
   it("validates repo skill changes even when the diff is Markdown-only", () => {
-    expect(commandIds([".agents/skills/foodos-ui-flow-spec/SKILL.md"])).toEqual(
+    expect(commandIds([".agents/skills/foodos-ui-quality-review/SKILL.md"])).toEqual(
       expect.arrayContaining(["markdown", "agent-config", "agent-tests"]),
     );
   });
