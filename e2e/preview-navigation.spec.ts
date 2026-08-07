@@ -1,9 +1,17 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import axe from "axe-core";
+
+async function waitForPreviewHydration(page: Page) {
+  await page.waitForFunction(() => {
+    const navigationButton = document.querySelector<HTMLButtonElement>(".bottom-nav button");
+    return Boolean(navigationButton && Object.keys(navigationButton).some((key) => key.startsWith("__reactProps$")));
+  });
+}
 
 test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
   test("Q-UX-THEME-E2E-001 changes the appearance with the keyboard and persists it", async ({ page }) => {
     await page.goto("/?demo=1");
+    await waitForPreviewHydration(page);
 
     const themeMenuButton = page.getByRole("button", { name: /^Darstellung ändern/ });
     await themeMenuButton.focus();
@@ -20,6 +28,7 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
     await page.reload();
+    await waitForPreviewHydration(page);
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     await expect(page.getByRole("button", { name: /Darstellung ändern\. Aktuell: Hell/ })).toBeVisible();
 
@@ -36,6 +45,7 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
 
   test("keeps the five canonical destinations usable without horizontal overflow", async ({ page }, testInfo) => {
     await page.goto("/?demo=1");
+    await waitForPreviewHydration(page);
     await expect(page.getByRole("heading", { name: "Heute in FoodOS" })).toBeVisible();
 
     for (const [label, heading] of [
@@ -118,6 +128,7 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
       });
     });
     await page.goto("/?demo=1");
+    await waitForPreviewHydration(page);
     await page.getByRole("button", { name: /Proteinshake auswählen/ }).click();
     await expect(page.getByRole("heading", { name: "Produkt statt Barcode suchen" })).toBeVisible();
     await page.getByLabel("Lagerort für kommende Scans").selectOption("pantry");
@@ -173,12 +184,98 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
 
   test("has no automatically detectable serious accessibility violation on Today", async ({ page }) => {
     await page.goto("/?demo=1");
+    await waitForPreviewHydration(page);
     await page.addScriptTag({ content: axe.source });
     const result = await page.evaluate(async () => {
       const runner = (window as typeof window & { axe: typeof axe }).axe;
       return runner.run(document, { resultTypes: ["violations"] });
     });
     expect(result.violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
+  });
+
+  test("offers a responsive yogurt MHD input proposal without silently confirming it", async ({ page }, testInfo) => {
+    await page.addInitScript(() => window.localStorage.setItem("foodos:theme-preference:v1", "light"));
+    await page.route("**/api/products/3017624010701?*", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          globalCatalogStatus: "live",
+          product: {
+            barcode: "3017624010701",
+            name: "Naturjoghurt E2E",
+            brand: "FoodOS Molkerei",
+            quantity: "500 g",
+            categories: ["Milchprodukte", "Joghurts"],
+            countries: ["Deutschland"],
+            labels: [],
+            ingredientsText: "Joghurt",
+            structuredIngredients: [],
+            allergens: ["Milch"],
+            traces: [],
+            additives: [],
+            nutrition: { kcal100g: 62, protein100g: 3.5, carbs100g: 4.7, fat100g: 3.5 },
+            assessments: [],
+            source: "open-food-facts",
+            sourceUrl: "https://world.openfoodfacts.org/product/3017624010701",
+            sourceLanguage: "de",
+            retrievedAt: "2026-08-07T10:00:00.000Z",
+            confidence: 0.91
+          }
+        })
+      });
+    });
+    await page.goto("/?demo=1");
+    await waitForPreviewHydration(page);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await page.getByRole("button", { name: "Scan", exact: true }).click();
+    await page.getByLabel("Lagerort für kommende Scans").selectOption("fridge");
+    const purchaseDate = await page.getByLabel("Einkaufstag").inputValue();
+    const expectedDate = new Date(`${purchaseDate}T12:00:00.000Z`);
+    expectedDate.setUTCDate(expectedDate.getUTCDate() + 7);
+    const expectedValue = expectedDate.toISOString().slice(0, 10);
+
+    await page.getByPlaceholder("EAN / UPC / GS1 eingeben").fill("3017624010701");
+    await page.getByRole("button", { name: "Prüfen" }).click();
+    await expect(page.getByText(/MHD-Vorschlag .*Packung prüfen/)).toBeVisible();
+    await page.getByRole("button", { name: "Fertig" }).click();
+    await expect(page.getByRole("heading", { name: "MHD-Vorschläge prüfen" })).toBeVisible();
+    await expect(page.getByLabel("MHD-Vorschlag mit Packung abgleichen")).toHaveValue(expectedValue);
+    await expect(page.getByText(/nicht von der Packung/)).toBeVisible();
+    await expect(page.getByText(/Ohne Packungsabgleich speichert FoodOS kein MHD/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Preview abschließen" })).toBeEnabled();
+
+    await page.addScriptTag({ content: axe.source });
+    const accessibility = await page.evaluate(async () => {
+      const runner = (window as typeof window & { axe: typeof axe }).axe;
+      return runner.run(document, { resultTypes: ["violations"] });
+    });
+    expect(accessibility.violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
+    await page.screenshot({ path: `docs/evidence/screenshots/mhd-proposal-${testInfo.project.name}.png`, fullPage: true });
+
+    for (const viewport of [
+      { width: 360, height: 800 },
+      { width: 390, height: 844 },
+      { width: 430, height: 932 }
+    ]) {
+      await page.setViewportSize(viewport);
+      await expect(page.getByRole("button", { name: "Stimmt mit Packung überein" })).toBeVisible();
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(1);
+      const touchTargets = await page.locator(".capture-exception-card .capture-quantity button").evaluateAll((buttons) => buttons.map((button) => {
+        const box = button.getBoundingClientRect();
+        return { width: box.width, height: box.height };
+      }));
+      expect(touchTargets.every((target) => target.width >= 48 && target.height >= 48)).toBe(true);
+      const viewportAccessibility = await page.evaluate(async () => {
+        const runner = (window as typeof window & { axe: typeof axe }).axe;
+        return runner.run(document, { resultTypes: ["violations"] });
+      });
+      expect(viewportAccessibility.violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
+    }
+
+    await page.getByRole("button", { name: "Stimmt mit Packung überein" }).click();
+    await expect(page.getByLabel("Mit der Packung abgeglichen")).toBeChecked();
+    await expect(page.getByLabel("Verbrauchsdatum")).toHaveCount(0);
   });
 
   test("fails closed when the export service is not configured", async ({ request }) => {
@@ -205,6 +302,7 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
       });
     });
     await page.goto("/?demo=1");
+    await waitForPreviewHydration(page);
     await page.getByRole("button", { name: "Scan", exact: true }).click();
     await page.getByLabel("Lagerort für kommende Scans").selectOption("pantry");
     await page.getByLabel("EAN, UPC oder GS1-Code").fill("3017624010701");

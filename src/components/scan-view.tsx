@@ -4,6 +4,7 @@ import Image from "next/image";
 import {
   AlertTriangle,
   Camera,
+  CalendarClock,
   Check,
   ChevronRight,
   ImageOff,
@@ -30,6 +31,7 @@ import {
   captureSignature,
   captureUnitCount,
   confirmCaptureException,
+  confirmSuggestedBestBefore,
   hasGs1BatchFacts,
   hasLowConfidence,
   hasPersonalRisk,
@@ -42,6 +44,12 @@ import {
   type CaptureEntry,
   type CaptureLocation
 } from "@/domain/capture-session";
+import {
+  calendarDateInTimeZone,
+  isCalendarDate,
+  suggestBestBeforeDate,
+  type BestBeforeSuggestion
+} from "@/domain/expiry-suggestion";
 import { hasValidGtinCheckDigit, parseGs1, type Gs1Elements } from "@/domain/gs1";
 import { ProductCatalogSearch } from "@/features/catalog/product-catalog-search";
 import {
@@ -76,6 +84,21 @@ function captureLocationLabel(location: CaptureLocation | null): string {
   return CAPTURE_LOCATION_OPTIONS.find((option) => option.value === location)?.label ?? "Lagerort offen";
 }
 
+function captureBestBeforeSuggestion(entry: CaptureEntry, purchaseDate: string): BestBeforeSuggestion | null {
+  return suggestBestBeforeDate({
+    product: entry.product,
+    location: entry.location,
+    baseDate: purchaseDate,
+    existingBestBeforeDate: entry.gs1?.bestBeforeDate,
+    existingUseByDate: entry.gs1?.useByDate
+  });
+}
+
+function formatGermanCalendarDate(value: string): string {
+  const [year, month, day] = value.split("-");
+  return `${day}.${month}.${year}`;
+}
+
 interface ScanViewProps {
   householdId?: string;
   initialCatalogQuery?: string;
@@ -84,6 +107,7 @@ interface ScanViewProps {
   onOpenToday?: () => void;
   preview?: boolean;
   active?: boolean;
+  today?: string;
 }
 
 export function ScanView({
@@ -93,7 +117,8 @@ export function ScanView({
   onOpenInventory,
   onOpenToday,
   preview = false,
-  active = true
+  active = true,
+  today
 }: ScanViewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const locationSelectRef = useRef<HTMLSelectElement>(null);
@@ -110,6 +135,8 @@ export function ScanView({
   const [cameraActive, setCameraActive] = useState(false);
   const [barcode, setBarcode] = useState("");
   const [selectedLocation, setSelectedLocation] = useState<CaptureLocation | null>(null);
+  const sessionToday = today && isCalendarDate(today) ? today : calendarDateInTimeZone();
+  const [purchaseDate, setPurchaseDate] = useState(sessionToday);
   const [entries, setEntries] = useState<CaptureEntry[]>([]);
   const [phase, setPhase] = useState<"capture" | "review" | "success">("capture");
   const [loading, setLoading] = useState(false);
@@ -118,8 +145,19 @@ export function ScanView({
   const [lastCapture, setLastCapture] = useState<CaptureNotice | null>(null);
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
 
-  const exceptionEntries = useMemo(() => entries.filter((entry) => captureExceptions(entry).length > 0), [entries]);
-  const reviewEntries = useMemo(() => entries.filter(captureNeedsReviewCard), [entries]);
+  const { exceptionEntries, reviewEntries, suggestionCount } = useMemo(() => {
+    const exceptions: CaptureEntry[] = [];
+    const review: CaptureEntry[] = [];
+    let suggestions = 0;
+    for (const entry of entries) {
+      const hasException = captureExceptions(entry).length > 0;
+      const hasSuggestion = Boolean(captureBestBeforeSuggestion(entry, purchaseDate));
+      if (hasException) exceptions.push(entry);
+      if (captureNeedsReviewCard(entry) || hasSuggestion) review.push(entry);
+      if (hasSuggestion) suggestions += 1;
+    }
+    return { exceptionEntries: exceptions, reviewEntries: review, suggestionCount: suggestions };
+  }, [entries, purchaseDate]);
   const unitCount = captureUnitCount(entries);
   const locked = saveState.status === "saving" || saveState.status === "queued" || saveState.status === "acked" || saveState.status === "uncertain";
   const queuedOperationId = saveState.status === "queued" ? saveState.operationId : null;
@@ -259,6 +297,14 @@ export function ScanView({
     selectedLocationRef.current = location;
     setSelectedLocation(location);
     if (location) setError(null);
+  }
+
+  function choosePurchaseDate(value: string) {
+    if (locked || !isCalendarDate(value) || value < "2000-01-01" || value > sessionToday) return;
+    setPurchaseDate(value);
+    operationIdRef.current = crypto.randomUUID();
+    setSaveState({ status: "idle" });
+    setAnnouncement(`Einkaufstag ${formatGermanCalendarDate(value)} ausgewählt.`);
   }
 
   function retainUnresolved(
@@ -492,6 +538,7 @@ export function ScanView({
     setLastCapture(null);
     setError(null);
     chooseCaptureLocation(null);
+    setPurchaseDate(sessionToday);
     operationIdRef.current = crypto.randomUUID();
   }
 
@@ -530,6 +577,20 @@ export function ScanView({
           {CAPTURE_LOCATION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       </label>
+      <label className="capture-session-purchase-date">
+        <span><small>EINKAUFSTAG</small><strong>Gekauft am</strong></span>
+        <input
+          aria-label="Einkaufstag"
+          aria-describedby="capture-purchase-date-help"
+          type="date"
+          min="2000-01-01"
+          max={sessionToday}
+          value={purchaseDate}
+          onChange={(event) => choosePurchaseDate(event.target.value)}
+          disabled={locked}
+        />
+        <small id="capture-purchase-date-help">Heute ist vorausgewählt. Der Tag ist die Basis für optionale MHD-Vorschläge.</small>
+      </label>
       <section className={`scanner-stage capture-scanner ${cameraActive ? "is-live" : ""}`}>
         <video ref={videoRef} muted playsInline aria-hidden="true" />
         <div className="scanner-overlay" aria-hidden="true">
@@ -555,7 +616,7 @@ export function ScanView({
       {error && <div className="error-banner" role="alert"><AlertTriangle size={17} /><span>{error}</span></div>}
       {lastCapture && <div className={`capture-last ${lastCapture.tone}`} role="status">{lastCapture.tone === "warning" ? <AlertTriangle size={17} /> : <Check size={17} />}<span>{lastCapture.message}</span></div>}
 
-      {entries.length > 0 && <CaptureList entries={entries} onChange={changed} />}
+      {entries.length > 0 && <CaptureList entries={entries} purchaseDate={purchaseDate} onChange={changed} />}
 
       <ProductCatalogSearch
         initialQuery={initialCatalogQuery}
@@ -567,11 +628,14 @@ export function ScanView({
       entries={entries}
       reviewEntries={reviewEntries}
       unresolvedCount={exceptionEntries.length}
+      suggestionCount={suggestionCount}
+      purchaseDate={purchaseDate}
       locked={locked}
       preview={preview}
       saveState={saveState}
       onBack={() => { setPhase("capture"); setSaveState({ status: "idle" }); }}
       onChange={changed}
+      onAnnounce={setAnnouncement}
       onCommit={() => void commitPurchase()}
       onOpenInventory={onOpenInventory}
       onOpenToday={onOpenToday}
@@ -579,30 +643,36 @@ export function ScanView({
   </div>;
 }
 
-function CaptureList({ entries, onChange, disabled = false }: { entries: CaptureEntry[]; onChange: (entries: CaptureEntry[]) => void; disabled?: boolean }) {
+function CaptureList({ entries, purchaseDate, onChange, disabled = false }: { entries: CaptureEntry[]; purchaseDate: string; onChange: (entries: CaptureEntry[]) => void; disabled?: boolean }) {
   return <section className="capture-list" aria-labelledby="capture-list-title">
     <div className="capture-section-heading"><div><p>ERFASST</p><h2 id="capture-list-title">Dein aktueller Einkauf</h2></div><small>Änderbar bis Fertig</small></div>
-    <ul>{entries.map((entry) => <li key={entry.itemMutationId} className={captureExceptions(entry).length ? "is-uncertain" : ""}>
+    <ul>{entries.map((entry) => {
+      const suggestion = captureBestBeforeSuggestion(entry, purchaseDate);
+      return <li key={entry.itemMutationId} className={captureExceptions(entry).length ? "is-uncertain" : ""}>
       <ProductThumb entry={entry} />
       <div className="capture-item-copy">
         <strong>{entry.product?.name ?? "Unbekanntes Produkt"}</strong>
         <small>{entry.product?.brand ?? entry.barcode} · {captureLocationLabel(entry.location)}</small>
         {captureExceptions(entry).length > 0 && <span><AlertTriangle size={13} />Später prüfen</span>}
+        {suggestion && <span className="capture-mhd-hint"><CalendarClock size={13} />MHD-Vorschlag {formatGermanCalendarDate(suggestion.date)} · Packung prüfen</span>}
       </div>
       <QuantityControl entry={entry} onChange={onChange} entries={entries} disabled={disabled} />
-    </li>)}</ul>
+    </li>})}</ul>
   </section>;
 }
 
-function CaptureReview({ entries, reviewEntries, unresolvedCount, locked, preview, saveState, onBack, onChange, onCommit, onOpenInventory, onOpenToday }: {
+function CaptureReview({ entries, reviewEntries, unresolvedCount, suggestionCount, purchaseDate, locked, preview, saveState, onBack, onChange, onAnnounce, onCommit, onOpenInventory, onOpenToday }: {
   entries: CaptureEntry[];
   reviewEntries: CaptureEntry[];
   unresolvedCount: number;
+  suggestionCount: number;
+  purchaseDate: string;
   locked: boolean;
   preview: boolean;
   saveState: SaveState;
   onBack: () => void;
   onChange: (entries: CaptureEntry[]) => void;
+  onAnnounce: (message: string) => void;
   onCommit: () => void;
   onOpenInventory?: () => void;
   onOpenToday?: () => void;
@@ -611,17 +681,19 @@ function CaptureReview({ entries, reviewEntries, unresolvedCount, locked, previe
   return <section className="capture-review" aria-labelledby="capture-review-title">
     <div className="capture-review-heading">
       <p>LETZTER SCHRITT</p>
-      <h2 id="capture-review-title">Nur Unklarheiten prüfen</h2>
+      <h2 id="capture-review-title">{unresolvedCount && suggestionCount ? "Vorschläge & Unklarheiten prüfen" : suggestionCount ? "MHD-Vorschläge prüfen" : "Nur Unklarheiten prüfen"}</h2>
       <span>{unresolvedCount
         ? `${unresolvedCount} ${unresolvedCount === 1 ? "Angabe braucht" : "Angaben brauchen"} dich.`
+        : suggestionCount
+          ? `${suggestionCount} ${suggestionCount === 1 ? "Vorschlag ist" : "Vorschläge sind"} optional. Nur nach Abgleich mit der Packung übernehmen.`
         : reviewEntries.length
           ? "Alle Angaben bestätigt. Du kannst sie bis zum Speichern weiter ändern."
           : "Alles ist bereit. Keine zusätzlichen Formulare."}</span>
     </div>
 
-    {reviewEntries.map((entry) => <ExceptionCard key={entry.itemMutationId} entry={entry} entries={entries} onChange={onChange} disabled={locked} />)}
+    {reviewEntries.map((entry) => <ExceptionCard key={`${entry.itemMutationId}:${purchaseDate}`} entry={entry} entries={entries} purchaseDate={purchaseDate} onChange={onChange} onAnnounce={onAnnounce} disabled={locked} />)}
 
-    {(saveState.status === "queued" || saveState.status === "uncertain") && <CaptureList entries={entries} onChange={onChange} disabled />}
+    {(saveState.status === "queued" || saveState.status === "uncertain") && <CaptureList entries={entries} purchaseDate={purchaseDate} onChange={onChange} disabled />}
 
     {(saveState.status === "rejected" || saveState.status === "error") && <div className="error-banner" role="alert"><AlertTriangle size={17} /><span>{saveState.message}</span></div>}
     {saveState.status === "queued" && <div className="batch-save-state queued" role="status">
@@ -643,9 +715,19 @@ function CaptureReview({ entries, reviewEntries, unresolvedCount, locked, previe
   </section>;
 }
 
-function ExceptionCard({ entry, entries, onChange, disabled }: { entry: CaptureEntry; entries: CaptureEntry[]; onChange: (entries: CaptureEntry[]) => void; disabled: boolean }) {
+function ExceptionCard({ entry, entries, purchaseDate, onChange, onAnnounce, disabled }: { entry: CaptureEntry; entries: CaptureEntry[]; purchaseDate: string; onChange: (entries: CaptureEntry[]) => void; onAnnounce: (message: string) => void; disabled: boolean }) {
   const exceptions = captureExceptions(entry);
+  const suggestion = captureBestBeforeSuggestion(entry, purchaseDate);
+  const confirmedDetailsRef = useRef<HTMLFieldSetElement>(null);
+  const shouldFocusConfirmationRef = useRef(false);
   const [name, setName] = useState("");
+  const [suggestedDate, setSuggestedDate] = useState(suggestion?.date ?? "");
+
+  useEffect(() => {
+    if (!shouldFocusConfirmationRef.current || !entry.gs1DateEdited) return;
+    shouldFocusConfirmationRef.current = false;
+    confirmedDetailsRef.current?.focus();
+  }, [entry.gs1?.bestBeforeDate, entry.gs1DateEdited]);
 
   function manualProduct(productName: string): Product {
     return {
@@ -669,7 +751,30 @@ function ExceptionCard({ entry, entries, onChange, disabled }: { entry: CaptureE
     onChange(next);
   }
 
-  return <article className="capture-exception-card">
+  function confirmMhdSuggestion() {
+    shouldFocusConfirmationRef.current = true;
+    const next = confirmSuggestedBestBefore(
+      entries,
+      entry.itemMutationId,
+      suggestedDate,
+      entry.quantity > 1 ? crypto.randomUUID() : undefined
+    );
+    if (next === entries) {
+      shouldFocusConfirmationRef.current = false;
+      onAnnounce("Das geprüfte MHD konnte nicht getrennt übernommen werden. Die übrigen Packungen bleiben unverändert; du kannst ohne MHD fortfahren.");
+      return;
+    }
+    onChange(next);
+    const packageMessage = entry.quantity === 1
+      ? `MHD ${formatGermanCalendarDate(suggestedDate)} für diese Packung übernommen.`
+      : `MHD ${formatGermanCalendarDate(suggestedDate)} für eine Packung übernommen. ${entry.quantity - 1} ${entry.quantity === 2 ? "weitere Packung bleibt" : "weitere Packungen bleiben"} ohne MHD.`;
+    const remainingBatchReview = (entry.gs1?.lotNumber || entry.gs1?.serialNumber) && !entry.confirmations.gs1
+      ? " Charge oder Seriennummer müssen noch separat geprüft werden."
+      : "";
+    onAnnounce(`${packageMessage}${remainingBatchReview}`);
+  }
+
+  return <article className={`capture-exception-card ${suggestion && !exceptions.length ? "is-suggestion" : ""}`}>
     <header><ProductThumb entry={entry} /><div><strong>{entry.product?.name ?? "Produktidentität unklar"}</strong><small>{entry.barcode}</small></div><QuantityControl entry={entry} entries={entries} onChange={onChange} disabled={disabled} /></header>
 
     {(!entry.location || entry.locationNeedsReview) && <label className="capture-review-location">
@@ -692,8 +797,37 @@ function ExceptionCard({ entry, entries, onChange, disabled }: { entry: CaptureE
       <button type="button" className="text-button" onClick={retainUnknown} disabled={disabled}>Ausdrücklich als unbekannt übernehmen</button>
     </form>}
 
-    {hasGs1BatchFacts(entry.gs1) && entry.gs1 && <fieldset className="capture-confirmation" disabled={disabled}>
-      <legend>GS1-Angaben der Packung prüfen</legend>
+    {suggestion && <fieldset className="capture-mhd-proposal" disabled={disabled}>
+      <legend><CalendarClock size={16} />FoodOS-MHD-Vorschlag</legend>
+      <p><strong>{formatGermanCalendarDate(suggestion.date)}</strong><span>+{suggestion.dayOffset} Tage ab Einkaufstag · nicht von der Packung</span></p>
+      <label>
+        <span>{entry.quantity === 1 ? "MHD-Vorschlag mit Packung abgleichen" : `MHD-Vorschlag für eine von ${entry.quantity} Packungen abgleichen`}</span>
+        <input
+          type="date"
+          min="2000-01-01"
+          max="2100-12-31"
+          value={suggestedDate}
+          aria-describedby={`mhd-proposal-help-${entry.itemMutationId}`}
+          onChange={(event) => setSuggestedDate(event.target.value)}
+        />
+      </label>
+      <button
+        type="button"
+        className="secondary-button wide"
+        disabled={!isCalendarDate(suggestedDate)}
+        onClick={confirmMhdSuggestion}
+      >
+        <Check size={17} />{entry.quantity === 1 ? "Stimmt mit Packung überein" : `Für 1 von ${entry.quantity} Packungen bestätigen`}
+      </button>
+      <small id={`mhd-proposal-help-${entry.itemMutationId}`}>{entry.quantity === 1
+        ? "Die Schätzung ist nur eine Eingabehilfe. Ohne Packungsabgleich speichert FoodOS kein MHD; ein Verbrauchsdatum wird nie geschätzt."
+        : `FoodOS übernimmt das geprüfte MHD nur für eine Packung. Die übrigen ${entry.quantity - 1} bleiben für einen eigenen Packungsabgleich ohne MHD. Ein Verbrauchsdatum wird nie geschätzt.`}</small>
+    </fieldset>}
+
+    {hasGs1BatchFacts(entry.gs1) && entry.gs1 && <fieldset ref={confirmedDetailsRef} tabIndex={-1} className="capture-confirmation" disabled={disabled}>
+      <legend>{entry.gs1DateEdited && !entry.gs1OriginalBestBeforeDate && !entry.gs1OriginalUseByDate
+        ? entry.confirmations.gs1 ? "Bestätigte Packungsangabe" : "Packungsangaben prüfen"
+        : "GS1-Angaben der Packung prüfen"}</legend>
       {entry.gs1.bestBeforeDate && <label><span>MHD</span><input type="date" value={entry.gs1.bestBeforeDate} onChange={(event) => onChange(updateCaptureGs1(entries, entry.itemMutationId, { ...entry.gs1!, bestBeforeDate: event.target.value }))} /></label>}
       {entry.gs1.useByDate && <label><span>Verbrauchsdatum</span><input type="date" value={entry.gs1.useByDate} onChange={(event) => onChange(updateCaptureGs1(entries, entry.itemMutationId, { ...entry.gs1!, useByDate: event.target.value }))} /></label>}
       {entry.gs1.lotNumber && <label><span>Charge</span><input value={entry.gs1.lotNumber} maxLength={120} onChange={(event) => onChange(updateCaptureGs1(entries, entry.itemMutationId, { ...entry.gs1!, lotNumber: event.target.value }))} /></label>}
