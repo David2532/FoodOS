@@ -20,7 +20,7 @@ export function AuthFrame({
       <div className="ambient ambient-one" />
       <div className="ambient ambient-two" />
       <section className="auth-shell">
-        <div className="auth-brand" aria-label="FoodOS">
+        <div className="auth-brand">
           <span><Sparkles size={20} /></span>
           <strong>Food<span>OS</span></strong>
           <div className="auth-brand-actions"><ThemeMenu />{showSignOut && <SignOutButton />}</div>
