@@ -1,5 +1,6 @@
 import { ShieldCheck, Sparkles } from "lucide-react";
 import { SignOutButton } from "./sign-out-button";
+import { ThemeMenu } from "@/features/settings/theme-menu";
 
 export function AuthFrame({
   eyebrow,
@@ -22,7 +23,7 @@ export function AuthFrame({
         <div className="auth-brand" aria-label="FoodOS">
           <span><Sparkles size={20} /></span>
           <strong>Food<span>OS</span></strong>
-          {showSignOut && <SignOutButton />}
+          <div className="auth-brand-actions"><ThemeMenu />{showSignOut && <SignOutButton />}</div>
         </div>
         <div className="auth-heading">
           <p><ShieldCheck size={14} /> {eyebrow}</p>

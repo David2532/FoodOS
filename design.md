@@ -1,579 +1,620 @@
 # FoodOS Design System
 
-Version 1.1 · Adaptive mobile-first · Dark nutritional utility · Deutsche Oberfläche
+Version **2.0** · Adaptive mobile-first · Quiet Intelligence · Deutsche Oberfläche  
+Status: **verbindlicher Produkt- und UI-Vertrag**
 
-Dieses Dokument ist die verbindliche visuelle und interaktive Produktspezifikation für
-FoodOS. Es schützt die App davor, bei neuen Features zu einer Ansammlung uneinheitlicher
-Karten und Formulare zu werden. Bestehende funktionierende Muster werden weitergeführt;
-neue Screens müssen sich wie derselbe Teil von FoodOS anfühlen.
+Dieses Dokument beschreibt, wie FoodOS aussehen, reagieren und sich anfühlen muss. Es ist
+für Menschen und Codex-Agenten geschrieben. Es ersetzt keine fachlichen Regeln, sondern
+übersetzt die kanonische Produktvision in eine konsistente, testbare Oberfläche.
 
-Visuelle North-Star-Tafeln und der vollständige Screen-Katalog liegen unter
-[`mockups/README.md`](mockups/README.md). Die Tafeln zeigen Stil und Hierarchie, sind aber
-wegen ihrer generativen Natur nicht verbindlich für exakte Texte, Daten oder Navigation.
-Die fachlich exakten Abläufe stehen in [`plans/USER_FLOWS.md`](plans/USER_FLOWS.md).
-Messbare Web-/Native-Performance, plattformspezifische Apple-/Android-Regeln,
-Accessibility-Gates und der UI-Engineering-Workflow stehen verbindlich in
-[`plans/UI_UX_PERFORMANCE_PLAN.md`](plans/UI_UX_PERFORMANCE_PLAN.md). Nutzerverständnis
-wird nach [`plans/UX_RESEARCH_AND_USABILITY_TESTING.md`](plans/UX_RESEARCH_AND_USABILITY_TESTING.md)
-mit echten Testpersonen geprüft; visuelle Qualität allein ist keine Usability-Evidence.
+## Quellen und Rangfolge
+
+1. `plans/FOODOS_MASTER_PLAN.md` — Gesamtpriorität und Quellenkarte.
+2. `plans/PRODUCT_NORTH_STAR.md` — Nutzerpromise und Einfachheitsgrenze.
+3. `plans/USER_FLOWS.md` — stabile Flow-IDs und fachliches Verhalten.
+4. `design.md` — visuelle Hierarchie, Navigation, Komponentenrezepte und UI-Abnahme.
+5. bestehende semantische CSS-Tokens und Komponenten — technische Ist-Quelle.
+6. Mockups, Figma, v0, Screenshots und generierte Bilder — Referenz oder Konzept, niemals
+   automatisch Autorität für Navigation, Daten, Sicherheit oder Produktverhalten.
+
+Messbare Performance- und Plattformregeln stehen zusätzlich in
+`plans/UI_UX_PERFORMANCE_PLAN.md`. Echte Usability-Evidence folgt
+`plans/UX_RESEARCH_AND_USABILITY_TESTING.md`. Die native Codex-UI-Agentenstruktur steht in
+`docs/agent/CODEX_UI_AGENT_ARCHITECTURE.md`.
+
+---
 
 ## 1. Produktgefühl
 
-FoodOS soll sich wie ein ruhiges, intelligentes Haushaltswerkzeug anfühlen – nicht wie
-eine medizinische Warn-App und nicht wie ein aggressiver Fitness-Tracker.
+FoodOS ist ein ruhiges, intelligentes Haushaltswerkzeug. Es wirkt hochwertig und modern,
+aber nicht wie ein Fitness-Tracker, Krankenhausprodukt, Gaming-Interface oder generisches
+SaaS-Dashboard.
 
-Die gewünschte Wirkung ist:
+Die gewünschte Wirkung:
 
-- **Sofort verständlich:** Der wichtigste nächste Schritt ist ohne Nachdenken sichtbar.
-- **Verlässlich:** Herkunft, Unsicherheit und Status der Daten werden ehrlich gezeigt.
-- **Ruhig:** Dunkle natürliche Flächen, wenig visuelles Rauschen, gezielte Akzentfarbe.
-- **Praktisch:** Große Trefferflächen, einhändige Nutzung, keine unnötigen Dialogketten.
-- **Motivierend:** Fortschritt statt Schuld; Warnungen bleiben sachlich und lösbar.
+- **sofort verständlich:** Der wichtigste nächste Schritt ist ohne Erklärung sichtbar;
+- **fast:** häufige Handlungen reagieren unmittelbar und unterbrechen den Nutzer nicht;
+- **verlässlich:** Quelle, Aktualität und Unsicherheit werden ehrlich dargestellt;
+- **ruhig:** wenige Flächen, klare Abstände und gezielte Akzente statt visueller Lautstärke;
+- **praktisch:** einhändig, große Trefferflächen, sinnvolle Standardwerte, schnelle Korrektur;
+- **motivierend:** Fortschritt und Möglichkeiten statt Schuld und künstlicher Dringlichkeit.
 
-Die Designpersönlichkeit lässt sich als „smarte Speisekammer bei Nacht“ beschreiben:
-waldgrün, warm, präzise und hochwertig.
+Interne Kurzform: **smarte Speisekammer bei Nacht** — waldgrün, warm, präzise und ruhig.
 
-## 2. Gestaltungsprinzipien
+---
+
+## 2. Nicht verhandelbare Designprinzipien
+
+### Ergebnis vor Oberfläche
+
+Jeder Screen beginnt mit der Nutzerfrage und dem nächsten sinnvollen Ergebnis. Die UI ist
+kein Schaukasten für Funktionen oder Kennzahlen.
 
 ### Handlung vor Erklärung
 
-Jeder Screen hat genau eine dominante Primäraktion. Sekundäraktionen sind sichtbar,
-aber konkurrieren nicht mit ihr. Lange Erklärungen erscheinen erst bei Bedarf.
+Pro Schritt existiert eine dominante Primäraktion. Details erscheinen progressiv und
+konkurrieren nicht mit der Aufgabe.
+
+### Erfassen statt verwalten
+
+Ein Einkauf ist eine zusammenhängende Sitzung. Bekannte Produkte erzeugen keine
+Einzelformulare. Das System übernimmt Produktdaten, Vorschläge und Wiederholungen; der
+Nutzer bestätigt nur Unsicherheit und sicherheitskritische Angaben.
 
 ### Zustand vor Dekoration
 
-Farbe, Icon und Text erklären einen echten Zustand: MHD, Datenqualität, persönliches
-Risiko, Synchronisierung oder Fortschritt. Farbe wird nie nur dekorativ für zufällige
-Karten eingesetzt.
+Farbe, Icon, Text und Bewegung erklären einen realen Zustand: erkannt, unklar, lokal,
+synchronisiert, bald fällig, betroffen oder nicht geprüft. Dekoration erhält keine eigene
+Hierarchiestufe.
 
 ### Persönlich relevant vor allgemein interessant
 
-Persönliche Allergene, bald ablaufende Produkte und konkrete Fehlmengen stehen oberhalb
-allgemeiner Produktinformationen. Vollständige Rohdaten bleiben erreichbar, dominieren
-aber nicht den ersten Blick.
+Allergene, Rückruf, Verbrauchsdatum, bald fällige Produkte und konkrete Fehlmengen stehen
+vor allgemeinen Produktdetails oder Statistiken.
 
-### Bestätigung bei Unsicherheit
+### Fakten vor Interpretation
 
-Erkannte MHD-, Chargen- oder OCR-Daten werden vor dem Speichern bestätigt. Die UI darf
-eine Vermutung nie wie eine Tatsache aussehen lassen.
+Nährwerte, Zutaten, Portion, Quelle und Datenabdeckung werden vor einer persönlichen
+Einordnung gezeigt. Es gibt keinen unerklärten universellen Gesund-/Ungesund-Score.
 
-### Progressive Offenlegung
+### Korrektur ist normal
 
-Der erste Blick zeigt Name, Menge, Status und Handlung. Zutatenrohtext, Provenienz,
-Evidenzdetails und technische Metadaten öffnen sich in Details oder Bottom Sheets.
+Jede Automatisierung besitzt einen kurzen, reversiblen Korrekturweg. Fehler werden nicht
+versteckt und zwingen nicht zum Neustart eines kompletten Einkaufs oder Plans.
 
-## 3. Informationsarchitektur
+---
 
-Die primäre Navigation besitzt dauerhaft fünf Ziele:
+## 3. Kanonische Informationsarchitektur
 
-| Ziel | Nutzerfrage | Primäraktion |
+FoodOS besitzt **vier primäre Ziele**:
+
+| Ziel | Nutzerfrage | Dominante Aktion |
 |---|---|---|
-| Heute | „Was ist heute wichtig?“ | Verzehr buchen |
-| Vorrat | „Was habe ich und was läuft ab?“ | Produkt/Charge öffnen |
-| Scan | „Was kommt neu hinein?“ | Kamera starten |
-| Plan | „Was esse ich diese Woche?“ | Mahlzeit einplanen |
-| Einkauf | „Was fehlt mir?“ | Artikel abhaken/hinzufügen |
+| **Heute** | „Was kann ich jetzt essen und was ist wichtig?“ | Mahlzeit auswählen |
+| **Erfassen** | „Was kommt aus diesem Einkauf in meinen Vorrat?“ | Einkauf starten/fortsetzen |
+| **Vorrat** | „Was habe ich, wo liegt es und was sollte ich nutzen?“ | Produkt oder schnelle Korrektur öffnen |
+| **Planen** | „Was koche ich, was fehlt und was kaufe ich?“ | Rezept/Plan/Einkauf fortsetzen |
 
-Der Scan ist in der Mitte hervorgehoben, bleibt aber Teil derselben Bottom Navigation.
-Profil, Haushalt, Ziele, Datenexport und Einstellungen liegen hinter dem Avatar bzw.
-dem rechten Topbar-Button und werden nicht als sechster Tab ergänzt.
+`Einkauf` ist kein fünfter Hauptbereich. Einkaufsliste, Wochenplan und Rezeptplanung bilden
+einen zusammenhängenden Bereich unter **Planen**. Profil, Haushalt, Ziele, Datenschutz,
+Integrationen, Export und Einstellungen liegen hinter dem Avatar beziehungsweise „Mehr“.
 
-Detailansichten ersetzen die jeweilige Inhaltsfläche und besitzen eine klare
-Zurück-Navigation. Mobile Formulare und kurze Entscheidungen öffnen bevorzugt als
-Bottom Sheet; komplexe Datenbearbeitung erhält einen eigenen Screen.
+Auf kompakten Geräten verwendet FoodOS eine Bottom Navigation mit vier eindeutigen Zielen.
+**Erfassen** darf als zentrale Handlung visuell hervorgehoben werden, bleibt aber ein
+normal beschrifteter und zugänglicher Navigationspunkt. Auf mittleren und erweiterten
+Fenstern wird dieselbe Informationsarchitektur als Rail/Sidebar oder List-Detail-Layout
+dargestellt; die Aufgabe und Reihenfolge ändern sich nicht.
 
-### Werbung und Premium
+Kritische Sicherheitsinterventionen dürfen auf Heute vor der normalen Essensentscheidung
+stehen. Ohne solche Intervention ist **„Was kann ich jetzt essen?“** die visuelle und
+inhaltliche Hauptentscheidung, nicht ein großer Kalorien-Dashboard-Hero.
 
-Werbung ist ein klar beschrifteter, zurückhaltender Fremdinhalt und nie Teil der
-Primärnavigation. Maximal eine kontextuelle Banner-/Native-Fläche darf auf einer
-unkritischen Übersicht stehen. Keine Werbung erscheint bei Anmeldung/2FA, Kamera/Scan,
-MHD/Verbrauchsdatum, Inhaltsstoff- oder Ernährungsprofil, Consent, Fehler, Export oder
-Kontolöschung. Rückruf-, Sync-Konflikt- und Wiederherstellungsflächen sind ebenfalls
-werbefrei. Interstitials unterbrechen keinen Nutzerflow.
-
-Premium-Upsells erklären konkreten laufenden Nutzen und bleiben ablehnbar. Sicherheits-,
-Warn-, Datenschutz-, Export-, Lösch- und Korrekturfunktionen sehen nie gesperrt aus.
-Consent ist weder Kaufzwang noch Verkaufsargument.
+---
 
 ## 4. Kernabläufe
 
-Jeder Kernablauf wird als zusammenhängender Produkt-Flow gestaltet und implementiert.
-Ein Flow besitzt immer einen klaren Einstieg, Fortschritt, Bestätigung, Abbruchweg und
-eine sinnvolle Erholung nach Fehlern. Screens dürfen nicht nur für den Happy Path schön
-aussehen. Navigation, Texte, Datenmutationen und Feedback müssen denselben Zustand
-erzählen; eine erfolgreiche UI ohne erfolgreiche Persistenz gilt nicht als Erfolg.
+### 4.1 Einkauf erfassen
 
-### Lebensmittel hinzufügen
+Ziel: Ein kompletter Einkauf wird mit möglichst wenig Unterbrechung in einen verlässlichen
+digitalen Vorrat umgewandelt.
 
-1. Scan-Tab öffnen.
-2. Kamera erlauben oder Barcode manuell eingeben.
-3. Produkt wird lokal bzw. über Open Food Facts gefunden.
-4. Produktidentität und Datenqualität werden angezeigt.
-5. GS1-Daten werden direkt übernommen oder ein zweiter MHD-/Chargen-Scan angeboten.
-6. Nutzer bestätigt/korrigiert Datum, Menge, Einheit und Lagerort.
-7. Eine kurze Erfolgsmeldung bestätigt den neuen Vorratsbestand und bietet
-   „Weiter scannen“ als nächste Aktion an.
+1. Nutzer startet **Einkauf erfassen**.
+2. Kamera/Barcode, Bon, E-Beleg oder manuelle Eingabe stehen als Erfassungswege bereit.
+3. Bei bekanntem Barcode folgt sofort Ton/Haptik, Produktname, Miniatur, Menge und Status.
+4. Die Kamera bleibt für den nächsten Artikel aktiv.
+5. Ein identischer erneuter Scan erhöht die Menge, ohne eine Detailseite zu öffnen.
+6. Hohe Konfidenz und geringes Risiko werden direkt in die Sitzung übernommen.
+7. Unklare Produktzuordnung, Menge, Lagerort oder optionale Daten landen in einer Queue.
+8. Unsicheres Verbrauchsdatum, Allergen oder Recall-Merkmal verlangt explizite Bestätigung.
+9. **Fertig** öffnet genau eine zusammengefasste Unsicherheitsprüfung.
+10. Bestätigen übernimmt den Einkauf atomar/idempotent und bietet direkt
+    **„Was kann ich damit essen?“** an.
 
-### Produkt verstehen
+Die Kamera endet nur bei Nutzerabbruch, Hintergrund/Timeout, Berechtigungsverlust oder
+wenn die Sitzung abgeschlossen wird. Ein Produktfund allein beendet die Einkaufssitzung
+nicht.
 
-1. Produktkopf: Bild, Name, Marke, Menge und Quellenstatus.
-2. Persönlich relevante Hinweise: Allergene/Ausschlüsse zuerst.
-3. Nährwerte als kompakte Zusammenfassung pro 100 g/ml oder bestätigter Portion.
-4. Inhaltsstoffe nach Relevanz sortiert, jeweils mit Begründung und Unsicherheit.
-5. Vollständige Zutaten, Labels und Metadaten aufklappbar.
+#### Erfassungs-HUD
 
-### Verzehr buchen
+Während des Scans dominieren Kamera und Rückmeldung. Sichtbar sind höchstens:
 
-1. Produkt oder geplante Mahlzeit auswählen.
-2. Charge und Portionsmenge bestätigen.
-3. Live-Vorschau zeigt Kalorien/Makros und verbleibenden Bestand.
-4. Eine Primäraktion bucht Verzehr und Bestandsänderung atomar.
-5. Dashboard aktualisiert sich sichtbar, aber ohne übertriebene Celebration.
+- kurze Scan-Anweisung;
+- Anzahl erfasster Packungen;
+- letzter Treffer mit Menge;
+- Status der unklaren Angaben;
+- Taschenlampe/Permission-Hilfe;
+- **Fertig** und ein ruhiger manueller Fallback.
 
-### Ablaufdatum behandeln
+Keine Produktdetailseite, Nährwerttabelle oder Zutatenanalyse unterbricht den schnellen
+Scan. Diese Inhalte bleiben nachgelagert erreichbar.
 
-Die App bietet immer eine konkrete Handlung: „Heute einplanen“, „Verbraucht“,
-„Entsorgt“ oder „Datum korrigieren“. Ein roter Status ohne Handlung ist unzulässig.
+### 4.2 Unsicherheit prüfen
 
-### Produktrückruf behandeln
+Die Abschlussfläche gruppiert nach nötiger Entscheidung statt nach technischen Quellen:
 
-1. Ein möglicher oder exakter Treffer steht über normalem MHD-/Plan-Inhalt.
-2. Zeige Match-Qualität, betroffene Charge/Packung, offizielle Quelle und Aktualität.
-3. Gib die offizielle Handlung wieder; FoodOS erklärt nicht stärker und verspricht keine
-   Sicherheit.
-4. `UNCHECKED`/veraltete Quelle bleibt sichtbar und verlinkt zur offiziellen Prüfung.
-5. Nutzer kann „Packung vergleichen“, „Entsorgt/zurückgebracht“ oder „Falsch zugeordnet
-   melden“, aber den amtlichen Datensatz nicht als sicher überschreiben.
+1. sicherheitskritisch bestätigen;
+2. Produktzuordnung auswählen;
+3. Menge/Lagerort kurz korrigieren;
+4. nichtkritische Angaben später ergänzen.
 
-### Offline und Konflikt behandeln
+Jede Zeile zeigt die Vermutung, den Grund der Unsicherheit, Quelle/Konfidenz und eine
+schnelle Korrektur. Nichtkritische Felder dürfen auf „später“ stehen. Die App erfindet
+keine MHD- oder Verbrauchsdaten, um die Queue leer erscheinen zu lassen.
 
-Nach einer Bestätigung steht sichtbar, ob die Änderung nur auf diesem Gerät, in der
-Warteschlange, synchronisiert, abgelehnt oder konfliktbehaftet ist. Ein Konflikt zeigt
-lokalen und Serverwert samt Folge; Sicherheits-, Mengen-, Mitgliedschafts- und
-Löschkonflikte werden nie still per „zuletzt gespeichert“ entschieden.
+### 4.3 Heute — Was kann ich jetzt essen?
 
-## 5. Layout und Raster
+Reihenfolge:
 
-### Mobile Basis
+1. exakter/möglicher Rückruf oder überschrittenes Verbrauchsdatum, falls handlungsrelevant;
+2. Entscheidung **Was kann ich jetzt essen?** mit zwei bis vier starken Vorschlägen;
+3. bald verbrauchen;
+4. kompakter Tages-/Nährstoffstatus;
+5. heutige Mahlzeiten beziehungsweise letzte Aktionen;
+6. Einkauf erfassen oder Plan fortsetzen.
 
-- Primärer Zielbereich: 360–430 px Breite.
-- Inhaltsbreite: `100%`, im Desktop-Preview maximal 520 px.
-- Horizontaler Seitenabstand: 18 px; bei maximal 380 px auf 13 px reduzieren.
-- Topbar: 44 px Bedienelemente plus Safe-Area-Abstand.
-- Bottom Navigation: fest, Safe Area berücksichtigen; Inhalt erhält mindestens 112 px
-  unteren Abstand, damit nichts verdeckt wird.
+Ein Vorschlag nennt knapp:
+
+- warum er passt;
+- ob alles vorhanden ist;
+- welche Zutat fehlt oder ersetzt werden kann;
+- Kochzeit und Portionen;
+- relevante Ablaufpriorität;
+- Kalorien/Makros, wenn zuverlässig verfügbar;
+- persönlichen Allergen-/Ausschlussstatus.
+
+### 4.4 Vorrat
+
+Suche steht vor Filtern. Standardreihenfolge ist handlungsorientiert:
+
+1. Rückruf/prüfen;
+2. Verbrauchsdatum;
+3. überschrittenes MHD;
+4. bald fällig;
+5. geöffnet;
+6. normal;
+7. Daten unvollständig.
+
+Jede Zeile zeigt Produkt, nutzbare Restmenge beziehungsweise verständliche Schätzung,
+Lagerort und wichtigsten Status. Mehrere Chargen dürfen gruppiert werden, die nächste
+relevante Charge bleibt sichtbar.
+
+Schnellkorrektur erlaubt Packung, Stück, Anteil oder ungefähre Restmenge. Exakte Gramm
+werden nur verlangt, wenn Berechnung oder Sicherheit sie benötigt.
+
+### 4.5 Rezept, Portionen und Kochen
+
+Rezeptgruppen:
+
+1. vollständig kochbar;
+2. mit sicherer Alternative kochbar;
+3. fast kochbar mit kurzer Fehlmenge;
+4. Inspiration außerhalb des aktuellen Vorrats.
+
+Rezeptkarten erklären ihren Rang, etwa: „Alles vorhanden · Spinat heute nutzen · 18 Min.“
+Portionsänderungen aktualisieren Fehlmengen und Nährwerte vor Bestätigung. Der Kochmodus
+zeigt eine klare Schrittfolge und bietet danach einen **Vorschlag** für den tatsächlichen
+Bestandsverbrauch. Unsichere Mengen werden nicht still abgezogen. Reste lassen sich mit
+wenigen Angaben wieder einlagern.
+
+### 4.6 Produkt und persönliche Eignung
+
+Reihenfolge:
+
+1. Produktidentität, Packung und Quellenstatus;
+2. persönlicher Allergen-/Ausschlusshinweis;
+3. Recall-/Datumsstatus der konkreten Packung;
+4. kompakte Nährwerte mit Portionsbasis;
+5. positive und zu beachtende Faktoren;
+6. Inhaltsstoffe nach persönlicher Relevanz;
+7. vollständige Daten, Quelle, Aktualität und Unsicherheit.
+
+Beispiel für eine zulässige Zusammenfassung:
+
+> „Passt gut zu deinem Protein-Ziel. Enthält dein hinterlegtes Allergen und relativ viel
+> Salz. Nährwerte vollständig, Zutatenliste teilweise strukturiert.“
+
+### 4.7 Planen und Einkauf zurückführen
+
+Plan, Rezepte und Einkaufsliste teilen denselben Bestand. Fehlmengen entstehen aus Plan
+minus nutzbarem Vorrat; manuelle Artikel bleiben erhalten. Abgehakte oder importierte
+Einkäufe öffnen eine neue Erfassungssitzung, statt erneut alle Produkte einzeln einzugeben.
+
+---
+
+## 5. Interaktionsbudgets
+
+Diese Werte sind Ziel- und Abnahmekriterien, keine Behauptung über den aktuellen Stand:
+
+- bekannter warmer Barcode: Rückmeldung und nächste Scanbereitschaft möglichst unter 1 s;
+- identischer Artikel: ein erneuter Scan, keine Detailansicht;
+- 15 bekannte Produkte: eine Sitzung, höchstens eine abschließende Prüffläche;
+- Produktname, Nährwerte, Zutaten und Standard-Packungsgröße werden nie abgetippt, wenn
+  eine validierte Quelle sie liefert;
+- pro Schritt genau eine dominante Primäraktion;
+- Hauptaktion innerhalb komfortabler Daumenreichweite und nie von Safe Area/Tastatur
+  verdeckt;
+- Nutzer erkennt Hauptinhalt und nächste Aktion innerhalb von fünf Sekunden;
+- kritische Warnung enthält immer eine konkrete Handlung;
+- Korrektur eines normalen Mengen-/Lagerortfehlers dauert wenige Sekunden und erfordert
+  keinen Flow-Neustart.
+
+Ein technisch vollständiger Flow, der wiederholt vermeidbare Felder verlangt, gilt als
+nicht bestanden.
+
+---
+
+## 6. Layout und adaptive Struktur
+
+### Kompakt
+
+- Zielbereich: 360–430 px; 320 px darf nicht horizontal überlaufen.
+- Inhaltsbreite: 100 %, in Desktop-Vorschau maximal sinnvoll begrenzen.
+- Seitenabstand: 18 px; bei sehr schmalen Geräten 13–16 px.
 - Hauptabstand zwischen Sektionen: 24 px.
-- Karteninnenabstand: 14–20 px abhängig von Informationsdichte.
+- Karten-/Flächeninnenabstand: 14–20 px nach Dichte.
+- Topbar und Bottom Navigation berücksichtigen iOS/Android Safe Areas.
+- Inhalt erhält ausreichend unteren Abstand; Sticky Actions bleiben oberhalb Navigation
+  und Bildschirmtastatur erreichbar.
 
-### Desktop
+### Mittel
 
-FoodOS bleibt eine fokussierte Consumer-App und wird nicht zu einem fremden Desktop-
-Dashboard. Das Layout richtet sich jedoch nach dem verfügbaren Fenster statt nur nach
-einem Gerätenamen: kompakt unter 600 px, mittel von 600–839 px und erweitert ab 840 px.
-Mittlere/erweiterte Fenster dürfen Navigation Rail/Sidebar und passende List-Detail-
-Ansichten nutzen, etwa Vorrat plus Charge, ohne Informationsarchitektur oder Task-Reihe
-zu wechseln. Reine Form-/Fokusflows bleiben sinnvoll begrenzt. Maus, Tastatur, Scrollbar,
-Split View, Rotation und dynamische Größenänderung müssen Zustand und Fokus bewahren.
+- 600–839 px.
+- Navigation darf zur Rail werden.
+- List-Detail oder Haupt-/Nebenbereich nur, wenn beide denselben Task unterstützen.
+- Resize bewahrt Eingabe, Auswahl, Scrollposition, Fokus und bestätigte lokale Absicht.
 
-### Spacing-Skala
+### Erweitert
 
-Nur diese Basisschritte verwenden: `4, 8, 12, 16, 20, 24, 32, 40, 48` px. Kleine
-optische Korrekturen von 1–2 px sind erlaubt, dürfen aber kein zweites Raster erzeugen.
+- ab 840 px.
+- keine breitgezogene Telefonspalte und kein fremdes Enterprise-Dashboard.
+- sinnvolle List-Detail-Aufteilung, etwa Vorrat + Produkt/Charge oder Plan + Rezept.
+- Fokusflows bleiben begrenzt und lesbar.
 
-## 6. Design Tokens
+### Raster
 
-Die bestehenden CSS-Variablen bleiben die technische Quelle. Neue Komponenten sollen
-keine zufälligen Hex-Werte einführen. Technisch werden Primitive, semantische Tokens,
-Komponenten-Tokens und Komponentenrezepte getrennt. Ein Theme ändert semantische
-Zuordnungen, nicht die Fachbedeutung. Das aktuelle Design-Tokens-Community-Group-
-Previewformat wird wegen seines eigenen Warnhinweises nicht als stabile autoritative
-Spezifikation implementiert; ein Adapter folgt erst auf eine stabile Veröffentlichung.
+Basisschritte: `4, 8, 12, 16, 20, 24, 32, 40, 48` px. Optische Korrekturen von 1–2 px
+sind erlaubt, erzeugen aber keine zweite Spacing-Skala.
 
-### Farbe
+---
 
-| Token | Wert | Verwendung |
+## 7. Design Tokens
+
+Die tatsächlich implementierten CSS-Variablen sind technische Quelle. Neue Komponenten
+verwenden semantische Tokens und keine zufälligen Hex-Werte.
+
+### Kernfarben
+
+| Token | aktueller Wert | Rolle |
 |---|---:|---|
 | `--canvas` | `#07100c` | App-Hintergrund |
-| `--surface` | `#0d1913` | Standardkarte/Feld |
+| `--surface` | `#0d1913` | Standardfläche |
 | `--surface-2` | `#122219` | erhöhte Fläche |
 | `--surface-3` | `#182b20` | aktive/kräftige Fläche |
 | `--ink` | `#f5f8f3` | Haupttext |
-| `--muted` | `#829188` | Meta- und Hilfstext |
+| `--muted` | `#829188` | Meta/Hilfe |
 | `--muted-2` | `#aab4ae` | sekundärer Text |
-| `--line` | `rgba(223,255,234,.09)` | dezente Trennung |
-| `--lime` | `#b7f36a` | Primäraktion, Erfolg, aktive Navigation |
-| `--warm` | `#ff947a` | dringend, abgelaufen, persönlicher Konflikt |
-| `--blue` | `#83c9ff` | neutrale Information, Sync, Training |
+| `--line` | `rgba(223,255,234,.09)` | Trennung |
+| `--lime` | `#b7f36a` | Primäraktion/aktiver Zustand |
+| `--warm` | `#ff947a` | Dringlichkeit/persönlicher Konflikt |
+| `--blue` | `#83c9ff` | Information/Sync |
 
-Zusätzliche semantische Farben:
-
-| Semantik | Vordergrund | Hintergrundidee |
-|---|---:|---:|
-| Beobachten | `#ffbb65` | `rgba(255,187,101,.10)` |
-| MHD bald | `#cfad74` | `rgba(210,169,101,.08)` |
-| Unbekannt | `--muted` | `rgba(255,255,255,.06)` |
-
-Rot/Orange/Grün dürfen nie allein Bedeutung tragen. Jeder Status erhält zusätzlich
-Text und ein eindeutiges Icon.
+Farbe trägt nie allein Bedeutung. Status erhält zusätzlich Text und eindeutiges Icon.
+Ein Theme ändert semantische Zuordnung, nicht fachliche Bedeutung.
 
 ### Typografie
 
-- Schrift: Geist über das vorhandene Next.js-Font-Setup; Arial nur als Fallback.
-- Große Kennzahl: 40–44 px, enges Tracking, Gewicht 700–780.
-- Screen-Titel: 20–22 px, Gewicht 700–750.
-- Sektionstitel: 18–20 px, Gewicht 700.
-- Kartentitel: 13–16 px, Gewicht 650–750.
-- Fließtext: 14–16 px, Zeilenhöhe mindestens 1.45; lange Erklärtexte bevorzugt 16 px.
-- Meta/Label: 11–13 px; Versalien nur für kurze Labels mit erhöhtem Tracking.
-- Interaktive, erklärende, sicherheits- oder datumsrelevante Texte dürfen nicht unter
-  12 px fallen. Kleinere Metadaten sind nur für redundante, nicht kritische Hinweise
-  zulässig und müssen den Kontrast trotzdem erfüllen.
-- Zahlen verwenden nach Möglichkeit tabellarische Ziffern, besonders bei Kalorien,
-  Makros, Preisen und Beständen.
+- Geist über das vorhandene Next.js-Font-Setup; System-Fallback ohne externe Laufzeitlast.
+- Display/Entscheidung: 32–44 px, Gewicht 700–780, sparsam.
+- Screen-Titel: 20–24 px, Gewicht 700–750.
+- Sektion: 18–20 px, Gewicht 700.
+- Kartentitel/Produkt: 14–17 px, Gewicht 650–750.
+- Fließtext: 14–16 px, Zeilenhöhe mindestens 1.45.
+- Meta/Label: 12–13 px; kritischer Text niemals kleiner als 12 px.
+- Kalorien, Makros, Preise und Mengen verwenden tabellarische Ziffern, wenn möglich.
 
 ### Form und Tiefe
 
-- Große Hero-Karten: 22–26 px Radius.
-- Standardkarten: 17–20 px Radius.
-- Buttons/Felder: 13–15 px Radius.
-- Pills/Chips: voller Radius oder 8–10 px.
-- Schatten sparsam; Tiefe entsteht primär durch Flächen und Linien.
-- Keine Glassmorphism-Flächen ohne ausreichenden opaken Fallback.
+- große Entscheidungsfläche: 22–26 px Radius;
+- Standardfläche: 17–20 px;
+- Button/Feld: 13–15 px;
+- Chips: voller Radius oder 8–10 px;
+- Tiefe primär durch Flächen und Linien, Schatten nur gezielt;
+- kein Glassmorphism ohne opaken, kontrastreichen Fallback.
 
-## 7. Komponenten
+### Bewegung
 
-### Topbar
+- Standard: 160–220 ms, `ease-out`;
+- Seitenwechsel höchstens 320 ms und geringe Bewegung;
+- Scanfeedback sofort; Animation blockiert keinen nächsten Scan;
+- normale Buchung erhält keinen Konfetti-Effekt;
+- `prefers-reduced-motion` deaktiviert Scanner-, Puls- und Seitenbewegung;
+- Swipe/Drag sind Abkürzung, nie einzige Bedienmöglichkeit.
 
-Links steht die FoodOS-Marke oder eine Zurück-Aktion, mittig Kontext und Screen-Titel,
-rechts Benachrichtigung, Profil oder passende Sekundäraktion. Pro Seite maximal zwei
-Icon-Buttons. Icon-Buttons benötigen zugängliche Namen und mindestens 44 × 44 CSS px/pt
-auf Web/iOS beziehungsweise 48 × 48 dp auf Android.
+---
 
-### Bottom Navigation
+## 8. Komponentenrezepte
 
-Fünf gleich breite Ziele. Aktivzustand besteht aus Farbe, Icon-Fläche und Text. Der
-mittlere Scan-Button darf erhöht erscheinen, aber keine Inhalte verdecken. Ein Badge
-zeigt nur handlungsrelevante Anzahl, etwa dringende MHD-Fälle.
+Komponenten sind wiederverwendbare Zustands- und Hierarchierezepte, keine Sammlung von
+Dekorationskarten.
 
-### Karten
+### App Shell
 
-Eine Karte hat einen klaren Zweck. Vermeide Karten in Karten, außer eine kleine
-Statusfläche erklärt direkt die übergeordnete Kennzahl. Klickbare Karten erhalten
-sichtbaren Hover-, Active- und Fokuszustand.
+Topbar, Inhaltsbereich, vierteilige Navigation/Rail, Safe Areas, Fokus- und
+Resize-Erhaltung. Maximal zwei Icon-Aktionen pro Topbar.
 
-### Primärbutton
+### Decision Hero
 
-Limettengrün, dunkler Text, mindestens 48 px hoch, klare Verbform: „Zum Vorrat
-hinzufügen“, „Verzehr buchen“, „Liste erstellen“. Pro Viewportbereich möglichst nur ein
-Primärbutton. Während Speicherung bleibt die Breite stabil; Spinner plus konkreter Text
-wie „Wird gespeichert …“.
+Eine Nutzerfrage, kurze Begründung, ein klares Ergebnis und eine Primäraktion. Höchstens
+vier unterstützende Kennzahlen; keine Metrik-Wand.
 
-### Sekundärbutton
+### Capture HUD
 
-Dunkle Surface oder Outline. Kein grauer Text mit zu geringem Kontrast. Destruktive
-Aktionen sind nie Primärbutton und benötigen eine Bestätigung mit benanntem Objekt.
+Kamera, Scanrahmen, letzter Treffer, Sitzungszähler, Unklar-Anzahl, Licht/Permission und
+Fertig-Aktion. Keine Detailanalyse im laufenden Scan.
 
-### Eingabefelder
+### Capture Queue Row
 
-- Sichtbares Label oberhalb des Felds; Placeholder ersetzt kein Label.
-- Mindesthöhe 48 px, Touchziel 44 px.
-- Einheit als kontrolliertes Suffix oder Auswahlfeld, nicht in den Placeholder mischen.
-- Validierung erscheint am Feld und erklärt eine Lösung.
-- Datumsfelder zeigen deutsches Format `TT.MM.JJJJ`, speichern intern ISO-Format.
-- Barcode- und Mengenfelder öffnen die passende mobile Tastatur.
+Produkt/Packung, Menge, Quelle/Status und schnelle Korrektur. Gleiches Produkt wird
+aggregiert, bleibt aber nachvollziehbar.
+
+### Uncertainty Review
+
+Gruppiert nach Entscheidung, zeigt Vermutung und Grund, verwendet schnelle Controls und
+erlaubt „später“ für nichtkritische Daten.
+
+### Inventory Row
+
+Produkt, Restmenge/Schätzung, Lagerort, nächster relevanter Status und klare Öffnen- oder
+Korrigieren-Aktion. Kein verschachteltes Kartenlayout.
+
+### Recipe Candidate
+
+Titel, Kochbarkeit, Begründung, Zeit, Portion, Fehlmenge und relevante Nährwerte. Bild nur,
+wenn es Hierarchie verbessert und Quelle/Lizenz klar ist.
+
+### Safety Callout
+
+Status, betroffene Packung, Quelle/Aktualität, offizielle Handlung und Wiederholungs-/
+Korrekturweg. Kein bloßer roter Alarm ohne Aktion.
 
 ### Bottom Sheet
 
-Für Portion, Lagerort, MHD-Bestätigung, Filter und schnelle Auswahl. Besitzt Handle,
-Titel, Schließen-Aktion, Fokusfalle, Escape-Verhalten und Safe-Area-Padding. Bei geöffneter
-Tastatur muss die Primäraktion sichtbar erreichbar bleiben.
+Handle, Titel, Schließen, Fokusfalle, Escape/Zurück, Safe Area und sichtbare Primäraktion
+bei geöffneter Tastatur. Für kurze Entscheidungen; komplexe Bearbeitung erhält Screen.
 
-### Toast und Inline-Feedback
+### Feedback
 
-Toasts bestätigen kurz reversible Erfolge und verschwinden nicht zu schnell. Fehler,
-die eine Nutzerentscheidung benötigen, erscheinen inline. Destruktive Bestandsaktionen
-bieten wenn technisch möglich „Rückgängig“.
+Toasts nur für kurze reversible Erfolge. Entscheidungsbedürftige Fehler erscheinen inline.
+Lokal/wartend/bestätigt/konflikt/abgelehnt bleibt unterscheidbar.
 
-### Skeleton
+---
 
-Skeletons spiegeln die echte Zielstruktur und pulsieren dezent. Kein Spinner für eine
-ganze Seite, wenn bereits bekannte lokale Daten angezeigt werden können.
+## 9. Pflichtzustände
 
-## 8. Screen-Spezifikation
+| Zustand | UI-Vertrag |
+|---|---|
+| `idle` | nächster Schritt verständlich |
+| `loading` | bekannte Inhalte stabil halten, lokaler Fortschritt sichtbar |
+| `success` | tatsächliches Ergebnis und nächste Aktion nennen |
+| `empty` | Grund erklären und Einstieg anbieten |
+| `error` | Ursache, Lösung, Retry und erhaltene Eingabe |
+| `offline` | Cache-Freshness und mögliche/unmögliche Aktion trennen |
+| `permission_denied` | konkreter Wiederherstellungsweg plus Fallback |
+| `conflict` | Werte, Auswirkung und bewusste Entscheidung zeigen |
+| `uncertain` | Vermutung, Quelle/Konfidenz und Bestätigung zeigen |
+| `partial` | verfügbare Fakten zeigen, fehlende Felder nicht als Null interpretieren |
 
-### Heute
+Skeletons spiegeln die Zielstruktur. Eine ganze Seite erhält keinen Spinner, wenn bekannte
+lokale Daten gezeigt werden können.
 
-Reihenfolge:
+---
 
-1. Exakter/möglicher Rückruf oder Verbrauchsdatum-Aktion, falls vorhanden.
-2. Tagesziel-Hero mit verbraucht/verbleibend und Fortschritt.
-3. Makros Protein, Kohlenhydrate, Fett.
-4. Dringendste MHD-Aktion, falls vorhanden.
-5. Heutige Mahlzeiten und Verzehr.
-6. Schnellaktionen.
+## 10. Daten-, Gesundheits- und Sicherheitsdarstellung
 
-Der Hero zeigt eine große Kennzahl, aber höchstens vier gleichzeitige Metriken. Wochen-
-details öffnen sich über eine klar beschriftete Aktion.
+- MHD (Qualität) und Verbrauchsdatum (Sicherheit) sind sprachlich und visuell verschieden.
+- Nach überschrittenem Verbrauchsdatum keine Verzehr-/Rezeptempfehlung.
+- Recall unterscheidet exakt, möglich, Textkandidat und ungeprüft/veraltet.
+- Quellenfehler wird niemals zu „nicht zurückgerufen“ oder grün.
+- Allergene/Ausschlüsse sind persönlich begründet; E-Nummer allein ist kein Schadensbeleg.
+- Unbekannte Nährwerte, Zutaten, Mengen, Daten und Quellen bleiben unbekannt.
+- AI darf ranken, formulieren und Optionen vorschlagen. Deterministische Systeme behalten
+  Mengenrechnung, Nährstoffsummen, Allergene, Recall, Datum und Autorisierung.
+- Persönliche Produkteignung zeigt positive Faktoren, Vorsicht, Zielbezug, Portion,
+  Datenabdeckung und Unsicherheit; keine Diagnose oder Heilversprechen.
+- Werbung fehlt in Auth, Scan, Datum, Recall, Allergie, Nährstoffdetail, Consent, Fehler,
+  Export und Löschung.
 
-### Vorrat
+---
 
-Suche bleibt oberhalb der Filter. Lagerorte sind horizontal scrollbare Chips. Die Liste
-sortiert standardmäßig nach Handlungsrelevanz: Rückruf/prüfen, Verbrauchsdatum,
-abgelaufenes MHD, bald fällig, geöffnet, normal.
-Jede Zeile zeigt Produkt, Restmenge, Lagerort und MHD-Status. Ein Produkt mit mehreren
-Chargen darf in einer Produktgruppe erscheinen, muss die nächste fällige Charge aber
-sofort sichtbar machen.
+## 11. Asset Direction und Medienwahl
 
-### Scan
+Neue Assets entstehen nur, wenn sie Verständnis, Vertrauen, Task-Erfolg oder
+Wiedererkennbarkeit verbessern.
 
-Die Kamera ist der visuelle Fokus. Die Scanfläche zeigt Rahmen, kurze Anweisung,
-Permission-Zustand und eine Taschenlampenaktion, falls verfügbar. Unterhalb folgen
-manuelle Eingabe und höchstens drei kurze Schritte. Nach erfolgreichem Produktfund wird
-die Kamera beendet, damit Batterie und Privatsphäre geschont werden.
+Reihenfolge der Entscheidung:
 
-### Produktergebnis
-
-Reihenfolge:
-
-1. Produktidentität und Datenquellen-Konfidenz.
-2. Primäre Aktion „MHD/Charge scannen“ bzw. erkannte Daten bestätigen.
-3. Offizieller Rückrufstatus/Quellenabdeckung, falls vorhanden.
-4. Persönliche Warnung, falls vorhanden.
-5. Kompakte Nährwerte.
-6. Sortierte Inhaltsstoffbewertung.
-7. Vollständige Zutaten und Metadaten aufklappbar.
-8. Sticky Primäraktion „Zum Vorrat hinzufügen“ nach vollständiger Bestätigung.
-
-Ein unbekanntes Produkt ist kein Fehler-Endzustand. Biete ein kurzes manuelles Formular
-und optional die spätere Datenverbesserung an.
-
-### Plan
-
-Die Wochentage bleiben kompakt und eindeutig auswählbar. Der ausgewählte Tag zeigt
-Zielerreichung und eine vertikale Mahlzeiten-Timeline. Vorschläge aus bald ablaufendem
-Vorrat erhalten eine sachliche Kennzeichnung. Drag-and-drop ist optional; jede Aktion
-muss auch über Buttons erreichbar sein.
-
-### Einkauf
-
-Oben: Artikelanzahl, grobe Kostenschätzung nur bei vorhandenen Preisdaten und Sync-
-status. Darunter Gruppierung nach Kategorie. Große Checkboxen, Menge/Einheit sichtbar,
-Quelle „aus Wochenplan“ oder „manuell“. Abgehakte Artikel wandern ans Ende, bleiben in
-derselben Sitzung aber erreichbar.
-
-## 9. Statussystem
-
-### MHD und Verbrauchsdatum
-
-| Zustand | Darstellung | Standardaktion |
-|---|---|---|
-| Mehr als 7 Tage | neutral/grün | Details |
-| 3–7 Tage | sandfarben, „bald“ | Einplanen |
-| 0–2 Tage | orange, Tageszahl | Heute einplanen |
-| Überschrittenes MHD | warm, „MHD überschritten“ | Prüfen/entscheiden |
-| Überschrittenes Verbrauchsdatum | rot/warm, eindeutig | Nicht verwenden/entsorgen |
-| Unbekannt | grau, „Kein Datum“ | Datum ergänzen |
-
-MHD und Verbrauchsdatum dürfen sprachlich und visuell nicht gleichgesetzt werden.
-
-### Inhaltsstoffrelevanz
-
-| Stufe | Label | Icon-Idee | Tonalität |
-|---|---|---|---|
-| Rot | Für dich vermeiden | Shield Alert | direkt, persönlich begründet |
-| Orange | Im Blick behalten | Triangle Alert | kontext- und dosisbezogen |
-| Gelb | Wissenswert | Info | neutral erklärend |
-| Grün | Kein Konflikt erkannt | Circle Check | vorsichtig positiv |
-| Grau | Nicht bewertet | Circle Help | Datenlücke transparent |
-
-„Gesund“, „giftig“ oder „schädlich“ werden nicht pauschal als Badge verwendet.
-
-### Datenqualität
-
-- **Bestätigt:** vom Nutzer geprüft oder strukturiert eindeutig erkannt.
-- **Quelle:** aus vertrauenswürdiger externer Datenquelle übernommen.
-- **Erkannt:** OCR/Parser-Ergebnis mit sichtbarer Konfidenz, noch unbestätigt.
-- **Unvollständig:** relevante Felder fehlen.
-- **Konflikt:** zwei Quellen widersprechen sich; Nutzerentscheidung erforderlich.
-
-### Rückruf und Quellenabdeckung
-
-| Zustand | Darstellung | Standardaktion |
-|---|---|---|
-| Exakt betroffen | warmrot, Quelle und Charge | Offizielle Handlung ansehen |
-| Möglicherweise betroffen | orange, fehlender Abgleich benannt | Packung/Charge vergleichen |
-| Textkandidat | neutral, keine Betroffenheitsbehauptung | Details prüfen |
-| Kein Treffer in aktuellen Quellen | neutral, Abdeckung/Aktualität sichtbar | Quellen ansehen |
-| Ungeprüft/veraltet | grau/amber, niemals grün | Offiziell prüfen/erneut laden |
-
-### Synchronisation
-
-- **Auf diesem Gerät:** lokal bestätigt, noch nicht serverbestätigt.
-- **Wartet/Synchronisiert:** Operation und Anzahl, ohne private Payload im Status.
-- **Aktuell:** konkrete Revision serverbestätigt.
-- **Konflikt:** Entscheidung mit beiden relevanten Zuständen nötig.
-- **Abgelehnt:** Berechtigung/Validierung geändert; keine Endlosschleife.
-
-## 10. Sprache und Microcopy
-
-- Schreibe kurzes, natürliches Deutsch und verwende konsequent „du“.
-- Buttons beginnen möglichst mit einem Verb.
-- Sage genau, was passiert: „2 Portionen zum Vorrat hinzufügen“ statt „Speichern“.
-- Fehler enthalten Ursache und nächste Lösung: „Kamera blockiert. Erlaube den Zugriff
-  in deinen Browser-Einstellungen oder gib den Barcode manuell ein.“
-- Keine Schuldformulierungen wie „Ziel verfehlt“. Besser: „Heute noch 32 g Protein bis
-  zu deinem Zielbereich.“
-- Keine medizinische Gewissheit: „Für dein hinterlegtes Allergen relevant“ statt
-  „Dieses Produkt ist gefährlich“.
-- Datum relativ plus absolut, wenn wichtig: „morgen · 03.08.“.
-- Unbekanntes bleibt sichtbar unbekannt: „Keine Angabe gefunden“ statt `0`.
-
-## 11. Interaktion und Bewegung
-
-- Standardtransition: 160–220 ms, `ease-out`.
-- Seitenwechsel: maximal 320 ms mit geringer Y-Bewegung und Fade.
-- Scanner-Beam darf kontinuierlich animieren, stoppt aber bei `prefers-reduced-motion`.
-- Erfolg: kurzer Farb-/Check-Wechsel, kein Konfetti für normale Buchungen.
-- Aktive Buttons reagieren sofort mit kleiner Helligkeits- oder Scale-Änderung, ohne
-  Layoutsprung.
-- Swipe-Gesten sind nur Abkürzungen; jede Funktion bleibt über sichtbare Controls
-  erreichbar.
-
-## 12. Asset Direction
-
-FoodOS verwendet wenige, gezielt platzierte Assets. Echte Produktdaten stehen im
-Vordergrund; Illustrationen unterstützen Orientierung und leere Zustände, ersetzen aber
-keine Information.
+1. kein Asset;
+2. Live-Typografie und Layout;
+3. vorhandenes Lucide-/FoodOS-Icon;
+4. deterministisches CSS oder authored SVG;
+5. echtes, quellenbasiertes Produktbild;
+6. originale generierte Illustration als Konzept.
 
 ### Visuelle Richtung
 
-- Organische, reduzierte Formen mit dunklem Waldgrün und limettengrünem Lichtakzent.
-- Nahbare Lebensmittel- und Vorratsmotive statt klinischer Gesundheitsästhetik.
-- Weiche Tiefenstaffelung, kontrollierte Körnung und klare Silhouetten.
-- Keine fotorealistischen Menschen als Standardmotiv, keine 3D-Emoji-Sammlung, keine
-  Neon-Gaming-Welt und kein generischer Corporate-Gradient-Stil.
-- Illustrationen bleiben ruhig genug, damit Status, Zahlen und Primäraktion dominieren.
+- Quiet Intelligence + Household Flow;
+- dunkles Waldgrün, warme neutrale Töne, kontrollierter Limettenakzent;
+- klare Silhouetten, organische reduzierte Formen, sparsame Körnung;
+- keine Blatt-Gabel-Gehirn-Roboter-Clipart;
+- keine Neon-Gaming-, Fitness-Bro-, Krankenhaus-, 3D-Emoji- oder generische SaaS-Optik;
+- Illustration bleibt hinter Daten und Hauptaktion.
 
-### Benötigte Asset-Familien
+### Technische Regeln
 
-| Familie | Einsatz | Empfohlenes Format |
-|---|---|---|
-| App-Icon/Marke | Manifest, Homescreen, Topbar | authored SVG + PNG-Größen |
-| Onboarding | maximal 2–3 kurze Schritte | AVIF/WebP, konsistente Serie |
-| Empty State | leerer Vorrat, Plan, Einkauf | kleine AVIF/WebP-Illustration |
-| Kamera-Hilfe | Permission/Scan-Anleitung | SVG-Illustration |
-| Produktbild | konkretes gescanntes Produkt | echte Quellen-URL/optimierter Cache |
-| Status/Navigation | UI-Bedienung | Lucide oder authored SVG |
+- Logos, Wortmarken, UI-Icons, Scannerrahmen, Diagramme und Barcodes: Vektor/CSS zuerst.
+- KI-Bild ist `CONCEPT`, nie automatisch finale Marke oder UI-Grafik.
+- Produktfoto einer realen Marke nur aus ausgewiesener Quelle; sonst neutraler Kein-Bild-
+  Zustand.
+- keine eingebrannte kritische oder lokalisierbare Copy;
+- semantische kleingeschriebene Dateinamen;
+- explizite Dimensionen und responsive Varianten;
+- normales mobiles Illustrationsasset nach Optimierung möglichst unter 150 KB;
+- Zweck, Quelle/Generationsmethode, Lizenz, Status und Einsatz in
+  `docs/brand/ASSET_MANIFEST.md`;
+- finaler Status nur nach unabhängiger visueller und Accessibility-Prüfung.
 
-Für präzise Interfacegrafik gilt: Vektor zuerst. Bildgenerierung ist für illustrative
-Motive vorgesehen, nicht für Icons, Diagramme, Text, Barcodes oder Nährwertgrafiken.
+---
 
-### Technische Asset-Regeln
-
-- Dateinamen sind semantisch, kleingeschrieben und mit Bindestrichen, zum Beispiel
-  `empty-inventory-dark.webp`.
-- Keine eingebrannten deutschen Texte, damit Übersetzung und Barrierefreiheit möglich
-  bleiben.
-- Rasterbilder besitzen explizite Breite/Höhe und passende responsive Varianten.
-- Ein normales mobiles Illustrationsasset sollte nach Optimierung möglichst unter
-  150 KB bleiben; größere Hero-Assets benötigen eine sichtbare Qualitätsbegründung.
-- Dekorative Bilder haben leeren Alt-Text; informative Bilder erhalten kurze,
-  zweckbezogene Beschreibung.
-- Herkunft, Generationshinweis und Einsatz werden in `public/assets/ASSETS.md` gepflegt.
-- Assets werden im echten Dark-Theme bei 360 und 430 px geprüft; kein heller Rechteck-
-  Hintergrund, unerwarteter Beschnitt oder schlecht lesbarer Kontrast.
-
-## 13. Barrierefreiheit
+## 12. Barrierefreiheit und Performance
 
 - WCAG 2.2 AA als Mindestziel.
-- Textkontrast mindestens 4.5:1, große Texte und UI-Grenzen mindestens 3:1.
-- Touchziele mindestens 44 × 44 CSS px/pt auf Web/iOS und 48 × 48 dp auf Android;
-  Abstand verhindert Fehlbedienung. Die kleinere normative WCAG-Ausnahme ist kein
-  Standard für primäre FoodOS-Aktionen.
-- Jede Icon-Aktion hat `aria-label` oder sichtbaren Text.
-- Fokus ist klar limettengrün und wird niemals deaktiviert, ohne Ersatz zu liefern.
-- Sticky Topbar, Bottom Navigation, Sheet und Bildschirmtastatur dürfen den fokussierten
-  Control oder die zugehörige Fehlermeldung nicht vollständig verdecken.
-- Statusänderungen wie Scanerfolg, Fehler und Speichern werden über geeignete Live-
-  Regionen angesagt, ohne Screenreader zu überfluten.
-- Diagramme und Progressringe besitzen Textäquivalente.
-- Farbe ist nie der einzige Träger von Bedeutung.
-- `prefers-reduced-motion` deaktiviert Scanner-, Puls- und Seitenanimationen.
-- Password Manager, Einfügen und Plattform-Autofill funktionieren in Passwort-/TOTP-
-  Flows; Authentifizierung verlangt keine zusätzliche Gedächtnisaufgabe.
-- Drag, Swipe, Long Press und Kamera sind Abkürzungen; dieselbe Aufgabe bleibt über
-  sichtbare, keyboard-/screenreader-bedienbare Controls möglich.
-- Kritische Flows werden manuell mit Tastatur sowie VoiceOver/TalkBack geprüft;
-  automatisierte Accessibility-Scans allein gelten nicht als vollständige Evidence.
+- Textkontrast 4.5:1; große Texte und relevante UI-Grenzen 3:1.
+- Touchziele mindestens 44 × 44 CSS px/pt auf Web/iOS und 48 × 48 dp auf Android.
+- sichtbare Labels ersetzen Placeholder; Icon-Aktionen besitzen zugängliche Namen.
+- Fokus bleibt sichtbar und wird nicht von Topbar, Navigation, Sheet oder Tastatur verdeckt.
+- Statusänderungen werden angemessen angekündigt, ohne Screenreader zu überfluten.
+- Diagramme/Progress besitzen Textäquivalent; Farbe ist nie alleinige Bedeutung.
+- Kamera, Swipe, Drag und Long Press besitzen sichtbaren Fallback.
+- 200 % Zoom und größere Systemschrift bleiben nutzbar.
+- Scanner, OCR, Charts und andere schwere Client-Funktionen werden intentbasiert geladen.
+- Bilder besitzen feste Aspect Ratio und Dimensionen; keine Layoutverschiebung.
+- Web-Ziele: LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1 am 75. Perzentil je Mobile/Desktop.
+- Kritische Flows werden zusätzlich manuell mit Tastatur und VoiceOver/TalkBack geprüft;
+  automatisierte Scans allein sind keine vollständige Evidence.
 
-## 14. Responsive und technische Regeln
+---
 
-- Kein horizontales Überlaufen bei 320, 360, 390 und 430 px.
-- Mittlere und erweiterte Fenster verwenden gezielte Navigation/Panes statt eine
-  gestreckte Telefonansicht; beim Wechsel bleiben Eingabe, Auswahl, Scroll-/Fokuspunkt
-  und bestätigte lokale Absicht erhalten.
-- Safe Areas auf iOS für Topbar, Bottom Navigation und Bottom Sheets berücksichtigen.
-- Lange Produktnamen umbrechen auf maximal zwei Zeilen; vollständiger Name in Details.
-- Deutsche Wörter wie „Mindesthaltbarkeitsdatum“ dürfen das Layout nicht sprengen.
-- On-Screen-Tastatur darf Eingaben und Bestätigungsbutton nicht verdecken.
-- Produktbilder mit fester Aspect Ratio und neutralem Fallback; keine Layoutverschiebung.
-- Inhalte funktionieren bei 200 % Zoom und mit größerer Systemschrift sinnvoll weiter.
-- Server-/semantisches HTML bleibt auf Web der Standard. Kamera, Scanner, Charts und
-  andere schwere Client-Funktionen werden route-/intentbasiert nachgeladen.
-- Bilder verwenden explizite Dimensionen und responsive `next/image`-/native Image-
-  Varianten; Fonts werden selbst/über das Framework optimiert und blockieren keine
-  externe Laufzeitanfrage.
-- Web-Release-Gates: LCP höchstens 2,5 s, INP höchstens 200 ms und CLS höchstens 0,1 am
-  75. Perzentil getrennt nach Mobile/Desktop. Native Release-Builds werden auf gepinnten
-  Referenzgeräten auf Start, Frames, Frozen Frames, Speicher und Batterie geprüft.
-- Konkrete Bundle-, Payload-, Bild-, Startup- und Frame-Budgets sowie Ausnahmen folgen
-  `plans/UI_UX_PERFORMANCE_PLAN.md`; Durchschnittswerte dürfen keine schlechte Geräte-
-  oder Release-Kohorte verbergen.
+## 13. Codex-, Figma-, v0-, shadcn- und Testregeln
+
+### Native UI-Agenten
+
+Standardkette für eine wesentliche UI-Änderung:
+
+```text
+ui_explorer
+-> ux_flow_designer + $foodos-ui-flow-spec
+-> CPO-Richtung
+-> ui_system_architect
+-> ui_implementer + $foodos-ui-implementation
+-> visual_verifier + $foodos-visual-qa
+-> erforderliche Produkt-/Safety-/Release-Freigabe
+```
+
+Nicht jede kleine Korrektur benötigt die ganze Kette. Implementierer und Verifier bleiben
+bei materieller Arbeit getrennt.
+
+### Figma
+
+Strukturierte Figma-Komponenten, Variablen und Code-Mappings sind hilfreicher als ein
+Screenshot, wenn ein freigegebenes natives Design existiert. Figma ist keine Voraussetzung
+für FoodOS und überschreibt weder Code-Tokens noch Produkt-/Safety-Regeln.
+
+### v0
+
+v0 darf einen bounded visuellen Vorschlag oder Komponentenprototyp liefern. Kein kompletter
+generierter Projektstand wird über FoodOS kopiert. Jede Übernahme wird gegen bestehende
+Komponenten, Tokens, Abhängigkeiten, Accessibility, Performance und Domainverträge geprüft.
+
+### shadcn/ui
+
+Bestehende FoodOS-Primitives zuerst. Vor einem Baustein: ansehen, Dokumentation prüfen,
+`--dry-run`/Diff bewerten. Kein blindes `init`, `add --all`, Überschreiben oder paralleles
+Designsystem. Eine FoodOS-Registry ist erst sinnvoll, wenn die Primitive stabil sind.
+
+### Storybook
+
+Storybook wird eingeführt, wenn eine stabile gemeinsam genutzte Komponentenbasis isolierte
+State-Stories, Interaktion, Accessibility und visuelle Regression wirtschaftlich rechtfertigt.
+Es ist kein Gate vor dem ersten Scan-first-Slice.
+
+### Browser und Playwright
+
+Der gerenderte Screen ist visuelle Wahrheit. Nach relevanten Änderungen: Seite öffnen,
+Netzwerk/Console prüfen, echte Interaktion ausführen, Screenshots der Zustände aufnehmen.
+Screenshot-Diffs laufen nur in kontrollierter, stabiler Umgebung, damit Font-/Rendering-
+Unterschiede keine wertlosen Flakes erzeugen.
+
+---
+
+## 14. Visuelle Evidence-Matrix
+
+Mindestens prüfen:
+
+- 360 × 800;
+- 390 × 844;
+- 430 × 932;
+- mittel/erweitert, wenn Layout betroffen;
+- Dark Mode; Light Mode nur, wenn unterstützt/geändert;
+- Standard, Loading, Empty, Error;
+- Permission denied;
+- Offline/Sync-Konflikt;
+- sehr langer deutscher Produktname;
+- große Schrift/200 % Zoom;
+- reduzierte Bewegung;
+- Kamera/Scanner: unbekanntes Produkt, Doppel-Scan, niedrige Konfidenz, Abschluss-Queue;
+- Recall: exakt, möglich, veraltet/ungeprüft und Korrektur/Rücknahme, wenn betroffen.
+
+Screenshotnamen enthalten Route, Zustand und Viewport. Keine privaten Nutzerdaten in
+Evidence oder PRs.
+
+---
 
 ## 15. Verbotene Muster
 
-- Keine neue Farbe für jede Kategorie.
-- Keine Neonverläufe, 3D-Illustrationen oder Gaming-Ästhetik.
-- Keine unbeschrifteten Icons für kritische Aktionen.
-- Keine wichtigen Interaktionen ausschließlich über Hover oder Swipe.
-- Keine Vollbildmodal-Kaskaden.
-- Keine pauschalen roten Warnungen für E-Nummern oder unbekannte Zutaten.
-- Keine erfundenen Nährwerte, Preise, MHD-Daten oder Konfidenzen.
-- Kein „nicht zurückgerufen/sicher“, wenn Quellen ungeprüft, veraltet oder unvollständig
-  sind; kein Text-Fuzzy-Match als exakte Betroffenheit.
-- Kein stilles Last-write-wins für Menge, Datum, Recall, Consent, Mitgliedschaft oder
-  Löschung und kein Erfolg, solange nur die UI statt lokal/serverseitig bestätigt hat.
-- Keine zehn Kennzahlen im Dashboard-Hero.
-- Keine deaktivierten Buttons ohne sichtbare Erklärung.
-- Keine Primäraktion unter der festen Bottom Navigation.
-- Keine finalen Placeholder-Illustrationen, Wasserzeichen oder uneinheitlichen Emoji-
-  Assets, wenn ein richtiges Asset benötigt wird.
+- fünf oder mehr konkurrierende Haupttabs;
+- Produktformular nach jedem bekannten Scan;
+- große Kalorienzahl als Standard-Hauptentscheidung auf Heute;
+- Kartenmosaik, Karten in Karten und Kennzahlfriedhof;
+- zufällige Hex-Werte, neue Farbe je Kategorie oder zweites Spacing-System;
+- generische Verläufe, Glassmorphism, Neon oder 3D-Deko ohne funktionalen Grund;
+- unbeschriftete kritische Icons;
+- wichtige Aktion nur über Hover, Swipe, Drag oder Kamera;
+- Modal-/Bottom-Sheet-Kaskaden;
+- deaktivierter Button ohne sichtbaren Grund;
+- Primäraktion unter Navigation, Safe Area oder Tastatur;
+- unbekannte Daten als Null, grün oder „sicher“;
+- pauschale Rotwarnung für E-Nummern oder allgemeine „gesund/ungesund“-Badges;
+- generiertes Logo ohne saubere Vektorrekonstruktion;
+- erfundene Produktbilder, Nährwerte, Preise, MHDs oder Konfidenzen;
+- finaler visueller PASS ohne echten Browserzustand und unabhängigen Verifier.
 
-## 16. Abnahmekriterien für jede UI-Änderung
+---
 
-Vor Abschluss eines Screens muss geprüft werden:
+## 16. Definition of Done für UI-Änderungen
 
-- Der wichtigste Inhalt und die Primäraktion sind in fünf Sekunden erkennbar.
-- Der Screen passt ohne horizontales Scrollen auf 360 px Breite.
-- Loading, leerer Zustand, Fehler, Erfolg und fehlende Berechtigung sind gestaltet.
-- Tastatur- und Touchbedienung funktionieren.
-- Fokus, Labels und Screenreader-Status sind vorhanden.
-- Unsichere oder externe Daten zeigen Quelle/Konfidenz angemessen.
-- MHD und Verbrauchsdatum werden fachlich korrekt unterschieden.
-- Rückruf hat Vorrang, zeigt Match-Qualität/Quelle/Aktualität und keine Sicherheitsgarantie.
-- Offline-/Sync-Status unterscheidet lokal, wartend, bestätigt, Konflikt und abgelehnt.
-- Inhaltsstoffstatus besitzt Text und Icon zusätzlich zur Farbe.
-- Die UI verwendet vorhandene Tokens und Komponenten statt neuer Ad-hoc-Stile.
-- Die Primäraktion wird nicht von Navigation, Tastatur oder Safe Area verdeckt.
-- Neue Assets passen zur Asset Direction, sind optimiert, zugänglich und dokumentiert.
-- Bundle-/Core-Web-Vitals- beziehungsweise Native-Startup/Frame-Auswirkung wurde für die
-  betroffene Route/Plattform gemessen und liegt im Budget oder besitzt eine befristete,
-  begründete Ausnahme.
-- Neue oder wesentlich geänderte kritische Flows besitzen echte Usability-Evidence und
-  keine ungelösten kritischen Verständnis-, Safety-, Privacy- oder Datenverlustprobleme.
+Eine UI-Änderung ist erst abgeschlossen, wenn:
 
-Bei visuellen Änderungen sind mindestens Screenshots der betroffenen Zustände bei
-360 × 800 px und 430 × 932 px zu prüfen. Für kritische Flows werden zusätzlich Kamera-
-Permission denied, unbekanntes Produkt, OCR mit niedriger Konfidenz, Offline und sehr
-langer Produktname getestet. Recall-Flows prüfen zusätzlich exakten Treffer, mögliche
-Betroffenheit, veraltete Quelle, Korrektur/Rücknahme und werbefreie Darstellung.
+- Nutzerziel, Hauptaktion und Akzeptanzkriterium benannt sind;
+- aktuelle Implementierung und wiederverwendbare Komponenten geprüft wurden;
+- der Flow weniger oder gleich viel vermeidbare Arbeit erzeugt;
+- alle betroffenen Pflichtzustände implementiert sind;
+- kompakt/mittel/erweitert korrekt reagieren;
+- Touch, Tastatur, Fokus, Screenreader, Textskalierung und reduzierte Bewegung geprüft sind;
+- Quelle, Konfidenz, MHD/use-by, Recall, Allergen und Sync fachlich korrekt erscheinen;
+- vorhandene Tokens/Primitives verwendet oder begründbar erweitert wurden;
+- Assets notwendig, optimiert, dokumentiert und unabhängig geprüft sind;
+- Browser, Console/Netzwerk, Interaktion und passende Tests für den exakten Commit geprüft
+  wurden;
+- Status ehrlich `PASS`, `FAIL`, `FLAKY`, `BLOCKED` oder `NOT_RUN` lautet;
+- eine wesentliche neue Nutzerinteraktion echte Usability-Evidence erhält, bevor daraus
+  Produkt-Markt- oder Verständlichkeitsbehauptungen entstehen.

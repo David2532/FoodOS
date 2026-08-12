@@ -14,7 +14,8 @@ personalisierte Werbung außerhalb sensibler Flows zeigen.
 
 - Next.js 16 + TypeScript
 - Supabase Postgres/Auth/Storage mit Row Level Security
-- Open Food Facts mit lokalem Cache
+- gestufte Produktsuche: AAL2-Haushaltscache, optionaler öffentlicher Katalog und
+  rate-limitierter Open-Food-Facts-Fallback
 - ZXing Browser für EAN/UPC/GS1-Scans
 - Vitest für deterministische Fachlogik
 - Next.js Standalone-Output für Vercel oder Docker
@@ -27,34 +28,70 @@ gemeinsame reine Domain-Pakete. Eine reine WebView-Hülle ist kein Release-Kandi
 ```bash
 cp .env.example .env.local
 npm install
+npm exec supabase start
+npm exec supabase db reset -- --local --no-seed
 npm run dev
 ```
 
-Ohne Supabase-Variablen startet die Oberfläche im Preview-Modus. Der Barcode-Lookup funktioniert serverseitig über Open Food Facts.
+`npm exec supabase status` zeigt die ausschließlich lokalen URL-/Publishable-Key-Werte,
+die in `.env.local` gehören. Keine Secret-/Service-Role-Keys in Client-Variablen oder Git
+ablegen. Ohne Supabase-Variablen startet die Oberfläche im klar gekennzeichneten
+Preview-Modus. Barcode-Lookup und die bewusst abgesendete Produktsuche funktionieren
+dann serverseitig über Open Food Facts; private Haushaltsdaten werden nicht simuliert.
+Die Suche läuft nicht bei jedem Tastendruck, überträgt keine Profil-/Haushaltsdaten und
+zeigt Quelle, fehlende Angaben sowie Provider-Ausfälle ausdrücklich an.
 
 ## Verifizieren
 
 ```bash
-npm run verify
+npm run verify:changed
+npm run verify:full
+npm run test:coverage
+npm run test:db
+npm run test:e2e
+npm audit --audit-level=high
 ```
 
-Node.js 22 is pinned in `.nvmrc`. GitHub CI runs the same locked install and verification
-for pull requests and `main`. The larger web/native/security/release suite described in
-the plans is not implemented merely because this baseline passes.
+Node.js 24 is pinned in `.nvmrc`. GitHub CI runs the same locked install and verification
+for pull requests and `main`. `test:db` requires the local Supabase Docker stack;
+`test:e2e` builds the app and checks Pixel-7/Desktop-Chrome profiles with Playwright and
+axe. A passing local subset is not production, native-device, usability, restore, load,
+store-sandbox or legal evidence.
 
-## Mit Codex weiterarbeiten
+`npm run catalog:verify` prüft ausschließlich eine bereits aktivierte, serverseitig
+erreichbare öffentliche Kataloggeneration. Ohne die nötigen server-only Credentials
+meldet der Befehl `BLOCKED`; er importiert keine Daten. Import, tägliche Aktualisierung,
+Lizenzgrenzen und Recovery sind unter
+[`docs/PUBLIC_CATALOG_OPERATIONS.md`](docs/PUBLIC_CATALOG_OPERATIONS.md) dokumentiert.
 
-Codex or another implementation agent should read, in order:
+Für den echten lokalen Auth-Flow zuerst die von `npm exec supabase status` ausgegebenen
+`API_URL`/`PUBLISHABLE_KEY` als `NEXT_PUBLIC_SUPABASE_URL`/
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` nur in der aktuellen Shell setzen und dann
+`npm run test:e2e:auth` ausführen. Der Test registriert eine isolierte Identität, schreibt
+und verifiziert TOTP und legt den Haushalt an; anschließend die lokale Testdatenbank mit
+`npm exec supabase db reset -- --local --no-seed` bereinigen.
 
-1. [`AGENTS.md`](AGENTS.md) for non-negotiable repository rules;
-2. [`docs/REPOSITORY_MAP.md`](docs/REPOSITORY_MAP.md) for current versus planned state,
-   document precedence and the vertical-slice workflow;
-3. [`plans/MASTER_PLAN.md`](plans/MASTER_PLAN.md) and the current validation/delivery gate;
-4. the exact user flow, specialist plan and quality/test contracts for the selected slice.
+## Schneller Codex-/Entwicklerstart
 
-[`CODEX_PROMPT.md`](CODEX_PROMPT.md) is the comprehensive build brief. It does not turn
-unimplemented stages into a safe one-commit task or authorize fabricated users, metrics,
-approvals, deployments or legal conclusions.
+```bash
+git status --short --branch
+npm run agent:context -- --list
+npm run agent:context -- <scope>
+# nur die ausgegebenen Dateien lesen und gezielt ändern
+npm run verify:changed
+npm run verify:full # nur vor zentralen oder risikoreichen Übergaben
+```
+
+[`AGENTS.md`](AGENTS.md) enthält die kurzen repositoryweiten Invarianten.
+[`docs/REPOSITORY_MAP.md`](docs/REPOSITORY_MAP.md) trennt Implementierung, lokale und
+Production-Evidence. Die typisierte Scope-Map unter `scripts/agent/scopes.mjs` routet zu
+den jeweils notwendigen Fachplänen, Codepfaden und Tests. Unbekannte Scopes brechen mit
+einer klaren Fehlermeldung ab.
+
+`npm run verify:changed -- --base=<ref>` dokumentiert seinen Vergleichspunkt und wählt
+risikobasiert Markdown-, Unit-, Typ-, Lint-, Build-, DB-/RLS- und E2E-Prüfungen. Ein
+fehlender lokaler Dienst bleibt `BLOCKED`. [`CODEX_PROMPT.md`](CODEX_PROMPT.md) ist nur
+für einen ausdrücklich angeforderten vollständigen Multi-Stage-Build bestimmt.
 
 ## Produkt-, Design- und Umsetzungsunterlagen
 
@@ -84,6 +121,7 @@ approvals, deployments or legal conclusions.
 - [`design-ceo.md`](design-ceo.md): Desktop-Designsystem der internen CEO-/Ops-Zentrale
 - [`docs/REPOSITORY_MAP.md`](docs/REPOSITORY_MAP.md): Codex-Lesereihenfolge, Ist-/Zielstand und Dokument-Priorität
 - [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md): Evidence-basierte Go/Limited-Beta/No-Go-Vorlage
+- [`docs/PUBLIC_CATALOG_OPERATIONS.md`](docs/PUBLIC_CATALOG_OPERATIONS.md): Open-Food-Facts-Import, Lizenz, Generationen, Sync und Recovery
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): Branch-, Clean-Code-, Test- und PR-Workflow
 - [`SECURITY.md`](SECURITY.md): privater Schwachstellen-Meldeweg und Security-Baseline
 
@@ -92,16 +130,128 @@ approvals, deployments or legal conclusions.
 Die Migrationen unter `supabase/migrations/` enthalten das Haushaltsmodell, Produkt- und
 Metadatenfelder, chargenbezogene MHD-Daten, Inhaltsstoffbewertungen, Vorrat, Food-Log,
 Rezepte, Wochenplan, Einkauf und RLS-Policies. Private Tabellen müssen zusätzlich einen
-AAL2-Claim verlangen.
+AAL2-Claim verlangen. Die neueren Forward-Migrationen ergänzen transaktionales
+Onboarding, idempotentes Erfassen/Verzehren, explizite Data-API-Rechte, append-only
+Inventar-Events sowie persistente Plan-/Einkaufs-RPCs. Die C0-Forward-Migrationen binden
+Mutation-IDs an einen Payload-Hash, sperren überschrittene Verbrauchsdaten und exakte
+Rückrufe, verlangen eine bewusste MHD-/Risikobestätigung und berechnen Fehlmengen per
+geplantem Nutzungstag mit FEFO-Zuordnung. Migration `0013` ergänzt ein append-only,
+versioniertes Privacy-Choice-Ledger; `0014` ergänzt eine deutsche Volltextprojektion und
+eine ausschließlich unter AAL2 nutzbare Suche über bestätigte Haushaltsprodukte.
+Die Migrationen `0015`, `0016`, `20260805074723` und `20260805075456` ergänzen einen physisch getrennten, generationierten
+öffentlichen Open-Food-Facts-Katalog: nur die feste validierte Allowlist wird gestaged,
+serverseitig über die tatsächlich persistierten Zeilen versiegelt und atomar aktiviert;
+Client-Tabellenzugriff bleibt verboten. Der Verifizierer prüft Zähler, GTINs, Hash-Manifeste,
+Quellen-Traceability und repräsentative Metadaten, ohne Produktpayloads auszugeben. Eine
+aktive, verifizierte Kataloggeneration ist derzeit **nicht** vorhanden.
+Betrieb, Quelle, Lizenz, Aktivierung und Recovery stehen in
+[`docs/PUBLIC_CATALOG_OPERATIONS.md`](docs/PUBLIC_CATALOG_OPERATIONS.md).
+Die Ops-Finanzmigrationen ab `20260805095221` halten Lieferantenquellen und
+Double-Entry-Zeilen append-only, erzwingen CEO-AAL2 sowie exakte Minor Units und
+behandeln manuell erfasste Rechnungsmetadaten als `ESTIMATE`. Die Forward-Migration
+`20260805165055` ergänzt unveränderliche Quellenvalidierungsereignisse: `SOURCE FINAL`
+setzt ein autoritatives Artefakt samt SHA-256 und Parser-Version voraus; historische
+Metadaten-Finals werden ohne Überschreiben des Journals effektiv herabgestuft.
+`20260805180000` ergänzt eine separate, append-only Payment-Reconciliation. `PAID`
+entsteht nur aus dem neuesten konsistenten Payment-Event für ein weiterhin exakt
+zugeordnetes `SOURCE FINAL`-Journal. Die Evidenz speichert ausschließlich System-/Beleg-ID,
+SHA-256, Parser-Provenienz, Minor Units, Währung und Datum; IBAN, Karten-, Konto- und
+Rohbelegdaten werden weder im CEO-Dashboard gelesen noch in diesem Modell gespeichert.
+`20260805200000` ergänzt dafür eine ausschließlich für `service_role` ausführbare,
+atomare System-Ingestion. Nutzer- und System-Aktor sind je Datensatz per XOR getrennt;
+exakte Natural-Key-Replays bleiben idempotent, während abweichende Quelle, Hash,
+Betrag, Währung oder Zahlungs-ID die gesamte Transaktion zurückrollen.
+`supabase/tests/` beweist AAL1-Verweigerung,
+zweiten Nutzer, Haushaltsisolation, Replay/Payload-Konflikt, Safety-Sperren und atomare
+Mengen-/Logwirkung.
 
 ## Vercel
 
 1. Repository in Vercel importieren.
-2. `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (oder den Legacy-
-   Anon-Key) und `OPEN_FOOD_FACTS_USER_AGENT` setzen.
+2. `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (oder ausschließlich
+   den Legacy-Anon-Key), `FOODOS_APP_ORIGIN` als exakte Production-Origin ohne Pfad,
+   `OPEN_FOOD_FACTS_USER_AGENT` sowie die server-only Recall-Variablen aus
+   `.env.example` setzen. Der Passwort-Reset akzeptiert nur diese serverseitig
+   konfigurierte Origin und leitet sie nicht aus `Host`- oder Forwarded-Headern ab.
 3. Production-Deployment ausführen.
 
-`SUPABASE_SERVICE_ROLE_KEY` ist nur für spätere serverseitige Adminjobs vorgesehen und darf nie als `NEXT_PUBLIC_*` gesetzt werden.
+Der Bulk-Katalogimport läuft nicht in Vercel. Er benötigt für den getrennten GitHub-
+Workflow einen server-only `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` und einen
+identifizierenden `OPEN_FOOD_FACTS_USER_AGENT` im Format
+`App/Version (contact@email)` oder `App/Version (https://project.example)`.
+Der tägliche Lauf bleibt bis zur Quellen-/Lizenzfreigabe durch die Repository-Variable
+`CATALOG_SYNC_ENABLED=true` deaktiviert; Details stehen im Katalog-Betriebsdokument.
+
+### Apple und Google OAuth 2.0 / OpenID Connect
+
+FoodOS stellt Apple und Google als primäre Ein-Klick-Anmeldung vor die eingeklappte
+E-Mail-Alternative. Beide laufen über Supabase Auth mit PKCE. Google fordert nur
+`openid email profile`, Apple nur `name email` an. OAuth liefert zunächst AAL1; bevor
+private Haushaltsdaten geladen werden, muss weiterhin TOTP AAL2 herstellen. Die
+Supabase-Sitzung bleibt danach auf dem Gerät erhalten, bis sie abgemeldet wird oder
+abläuft.
+
+1. In Google Cloud einen Web-OAuth-Client anlegen. Als autorisierte Redirect-URI
+   ausschließlich die von Supabase angezeigte Provider-Callback-URL
+   `https://<project-ref>.supabase.co/auth/v1/callback` eintragen.
+2. Client-ID und Client-Secret nur im Supabase-Dashboard unter **Authentication →
+   Providers → Google** speichern. Diese Werte gehören weder nach Vercel noch ins Repo.
+3. In Supabase unter **Authentication → URL Configuration** die echte Production-Site-
+   URL setzen und `https://<production-host>/auth/confirm` als exakte Redirect-URL
+   erlauben. Keine Wildcards für Production verwenden.
+4. Erst danach in Vercel `NEXT_PUBLIC_OAUTH_GOOGLE_ENABLED=true` setzen. Preview-
+   Deployments bleiben ohne eigene exakt freigegebene Callback-URL bei `false`.
+
+Für Apple wird zusätzlich ein Apple-Developer-Konto mit App ID, Services ID und Sign-in-
+with-Apple-Key benötigt. Die Werte werden ausschließlich unter **Authentication →
+Providers → Apple** hinterlegt; danach kann `NEXT_PUBLIC_OAUTH_APPLE_ENABLED=true`
+gesetzt werden. Apples OAuth-Secret muss spätestens alle sechs Monate rotiert werden;
+Rotation, Verantwortlicher und Ablaufwarnung sind vor Production festzulegen.
+
+Im lokalen Entwicklungsbetrieb erscheint stattdessen automatisch **FoodOS
+ausprobieren**. Dieser Ein-Klick-Weg öffnet ausschließlich die vorhandene Demo mit
+fiktiven Daten und liest keine privaten Supabase-Tabellen. In Production ist er
+standardmäßig aus und muss mit `NEXT_PUBLIC_DEMO_MODE_ENABLED=true` bewusst aktiviert
+werden.
+
+Der Callback akzeptiert nur lokale absolute Pfade als `next`; protokollrelative,
+Backslash- und externe Ziele werden auf `/` reduziert. Provider-Fehler werden ohne
+ungeprüfte Fehlermeldung oder Token in die Login-Oberfläche zurückgeführt.
+
+Für die aktuellen Nutzerflows wird kein Service-Role-Key benötigt. Künftige Adminjobs
+müssen Secrets ausschließlich in der jeweiligen Server-/Deployment-Secret-Verwaltung
+halten und dürfen sie nie als `NEXT_PUBLIC_*` setzen.
+Der geplante Rückrufjob und seine getrennte Quellenfreigabe sind unter
+[`docs/RECALL_INGESTION.md`](docs/RECALL_INGESTION.md) beschrieben.
+
+### Konto, Darstellung und Passwort
+
+Der rechte Konto-Button öffnet die eigene Einstellungsansicht; er erweitert die fünf
+Hauptbereiche nicht um einen sechsten Tab. Dort können Nutzer die lokale Darstellung
+**System**, **Hell** oder **Dunkel** wählen, Datenschutzzwecke prüfen, einen Export
+herunterladen und sich abmelden. Die Theme-Präferenz ist nicht sensibel und bleibt pro
+Gerät in einem validierten Cookie plus Browser-Speicher erhalten.
+
+Beim sicheren Abmelden bleibt die Session erhalten, solange die verschlüsselte lokale
+Offline-Ablage in einem weiteren FoodOS-Tab noch gelöscht wird. Sobald derselbe
+Löschvorgang bestätigt ist, setzt FoodOS die bereits gestartete Abmeldung automatisch
+fort; ein zweiter Klick darf die Bestätigung nicht umgehen.
+
+E-Mail-Konten können das Passwort im AAL2-geschützten Bereich mit aktuellem Passwort
+ändern. Die lokale Supabase-Konfiguration verlangt mindestens zwölf Zeichen,
+`secure_password_change = true` und unterstützt den E-Mail-Sicherheitscode für nicht
+mehr frische Sitzungen. Nach erfolgreicher Änderung werden andere Sitzungen widerrufen.
+Der Link **Passwort vergessen?** bestätigt aus Schutz vor Konto-Enumeration immer gleich
+und führt nach dem verifizierten Callback zu `/auth/passwort-zuruecksetzen`; die
+ Rücksetzung versucht anschließend den serverseitig bestätigten Widerruf aller Sitzungen
+ und führt erst nach vollständigem Sicherheitsabschluss wieder durch den normalen
+ TOTP-AAL2-Gate. Falls das serverseitige Beenden weiterer Sitzungen fehlschlaegt,
+ behauptet die Oberflaeche keinen vollstaendigen Widerruf: Sie versucht zuerst die
+ lokale Abmeldung dieses Geraets. Gelingt diese, bleibt der eingeschraenkte Zustand
+ sichtbar und verweist auf die manuelle Abmeldung anderer Geraete; scheitert auch sie,
+ bleibt die Seite auf einem sicheren Wiederholen-Pfad statt in eine noch aktive Sitzung
+ weiterzuleiten. Die genaue Produktions-Checkliste steht in
+[`docs/ACCOUNT_SETTINGS_AND_PASSWORDS.md`](docs/ACCOUNT_SETTINGS_AND_PASSWORDS.md).
 
 ## Rechtlicher Status
 
@@ -112,12 +262,17 @@ Lebensmittel-Claims, Werbung, Barrierefreiheit und das konkrete Land freigegeben
 
 ## Aktueller Reifegrad
 
-Die neuen Unterlagen sind Ziel- und Release-Spezifikationen, keine Behauptung, dass diese
-Funktionen bereits implementiert sind. Der aktuelle Prototyp hat Auth-/AAL2-Grundlagen,
-UI und drei Unit-Tests. Recall-Pipeline, native Offline-Synchronisation, Playwright/
-Maestro/pgTAP-Gesamtsuite, signierte OTA-Governance und die echte CEO-Zentrale müssen in
-den dokumentierten Stufen noch gebaut, mit Live-Quellen verbunden und bewiesen werden.
-Die UI-/Performance-Zielwerte sind ebenso Release-Gates: Aktuell existieren noch keine
-Produktions-RUM-Daten, native Release-Build-Messungen oder abgeschlossenen echten
-Usability-Runden. Das Repository sollte bis zur Marken-, Sicherheits- und Rechtsfreigabe
-privat bleiben und enthält derzeit keine Open-Source-Lizenz.
+Der Web-MVP besitzt Auth-/AAL2-Gates, transaktionales Onboarding, Cache-first-Produktlookup,
+absendebasierte reale Katalogsuche mit responsiven Produktkarten, einen implementierten
+aber nicht verwalteten generationierten öffentlichen Katalogimport, EAN/UPC/GS1-Erfassung,
+manuellen unbekannten Produkt-/MHD-Fallback, chargenbezogenen
+Vorrat, atomaren Verzehr, Tageswerte sowie persistente Wochenplan-/Einkaufsflows. Lokale
+Unit-/Property-, Coverage-, pgTAP/RLS- und Playwright/axe-Suiten sind vorhanden; der
+konkrete Stand steht unter `docs/evidence/`.
+
+Stage -1 ist weiterhin nicht bestanden: Es gibt keine erfundenen Interviews,
+Concierge-Beta, Zahlungs-, Marken- oder echte Usability-Evidence. Recall-Quellenfreigabe,
+vollständige Offline-Read-Synchronisation, Kontolöschung/Retention, Ops-/CEO-Ledger, native Apps,
+Maestro/Store-Sandbox, Restore/Last/Security-Pentest und Production-RUM/Deployment sind
+nicht durch den Web-MVP bewiesen. Das Repository bleibt bis zu Markt-, Marken-,
+Sicherheits- und Rechtsfreigabe privat und enthält keine Open-Source-Lizenz.

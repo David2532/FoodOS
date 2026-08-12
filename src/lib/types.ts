@@ -1,4 +1,12 @@
-export type AppView = "today" | "inventory" | "scan" | "plan" | "shopping";
+import type { NutritionDaySummary, NutritionWeekSummary } from "@/domain/nutrition-summary";
+import type { MealSuggestion } from "@/domain/meal-suggestions";
+import type {
+  HouseholdMemberRow,
+  HouseholdSummaryRow,
+  PendingHouseholdInvitationRow
+} from "@/contracts/household-membership";
+
+export type AppView = "today" | "inventory" | "scan" | "plan" | "shopping" | "settings";
 
 export type RiskLevel = "avoid" | "watch" | "info" | "ok" | "unknown";
 
@@ -29,24 +37,97 @@ export interface Product {
   brand?: string;
   imageUrl?: string;
   quantity?: string;
+  categories: string[];
+  countries: string[];
   ingredientsText?: string;
+  structuredIngredients: Array<{ name: string; normalizedName?: string; percentage?: number }>;
   allergens: string[];
   traces: string[];
+  additives: string[];
   labels: string[];
+  nutriScore?: string;
+  novaGroup?: number;
+  servingSize?: string;
   nutrition: ProductNutrition;
   assessments: IngredientAssessment[];
-  source: "open-food-facts" | "manual" | "cache";
+  source: "open-food-facts" | "global-catalog" | "manual" | "cache";
+  sourceUrl?: string;
+  sourceLanguage?: string;
+  sourceUpdatedAt?: string;
+  databaseLicense?: string;
+  imageLicense?: string;
+  retrievedAt: string;
   confidence: number;
 }
 
 export interface InventoryItem {
   id: string;
+  productId: string;
+  gtin?: string;
   name: string;
   brand?: string;
-  emoji: string;
+  imageUrl?: string;
   remainingLabel: string;
-  location: "Kühlschrank" | "Gefrierfach" | "Vorrat";
-  bestBefore?: string;
+  remainingAmount: number;
+  unit: "g" | "ml" | "piece";
+  location: "Kühlschrank" | "Gefrierfach" | "Vorrat" | "Getränke" | "Sonstiges";
+  dateKind?: "best_before" | "use_by";
+  expiryDate?: string;
   daysUntilExpiry?: number;
-  accent: string;
+  expiryState: "future" | "soon" | "today" | "past_best_before" | "past_use_by" | "unknown";
+  lotNumber?: string;
+  personalRiskMatches: string[];
+  recall: {
+    kind: "exact" | "possible_gtin" | "text_candidate" | "none" | "source_unavailable";
+    blocksConsumption: boolean;
+    stale: boolean;
+    wording: string;
+    sourceUrl?: string;
+  };
+  nutrition: ProductNutrition;
+}
+
+export interface MealPlanItem {
+  id: string;
+  productId: string;
+  plannedFor: string;
+  mealType: "breakfast" | "lunch" | "dinner" | "snack";
+  servings: number;
+  plannedAmount: number;
+  plannedUnit: "g" | "ml" | "piece";
+  revision: number;
+  productName: string;
+}
+
+export interface ShoppingItem {
+  id: string;
+  label: string;
+  requiredAmount?: number;
+  unit?: string;
+  checked: boolean;
+  source: "manual" | "plan";
+}
+
+export interface AppSnapshot {
+  currentUserId: string;
+  household: { id: string; name: string };
+  households: HouseholdSummaryRow[];
+  householdMembers: HouseholdMemberRow[];
+  pendingHouseholdInvitations: PendingHouseholdInvitationRow[];
+  inventory: InventoryItem[];
+  today: NutritionDaySummary & {
+    calorieTarget?: number;
+    proteinTargetG?: number;
+  };
+  nutritionWeek: NutritionWeekSummary;
+  weekStart: string;
+  mealPlan: MealPlanItem[];
+  mealSuggestions: MealSuggestion[];
+  mealSuggestionRecipeCount: number;
+  shoppingItems: ShoppingItem[];
+  shoppingCalculationRevision?: number;
+  recallSource: {
+    status: "unavailable" | "fresh" | "stale";
+    lastSuccessAt?: string;
+  };
 }

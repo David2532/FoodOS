@@ -104,6 +104,15 @@ household, profile, rules, events, billing, and consent data. Join by normalized
 source reference; preserve license/provenance. Raw OCR images are processed on-device by
 default or deleted from cloud processing within the documented retention window.
 
+The shared public catalog is a third, separate boundary: its importer streams the
+official JSONL export through a fixed allowlist into a service-role-only staging
+generation. A service-only atomic activation selects exactly one generation for the
+AAL2 read projections; direct client table access remains revoked. Household cache,
+active shared generation, live provider and manual capture are distinct source states,
+not interchangeable truths. Failed staging input leaves the prior active generation
+unchanged. The current recovery path is a verified re-import, not an implemented
+one-command generation rollback; see `docs/PUBLIC_CATALOG_OPERATIONS.md`.
+
 Recall notices remain an immutable, source-versioned domain separated from household
 matches. Exact/possible/text-candidate/unchecked state is calculated by deterministic
 rules; a fuzzy name never writes an exact affected state.
