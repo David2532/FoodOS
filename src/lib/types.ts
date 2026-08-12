@@ -1,4 +1,5 @@
 import type { NutritionDaySummary, NutritionWeekSummary } from "@/domain/nutrition-summary";
+import type { MealSuggestion } from "@/domain/meal-suggestions";
 import type {
   HouseholdMemberRow,
   HouseholdSummaryRow,
@@ -121,6 +122,8 @@ export interface AppSnapshot {
   nutritionWeek: NutritionWeekSummary;
   weekStart: string;
   mealPlan: MealPlanItem[];
+  mealSuggestions: MealSuggestion[];
+  mealSuggestionRecipeCount: number;
   shoppingItems: ShoppingItem[];
   shoppingCalculationRevision?: number;
   recallSource: {

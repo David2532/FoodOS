@@ -52,7 +52,7 @@ npm run test:e2e
 npm audit --audit-level=high
 ```
 
-Node.js 22 is pinned in `.nvmrc`. GitHub CI runs the same locked install and verification
+Node.js 24 is pinned in `.nvmrc`. GitHub CI runs the same locked install and verification
 for pull requests and `main`. `test:db` requires the local Supabase Docker stack;
 `test:e2e` builds the app and checks Pixel-7/Desktop-Chrome profiles with Playwright and
 axe. A passing local subset is not production, native-device, usability, restore, load,

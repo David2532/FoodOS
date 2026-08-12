@@ -1063,3 +1063,58 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   .capture-session .scan-beam { display: none; }
   .capture-session, .capture-success { animation: none; }
 }
+
+/* Ranked, read-only meal suggestions from the household's current usable inventory. */
+.meal-suggestions-section { display: grid; gap: 12px; }
+.meal-suggestion-grid { margin: 0; padding: 0; display: grid; gap: 12px; list-style: none; }
+.meal-suggestion-grid > li { min-width: 0; }
+.meal-suggestion-card { min-width: 0; height: 100%; border: 1px solid var(--line); border-radius: 20px; padding: 16px; display: grid; align-content: start; gap: 12px; background: var(--card-background); }
+.meal-suggestion-card > header { min-width: 0; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: center; }
+.meal-suggestion-card > header > div { min-width: 0; }
+.meal-suggestion-card > header p { margin: 0 0 3px; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .11em; }
+.meal-suggestion-card h3 { margin: 0; overflow-wrap: anywhere; font-size: 17px; letter-spacing: -.025em; }
+.meal-suggestion-icon { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; color: var(--lime); background: color-mix(in srgb, var(--lime) 10%, var(--surface)); }
+.meal-suggestion-fit { margin: 0; min-height: 34px; border-radius: 13px; padding: 8px 10px; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 760; }
+.meal-suggestion-fit.complete { color: var(--ink); background: var(--success-background); }
+.meal-suggestion-fit.complete svg { color: var(--lime); }
+.meal-suggestion-fit.partial { color: var(--ink); background: color-mix(in srgb, var(--blue) 9%, var(--surface)); }
+.meal-suggestion-fit.partial svg { color: var(--blue); }
+.meal-suggestion-fit svg, .meal-suggestion-uncertain svg { flex: 0 0 auto; }
+.meal-suggestion-reason { margin: 0; color: var(--muted-2); font-size: 14px; line-height: 1.45; }
+.meal-suggestion-uncertain { margin: 0; border-left: 2px solid var(--warm); padding-left: 10px; display: flex; gap: 8px; color: var(--danger-text); font-size: 13px; line-height: 1.45; }
+.meal-suggestion-details { border-top: 1px solid var(--line); }
+.meal-suggestion-details summary { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink); cursor: pointer; font-size: 14px; font-weight: 760; list-style: none; }
+.meal-suggestion-details summary::-webkit-details-marker { display: none; }
+.meal-suggestion-details summary svg { color: var(--lime); transition: transform .18s ease-out; }
+.meal-suggestion-details[open] summary svg { transform: rotate(180deg); }
+.meal-suggestion-details dl { margin: 0; display: grid; }
+.meal-suggestion-details dl > div { min-width: 0; border-top: 1px solid var(--line); padding: 10px 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+.meal-suggestion-details dt { overflow-wrap: anywhere; color: var(--muted-2); font-size: 13px; }
+.meal-suggestion-details dd { margin: 0; display: grid; justify-items: end; gap: 2px; font-variant-numeric: tabular-nums; }
+.meal-suggestion-details dd strong { font-size: 13px; }
+.meal-suggestion-details dd span, .meal-suggestion-details > p { color: var(--muted); font-size: 12px; }
+.meal-suggestion-details > p { margin: 4px 0 0; line-height: 1.45; }
+.meal-suggestion-empty h3 { margin: 0; font-size: 19px; }
+.meal-suggestion-empty-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.today-nutrition { display: grid; gap: 12px; }
+.today-nutrition .nutrition-heading > strong { text-align: right; font-size: 22px; font-variant-numeric: tabular-nums; }
+.today-nutrition .nutrition-heading > strong small { color: var(--muted); font-size: 10px; font-weight: 600; }
+.today-nutrition > p { margin: 0; color: var(--muted-2); font-size: 12px; }
+.nutrition-week-details { border-top: 1px solid var(--line); }
+.nutrition-week-details summary { min-height: 44px; display: flex; align-items: center; color: var(--muted-2); cursor: pointer; font-size: 12px; font-weight: 740; }
+.nutrition-week-details > p { margin: 0 0 10px; color: var(--muted-2); font-size: 12px; }
+
+@media (min-width: 700px) {
+  .meal-suggestion-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 380px) {
+  .meal-suggestion-card { padding: 14px; }
+  .meal-suggestion-details dl > div { grid-template-columns: 1fr; gap: 5px; }
+  .meal-suggestion-details dd { justify-items: start; }
+  .meal-suggestion-empty-actions, .meal-suggestion-empty-actions > button { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meal-suggestion-details summary svg { transition: none; }
+}

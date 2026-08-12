@@ -70,7 +70,9 @@ function snapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
       totals: { entryCount: 0, kcal: metric, proteinG: metric, carbsG: metric, fatG: metric }
     },
     weekStart: "2026-08-03",
-    mealPlan: [planItem()],
+  mealPlan: [planItem()],
+  mealSuggestions: [],
+  mealSuggestionRecipeCount: 0,
     shoppingItems: [],
     shoppingCalculationRevision: 0,
     recallSource: { status: "fresh" },

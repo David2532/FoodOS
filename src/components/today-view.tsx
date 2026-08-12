@@ -1,6 +1,21 @@
 import { ArrowRight, Beef, Clock3, Database, Flame, PackageCheck, PackageSearch, Plus, ShieldAlert, Wheat } from "lucide-react";
 import type { NutritionMetricSummary, NutritionTotals } from "@/domain/nutrition-summary";
+import type { MealSuggestion } from "@/domain/meal-suggestions";
 import type { AppSnapshot, AppView } from "@/lib/types";
+import { MealSuggestionsSection } from "./meal-suggestions-section";
+
+const previewSuggestions: MealSuggestion[] = [{
+  recipeId: "preview-gemuesereis",
+  name: "Gemüse-Reis-Pfanne",
+  servings: 2,
+  availability: "complete",
+  ingredients: [
+    { productId: "preview-rice", name: "Reis", requiredAmount: 200, availableAmount: 200, missingAmount: 0, unit: "g", status: "available" },
+    { productId: "preview-vegetables", name: "Gemüse", requiredAmount: 300, availableAmount: 300, missingAmount: 0, unit: "g", status: "available" }
+  ],
+  useSoonNames: ["Gemüse"],
+  hasUncertainCoverage: false
+}];
 
 function nutritionNumber(metric: NutritionMetricSummary, maximumFractionDigits = 1): string {
   if (metric.value === null) return "—";
@@ -39,35 +54,21 @@ function NutritionMacros({ totals, period }: { totals: NutritionTotals; period: 
 
 export function TodayView({ onNavigate, onOpenCatalog, snapshot }: { onNavigate: (view: AppView) => void; onOpenCatalog?: (query?: string) => void; snapshot?: AppSnapshot }) {
   if (snapshot) {
-    const urgent = snapshot.inventory.find((item) => ["past_use_by", "today", "soon", "past_best_before"].includes(item.expiryState));
+    const safetyIntervention = snapshot.inventory.find((item) => item.expiryState === "past_use_by" || item.recall.kind === "exact" || item.recall.kind === "possible_gtin");
+    const urgent = snapshot.inventory.find((item) => ["today", "soon", "past_best_before"].includes(item.expiryState) && item.recall.kind !== "exact" && item.recall.kind !== "possible_gtin");
     const target = snapshot.today.calorieTarget;
     const targetProgress = target && snapshot.today.kcal.value !== null ? Math.min(100, snapshot.today.kcal.value / target * 100) : 0;
     const todayCoverage = nutritionCoverage(snapshot.today.kcal);
     const weekCoverage = nutritionCoverage(snapshot.nutritionWeek.totals.kcal);
     return (
       <div className="stack-lg page-enter">
-        <section className="hero-card" aria-labelledby="nutrition-today-title">
-          <div className="hero-topline"><div id="nutrition-today-title"><span className="status-pulse" />Heute · {snapshot.today.entryCount} {snapshot.today.entryCount === 1 ? "Buchung" : "Buchungen"}</div></div>
-          <div className="hero-number">
-            <strong aria-label={`Kalorien heute: ${snapshot.today.kcal.value === null ? "Unbekannt" : `${nutritionNumber(snapshot.today.kcal, 0)} Kilokalorien`}`}>{nutritionNumber(snapshot.today.kcal, 0)}</strong>
-            <span>{snapshot.today.kcal.value === null ? "kcal unbekannt" : target ? `/ ${target.toLocaleString("de-DE")} kcal` : "kcal heute"}</span>
-          </div>
-          {todayCoverage && <p role="status">{todayCoverage}</p>}
-          {target && snapshot.today.kcal.value !== null && <div className="progress-track" aria-label={`${Math.round(targetProgress)} Prozent des Tagesziels`}><span style={{ width: `${targetProgress}%` }} /></div>}
-          <NutritionMacros totals={snapshot.today} period="heute" />
-          <button className="primary-button" onClick={() => onNavigate("inventory")}><PackageCheck size={18} /> Verzehr aus Vorrat buchen</button>
-        </section>
-        <section className="hero-card" aria-labelledby="nutrition-week-title">
-          <div className="hero-topline"><div id="nutrition-week-title"><span className="status-pulse" />Diese Woche · {snapshot.nutritionWeek.totals.entryCount} {snapshot.nutritionWeek.totals.entryCount === 1 ? "Buchung" : "Buchungen"}</div></div>
-          <div className="hero-number">
-            <strong aria-label={`Kalorien diese Woche: ${snapshot.nutritionWeek.totals.kcal.value === null ? "Unbekannt" : `${nutritionNumber(snapshot.nutritionWeek.totals.kcal, 0)} Kilokalorien`}`}>{nutritionNumber(snapshot.nutritionWeek.totals.kcal, 0)}</strong>
-            <span>{snapshot.nutritionWeek.totals.kcal.value === null ? "kcal unbekannt" : "kcal gesamt"}</span>
-          </div>
-          {weekCoverage && <p>{weekCoverage}</p>}
-          <NutritionMacros totals={snapshot.nutritionWeek.totals} period="diese Woche" />
-        </section>
-        <CatalogShortcut onNavigate={onNavigate} />
+        {safetyIntervention && <section className="expiry-card safety-intervention" role="alert">
+          <div className="expiry-icon"><ShieldAlert size={20} /></div>
+          <div><p>{safetyIntervention.recall.kind === "exact" ? "RÜCKRUF · EXAKTER TREFFER" : safetyIntervention.recall.kind === "possible_gtin" ? "RÜCKRUF · MÖGLICHER TREFFER" : "VERBRAUCHSDATUM ÜBERSCHRITTEN"}</p><h3>{safetyIntervention.name} zuerst prüfen</h3><span>{safetyIntervention.recall.kind === "exact" || safetyIntervention.expiryState === "past_use_by" ? "Nicht zum Verzehr vorgeschlagen" : "Packung und amtliche Quelle vergleichen"}</span></div>
+          <button onClick={() => onNavigate("inventory")} aria-label={`${safetyIntervention.name} im Vorrat prüfen`}><ArrowRight size={18} /></button>
+        </section>}
         {snapshot.recallSource.status !== "fresh" && <section className="recall-source-warning" role="status"><ShieldAlert size={21} /><div><strong>{snapshot.recallSource.status === "stale" ? "Rückrufquelle ist veraltet" : "Rückrufprüfung nicht verfügbar"}</strong><p>Es ist keine aktuelle Aussage zur Betroffenheit oder Sicherheit möglich. Prüfe im Zweifel die amtliche Quelle lebensmittelwarnung.de.</p></div></section>}
+        <MealSuggestionsSection suggestions={snapshot.mealSuggestions} recipeCount={snapshot.mealSuggestionRecipeCount} onNavigate={onNavigate} />
         {urgent ? (
           <section className="expiry-card">
             <div className="expiry-icon"><Clock3 size={20} /></div>
@@ -75,13 +76,28 @@ export function TodayView({ onNavigate, onOpenCatalog, snapshot }: { onNavigate:
             <button onClick={() => onNavigate("inventory")} aria-label={`${urgent.name} im Vorrat öffnen`}><ArrowRight size={18} /></button>
           </section>
         ) : (
-          <section className="empty-state"><PackageCheck size={24} /><h2>{snapshot.inventory.length ? "Keine dringende Charge" : "Dein Vorrat ist leer"}</h2><p>{snapshot.inventory.length ? "Aktuell ist keine Charge mit Datum kurzfristig fällig." : "Scanne dein erstes Lebensmittel oder gib den Barcode manuell ein."}</p><button className="primary-button" onClick={() => onNavigate("scan")}><Plus size={17} /> Lebensmittel erfassen</button></section>
+          !snapshot.inventory.length && <section className="empty-state"><PackageCheck size={24} /><h2>Dein Vorrat ist leer</h2><p>Scanne dein erstes Lebensmittel oder gib den Barcode manuell ein.</p><button className="primary-button" onClick={() => onNavigate("scan")}><Plus size={17} /> Lebensmittel erfassen</button></section>
         )}
+        <section className="nutrition-card today-nutrition" aria-labelledby="nutrition-today-title">
+          <div className="nutrition-heading"><div><p>TAGESSTATUS</p><h2 id="nutrition-today-title">Heute · {snapshot.today.entryCount} {snapshot.today.entryCount === 1 ? "Buchung" : "Buchungen"}</h2></div><strong aria-label={`Kalorien heute: ${snapshot.today.kcal.value === null ? "Unbekannt" : `${nutritionNumber(snapshot.today.kcal, 0)} Kilokalorien`}`}>{nutritionNumber(snapshot.today.kcal, 0)} <small>{snapshot.today.kcal.value === null ? "kcal unbekannt" : target ? `/ ${target.toLocaleString("de-DE")} kcal` : "kcal"}</small></strong></div>
+          {todayCoverage && <p role="status">{todayCoverage}</p>}
+          {target && snapshot.today.kcal.value !== null && <div className="progress-track" aria-label={`${Math.round(targetProgress)} Prozent des Tagesziels`}><span style={{ width: `${targetProgress}%` }} /></div>}
+          <NutritionMacros totals={snapshot.today} period="heute" />
+          <details className="nutrition-week-details">
+            <summary>Diese Woche anzeigen</summary>
+            <p><strong aria-label={`Kalorien diese Woche: ${snapshot.nutritionWeek.totals.kcal.value === null ? "Unbekannt" : `${nutritionNumber(snapshot.nutritionWeek.totals.kcal, 0)} Kilokalorien`}`}>{nutritionNumber(snapshot.nutritionWeek.totals.kcal, 0)} kcal</strong> · {snapshot.nutritionWeek.totals.entryCount} Buchungen</p>
+            {weekCoverage && <p>{weekCoverage}</p>}
+            <NutritionMacros totals={snapshot.nutritionWeek.totals} period="diese Woche" />
+          </details>
+          <button className="small-action" onClick={() => onNavigate("inventory")}><PackageCheck size={18} /> Verzehr aus Vorrat buchen</button>
+        </section>
+        <CatalogShortcut onNavigate={onNavigate} />
       </div>
     );
   }
   return (
     <div className="stack-lg page-enter">
+      <MealSuggestionsSection suggestions={previewSuggestions} recipeCount={1} onNavigate={onNavigate} />
       <section className="hero-card">
         <div className="hero-topline">
           <div><span className="status-pulse" />Auf Kurs</div>

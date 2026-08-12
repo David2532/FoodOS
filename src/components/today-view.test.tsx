@@ -39,6 +39,16 @@ const snapshot: AppSnapshot = {
   },
   weekStart: "2026-08-03",
   mealPlan: [],
+  mealSuggestions: [{
+    recipeId: "00000000-0000-4000-8000-000000000101",
+    name: "Reis mit Gemüse",
+    servings: 2,
+    availability: "complete",
+    ingredients: [{ productId: "00000000-0000-4000-8000-000000000201", name: "Reis", requiredAmount: 200, availableAmount: 200, missingAmount: 0, unit: "g", status: "available" }],
+    useSoonNames: ["Reis"],
+    hasUncertainCoverage: false
+  }],
+  mealSuggestionRecipeCount: 1,
   shoppingItems: [],
   recallSource: { status: "fresh" }
 };
@@ -70,6 +80,26 @@ describe("TodayView catalog entry", () => {
     expect(screen.getByLabelText("Fett heute: 5 Gramm")).toBeTruthy();
     expect(screen.getByLabelText("Kalorien diese Woche: 750 Kilokalorien")).toBeTruthy();
     expect(screen.getAllByText("1 von 2 Buchungen ohne Angabe")).toHaveLength(2);
+  });
+
+  it("puts an explainable inventory-based meal decision before nutrition", () => {
+    render(<TodayView onNavigate={vi.fn()} snapshot={snapshot} />);
+
+    const suggestionHeading = screen.getByRole("heading", { name: "Was kann ich jetzt essen?" });
+    const nutritionHeading = screen.getByRole("heading", { name: /Heute · 2 Buchungen/ });
+    expect(suggestionHeading.compareDocumentPosition(nutritionHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Reis mit Gemüse" })).toBeTruthy();
+    fireEvent.click(screen.getByText("Zutaten prüfen"));
+    expect(screen.getByText("FoodOS zieht hier noch nichts vom Vorrat ab.")).toBeTruthy();
+  });
+
+  it("offers a recovery path when recipes have no eligible suggestion", () => {
+    const onNavigate = vi.fn();
+    render(<TodayView onNavigate={onNavigate} snapshot={{ ...snapshot, mealSuggestions: [] }} />);
+
+    expect(screen.getByRole("heading", { name: "Aktuell kein passender Vorschlag" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Vorrat prüfen/ }));
+    expect(onNavigate).toHaveBeenCalledWith("inventory");
   });
 
   it("renders a missing nutrition value as unknown and never as a synthetic zero", () => {

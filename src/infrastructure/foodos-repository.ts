@@ -11,6 +11,7 @@ import {
 import { classifyExpiry } from "@/domain/expiry";
 import { criticalFoodRiskMatches, type FoodRiskPreference } from "@/domain/ingredient-relevance";
 import { buildNutritionSummary } from "@/domain/nutrition-summary";
+import { buildMealSuggestions, type MealSuggestionRecipe } from "@/domain/meal-suggestions";
 import { assessRecall, type RecallAssessment, type RecallNotice } from "@/domain/recall";
 import type { AppSnapshot, InventoryItem } from "@/lib/types";
 
@@ -49,6 +50,21 @@ const mealPlanRowSchema = z.object({
   planned_unit: z.enum(["g", "ml", "piece"]),
   revision: z.coerce.number().int().positive(),
   products: z.object({ name: z.string() })
+});
+
+const recipeRowSchema = z.object({
+  id: z.uuid(),
+  name: z.string().min(1).max(240),
+  servings: z.coerce.number().positive(),
+  is_favorite: z.boolean()
+});
+
+const recipeItemRowSchema = z.object({
+  recipe_id: z.uuid(),
+  product_id: z.uuid(),
+  amount: z.coerce.number().positive(),
+  unit: z.enum(["g", "ml", "piece"]),
+  products: z.object({ name: z.string().min(1).max(240) })
 });
 
 const shoppingListSchema = z.object({
@@ -195,7 +211,7 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient, selectedHouse
   if (userResult.error || !userResult.data.user) return { kind: "error", message: "Deine Sitzung konnte nicht bestätigt werden." };
   const today = berlinDate();
   const weekStart = mondayOf(today);
-  const [nutritionSummaryResult, profileResult, mealPlanResult, shoppingListResult, recallSourceResult, foodRiskResult, metadataResult, recallEventsResult, householdMembersResult, pendingInvitationsResult] = await Promise.all([
+  const [nutritionSummaryResult, profileResult, mealPlanResult, recipesResult, shoppingListResult, recallSourceResult, foodRiskResult, metadataResult, recallEventsResult, householdMembersResult, pendingInvitationsResult] = await Promise.all([
     supabase.rpc("get_my_nutrition_summary", { target_week_start: weekStart }),
     supabase.from("profiles").select("calorie_target, protein_target_g").maybeSingle(),
     supabase
@@ -205,6 +221,12 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient, selectedHouse
       .gte("planned_for", weekStart)
       .lte("planned_for", plusDays(weekStart, 6))
       .order("planned_for", { ascending: true }),
+    supabase
+      .from("recipes")
+      .select("id, name, servings, is_favorite")
+      .eq("household_id", membership.household_id)
+      .order("is_favorite", { ascending: false })
+      .order("name", { ascending: true }),
     supabase
       .from("shopping_lists")
       .select("id, calculation_revision")
@@ -234,10 +256,11 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient, selectedHouse
       ? supabase.rpc("list_household_invitations", { target_household: membership.household_id })
       : Promise.resolve({ data: [], error: null })
   ]);
-  if (nutritionSummaryResult.error || profileResult.error || mealPlanResult.error || shoppingListResult.error || recallSourceResult.error || foodRiskResult.error || metadataResult.error || recallEventsResult.error || householdMembersResult.error || pendingInvitationsResult.error) return { kind: "error", message: "Tages-, Wochen-, Plan-, Einkaufs-, Risiko-, Rückruf- oder Haushaltsdaten konnten nicht geladen werden." };
+  if (nutritionSummaryResult.error || profileResult.error || mealPlanResult.error || recipesResult.error || shoppingListResult.error || recallSourceResult.error || foodRiskResult.error || metadataResult.error || recallEventsResult.error || householdMembersResult.error || pendingInvitationsResult.error) return { kind: "error", message: "Tages-, Wochen-, Rezept-, Einkaufs-, Risiko-, Rückruf- oder Haushaltsdaten konnten nicht geladen werden." };
   const parsedNutritionSummary = nutritionSummaryRowsSchema.safeParse(nutritionSummaryResult.data);
   const parsedProfile = profileSchema.nullable().safeParse(profileResult.data);
   const parsedMealPlan = z.array(mealPlanRowSchema).safeParse(mealPlanResult.data);
+  const parsedRecipes = z.array(recipeRowSchema).safeParse(recipesResult.data);
   const parsedShoppingList = shoppingListSchema.nullable().safeParse(shoppingListResult.data);
   const parsedRecallSource = recallSourceSchema.nullable().safeParse(recallSourceResult.data);
   const parsedFoodRisks = z.array(foodRiskRowSchema).safeParse(foodRiskResult.data);
@@ -245,7 +268,7 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient, selectedHouse
   const parsedRecallEvents = z.array(recallEventRowSchema).safeParse(recallEventsResult.data);
   const parsedHouseholdMembers = z.array(householdMemberRowSchema).safeParse(householdMembersResult.data);
   const parsedPendingInvitations = z.array(pendingHouseholdInvitationRowSchema).safeParse(pendingInvitationsResult.data);
-  if (!parsedNutritionSummary.success || !parsedProfile.success || !parsedMealPlan.success || !parsedShoppingList.success || !parsedRecallSource.success || !parsedFoodRisks.success || !parsedMetadata.success || !parsedRecallEvents.success || !parsedHouseholdMembers.success || !parsedPendingInvitations.success) return { kind: "error", message: "Tages-, Wochen-, Plan-, Einkaufs-, Risiko-, Rückruf- oder Haushaltsdaten haben ein unerwartetes Format." };
+  if (!parsedNutritionSummary.success || !parsedProfile.success || !parsedMealPlan.success || !parsedRecipes.success || !parsedShoppingList.success || !parsedRecallSource.success || !parsedFoodRisks.success || !parsedMetadata.success || !parsedRecallEvents.success || !parsedHouseholdMembers.success || !parsedPendingInvitations.success) return { kind: "error", message: "Tages-, Wochen-, Rezept-, Einkaufs-, Risiko-, Rückruf- oder Haushaltsdaten haben ein unerwartetes Format." };
 
   let nutritionSummary: ReturnType<typeof buildNutritionSummary>;
   try {
@@ -285,6 +308,20 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient, selectedHouse
     parsedShoppingItems = validatedItems.data;
   }
 
+  let parsedRecipeItems: z.infer<typeof recipeItemRowSchema>[] = [];
+  const recipeIds = parsedRecipes.data.map((recipe) => recipe.id);
+  if (recipeIds.length) {
+    const recipeItemsResult = await supabase
+      .from("recipe_items")
+      .select("recipe_id, product_id, amount, unit, products!inner(name)")
+      .in("recipe_id", recipeIds)
+      .order("id", { ascending: true });
+    if (recipeItemsResult.error) return { kind: "error", message: "Rezeptzutaten konnten nicht geladen werden." };
+    const validatedItems = z.array(recipeItemRowSchema).safeParse(recipeItemsResult.data);
+    if (!validatedItems.success) return { kind: "error", message: "Rezeptzutaten haben ein unerwartetes Format." };
+    parsedRecipeItems = validatedItems.data;
+  }
+
   const inventory = parsedRows.data.map((row): InventoryItem => {
     const dateKind = row.use_by_date ? "use_by" : row.best_before_date ? "best_before" : undefined;
     const date = row.use_by_date ?? row.best_before_date;
@@ -320,6 +357,18 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient, selectedHouse
       }
     };
   });
+  const recipes: MealSuggestionRecipe[] = parsedRecipes.data.map((recipe) => ({
+    id: recipe.id,
+    name: recipe.name,
+    servings: recipe.servings,
+    isFavorite: recipe.is_favorite,
+    items: parsedRecipeItems.filter((item) => item.recipe_id === recipe.id).map((item) => ({
+      productId: item.product_id,
+      productName: item.products.name,
+      amount: item.amount,
+      unit: item.unit
+    }))
+  }));
 
   return {
     kind: "ready",
@@ -348,6 +397,8 @@ export async function loadFoodOsSnapshot(supabase: SupabaseClient, selectedHouse
         revision: entry.revision,
         productName: entry.products.name
       })),
+      mealSuggestions: buildMealSuggestions(recipes, inventory),
+      mealSuggestionRecipeCount: recipes.length,
       shoppingItems: parsedShoppingItems.map((entry) => ({
         id: entry.id,
         label: entry.label,

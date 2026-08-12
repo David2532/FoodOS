@@ -35,6 +35,8 @@ const snapshot: AppSnapshot = {
   },
   weekStart: "2026-08-03",
   mealPlan: [],
+  mealSuggestions: [],
+  mealSuggestionRecipeCount: 0,
   shoppingItems: [{
     id: "00000000-0000-4000-8000-000000000010",
     label: "Bestehender manueller Posten",
