@@ -33,7 +33,7 @@
     "@zxing/browser": "0.1.5",
     "@zxing/library": "0.21.3",
     "geist": "1.7.2",
-    "lucide-react": "1.29.0",
+    "lucide-react": "1.30.0",
     "next": "16.2.12",
     "react": "19.2.8",
     "react-dom": "19.2.8",
