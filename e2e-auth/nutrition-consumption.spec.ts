@@ -45,7 +45,7 @@ async function createAal2Household(page: Page) {
   await page.getByLabel("Tagesziel kcal · optional").fill("2200");
   await page.getByLabel("Protein g · optional").fill("150");
   await page.getByRole("button", { name: "Haushalt sicher anlegen" }).click();
-  await expect(page.getByRole("heading", { name: "Heute" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Heute", exact: true })).toBeVisible();
 }
 
 function requireLocalSupabaseEnvironment() {
@@ -151,7 +151,7 @@ test("an AAL2 consumption updates exact daily and weekly nutrition after reload"
   await createAal2Household(page);
   await seedNutritionBatch(page);
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Heute" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Heute", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Vorrat", exact: true }).click();
 
   await page.getByRole("button", { name: new RegExp(PRODUCT_NAME) }).click();

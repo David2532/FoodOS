@@ -527,7 +527,13 @@ describe("continuous purchase capture", () => {
     await screen.findByText("Auf diesem Gerät gespeichert");
     const rejectedOperationId = outbox.submitDurableRpc.mock.calls[0]?.[0].operationId;
 
-    await act(async () => outboxListener?.());
+    await waitFor(() => {
+      expect(outboxListener).toBeTypeOf("function");
+      expect(outbox.getDurableOperationStatus).toHaveBeenCalledTimes(1);
+    });
+    const notifyOutbox = outboxListener;
+    if (!notifyOutbox) throw new Error("Expected the durable outbox listener to be registered.");
+    await act(async () => notifyOutbox());
     await screen.findByText(/gespeicherte Änderung wurde abgelehnt/);
     fireEvent.click(screen.getByRole("button", { name: /Erneut sicher speichern/ }));
     await screen.findByText(/im Vorrat/);

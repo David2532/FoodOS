@@ -45,7 +45,7 @@ async function createAal2Household(page: Page): Promise<string> {
 
   await page.getByLabel("Haushaltsname").fill("Entsorgung E2E Haushalt");
   await page.getByRole("button", { name: "Haushalt sicher anlegen" }).click();
-  await expect(page.getByRole("heading", { name: "Heute" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Heute", exact: true })).toBeVisible({ timeout: 15_000 });
   return email;
 }
 
@@ -175,7 +175,7 @@ test("Q-INV-DISCARD-E2E-001 safely disposes a post-use-by batch once across offl
   }, disposalOperationId)).toBe(true);
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Heute" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Heute", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Vorrat", exact: true }).click();
   await expect(page.getByRole("button", { name: new RegExp(PRODUCT_NAME) })).toHaveCount(0);
 
@@ -353,7 +353,7 @@ test("Q-INV-DISCARD-E2E-002 reconciles a lost disposal acknowledgement through t
   }, committed.mutationId)).toBe(true);
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Heute" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Heute", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Vorrat", exact: true }).click();
   await expect(page.getByRole("button", { name: new RegExp(PRODUCT_NAME) })).toHaveCount(0);
 

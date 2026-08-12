@@ -112,7 +112,7 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
   await page.getByLabel("Protein g · optional").fill("150");
   await page.getByRole("button", { name: "Haushalt sicher anlegen" }).click();
 
-  await expect(page.getByRole("heading", { name: "Heute" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Heute", exact: true })).toBeVisible();
   await expect(page.getByText("E2E Haushalt", { exact: true })).toBeVisible();
   await expect(page.getByText("Rückrufprüfung nicht verfügbar", { exact: true })).toBeVisible();
 
@@ -284,5 +284,5 @@ test("real local user must enroll TOTP before atomic household onboarding", asyn
   await page.getByLabel("Passwort").fill(changedPassword);
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Anmeldung bestätigen" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Heute" })).not.toBeVisible();
+  await expect(page.getByRole("heading", { name: "Heute", exact: true })).not.toBeVisible();
 });

@@ -49,7 +49,7 @@ async function createVerifiedHousehold(page: Page) {
   await expect(page.getByRole("heading", { name: "Deinen Haushalt anlegen" })).toBeVisible();
   await page.getByLabel("Haushaltsname").fill("Offline-Cleanup E2E");
   await page.getByRole("button", { name: "Haushalt sicher anlegen" }).click();
-  await expect(page.getByRole("heading", { name: "Heute" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Heute", exact: true })).toBeVisible();
 }
 
 test("blocked offline cleanup remains pending, updates both tabs, and confirms deletion after the blocker closes", async ({ page }) => {

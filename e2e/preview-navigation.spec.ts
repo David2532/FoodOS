@@ -68,6 +68,12 @@ test.describe("Q-UX-PRIMARY-ACTION-E2E-001 preview shell", () => {
   });
 
   test("opens a source-backed protein shake choice and then the existing intake flow", async ({ page }, testInfo) => {
+    await page.route("https://images.openfoodfacts.org/**", async (route) => {
+      await route.fulfill({
+        contentType: "image/svg+xml",
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="400" height="400" fill="#173229"/></svg>'
+      });
+    });
     await page.route("**/api/products/search?*", async (route) => {
       const query = new URL(route.request().url()).searchParams.get("q");
       await route.fulfill({
