@@ -164,9 +164,11 @@ test("an AAL2 consumption updates exact daily and weekly nutrition after reload"
   await expect(page.getByLabel("Protein heute: 6,3 Gramm")).toBeVisible();
   await expect(page.getByLabel("Carbs heute: 57,5 Gramm")).toBeVisible();
   await expect(page.getByLabel("Fett heute: 30,9 Gramm")).toBeVisible();
+  await page.getByText("Diese Woche anzeigen", { exact: true }).click();
   await expect(page.getByLabel("Kalorien diese Woche: 539 Kilokalorien")).toBeVisible();
 
   await page.reload();
   await expect(page.getByLabel("Kalorien heute: 539 Kilokalorien")).toBeVisible();
+  await page.getByText("Diese Woche anzeigen", { exact: true }).click();
   await expect(page.getByLabel("Fett diese Woche: 30,9 Gramm")).toBeVisible();
 });
