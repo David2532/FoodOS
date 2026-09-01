@@ -35,7 +35,7 @@ jobs:
       - name: Enforce coverage thresholds
         run: npm run test:coverage
       - name: Upload production build evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: next-build-${{ github.sha }}
           path: .next
@@ -74,7 +74,7 @@ jobs:
         run: npm run test:e2e:auth
       - name: Upload authenticated first-failure evidence
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: authenticated-e2e-failure-${{ github.sha }}
           path: |
@@ -103,7 +103,7 @@ jobs:
         run: npm run test:e2e
       - name: Upload first-failure evidence
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: preview-e2e-failure-${{ github.sha }}
           path: |
